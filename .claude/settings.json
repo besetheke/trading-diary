@@ -1,0 +1,25 @@
+{
+  "_hinweis": "Profil STARK. Dieses Modell legt in AP-01 Tests und Fixtures an und muss sie schreiben duerfen. Geschuetzt sind nur Plan und Konfiguration.",
+  "permissions": {
+    "deny": [
+      "Edit(./plan/**)",
+      "Write(./plan/**)",
+      "Edit(./.claude/**)",
+      "Write(./.claude/**)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git commit *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "python .claude/hooks/schutz.py --profil locker" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+*.pyc
+__pycache__/
+.claude/settings-guenstig.json
+*.sqlite
+*.db
+fixtures/golden/
+
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
