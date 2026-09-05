@@ -1,0 +1,51 @@
+[project]
+name = "trading-journal"
+version = "0.1.0"
+description = "Lokales Trading-Journal: Executions, Ketten, Kampagnen, Analytik"
+requires-python = ">=3.12"
+dependencies = [
+    "SQLAlchemy>=2.0",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["journal", "ingest", "engine", "analytics", "api"]
+
+[tool.ruff]
+line-length = 100
+# Hook- und Settings-Dateien sind Werkzeugkonfiguration, kein Projektcode.
+extend-exclude = [".claude"]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic-Autogenerate erzeugt bewusst lange Zeilen, Docstring-Leerzeichen
+# und eine eigene Importordnung; der Inhalt ist maschinell erzeugt und wird
+# nachträglich nicht von Hand editiert (CLAUDE.md, Regel 3).
+"migrations/versions/*" = ["E501", "W291", "I001"]
