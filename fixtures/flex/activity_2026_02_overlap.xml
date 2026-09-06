@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260115" toDate="20260215"
+                   period="Last30Days" whenGenerated="20260216T120000" currency="EUR">
+      <Trades>
+        <Trade transactionID="9000003" tradeID="111000003" ibExecID="0003.0001.01.01"
+               ibOrderID="5550002" orderReference="ActivityMonitor"
+               conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
+               buySell="BUY" quantity="100" tradePrice="42.50" proceeds="-4250.00"
+               ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
+               fxRateToBase="0.9300" netCash="-4251.00" tradeTime="20260107 15:32:00"
+               orderTime="20260107 15:31:00" exchange="MEMX" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000011" tradeID="111000011" ibExecID="0011.0001.01.01"
+               ibOrderID="5550007" orderReference=""
+               conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
+               buySell="SELL" quantity="40" tradePrice="44.10" proceeds="1764.00"
+               ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
+               fxRateToBase="0.9300" netCash="1763.00" tradeTime="20260205 15:33:00"
+               orderTime="20260205 15:32:00" exchange="MEMX" notes="" openCloseIndicator="C" />
+        <Trade transactionID="9000012" tradeID="111000012" ibExecID="0012.0001.01.01"
+               ibOrderID="5550008" orderReference="OptionsApp: Trade 44, Leg 1, Open Order 1"
+               conid="100009" symbol="IDX1 165C" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="C" strike="165" expiry="20260417" buySell="SELL" quantity="1"
+               tradePrice="0.95" proceeds="-95.00" ibCommission="-1.90"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000"
+               netCash="-96.90" tradeTime="20260210 14:50:00" orderTime="20260210 14:49:00"
+               exchange="EUREX" notes="" openCloseIndicator="" />
+      </Trades>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

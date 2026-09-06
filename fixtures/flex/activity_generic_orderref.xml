@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260101" toDate="20260131"
+                   period="January2026" whenGenerated="20260201T120000" currency="EUR">
+      <Trades>
+        <Trade transactionID="9200001" tradeID="113000001" ibExecID="0013.0001.01.01"
+               ibOrderID="5560001" orderReference="ActivityMonitor"
+               conid="100013" symbol="IDX1 160P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="160" expiry="20260220" buySell="SELL" quantity="1"
+               tradePrice="2.00" proceeds="-200.00" ibCommission="-1.90"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000"
+               netCash="-201.90" tradeTime="20260112 15:30:00" orderTime="20260112 15:29:00"
+               exchange="CBOE2" notes="" openCloseIndicator="" />
+        <Trade transactionID="9200002" tradeID="113000002" ibExecID="0013.0001.02.01"
+               ibOrderID="5560001" orderReference="OptTrader"
+               conid="100014" symbol="IDX1 150P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="150" expiry="20260220" buySell="BUY" quantity="1"
+               tradePrice="1.00" proceeds="100.00" ibCommission="-1.90"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000"
+               netCash="98.10" tradeTime="20260112 15:30:00" orderTime="20260112 15:29:00"
+               exchange="CBOE2" notes="" openCloseIndicator="" />
+        <Trade transactionID="9200003" tradeID="113000003" ibExecID="0013.0001.03.01"
+               ibOrderID="5560001" orderReference="OptionChain"
+               conid="100015" symbol="IDX1 170P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="170" expiry="20260220" buySell="BUY" quantity="1"
+               tradePrice="0.50" proceeds="-50.00" ibCommission="-1.90"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000"
+               netCash="-51.90" tradeTime="20260112 15:30:00" orderTime="20260112 15:29:00"
+               exchange="CBOE2" notes="" openCloseIndicator="" />
+      </Trades>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

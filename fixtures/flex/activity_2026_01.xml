@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260101" toDate="20260131"
+                   period="January2026" whenGenerated="20260201T120000" currency="EUR">
+      <Trades>
+        <Trade transactionID="9000001" tradeID="111000001" ibExecID="0001.0002.01.01"
+               ibOrderID="5550001" orderReference="OptionsApp: Trade 42, Leg 1, Open Order 1"
+               conid="100001" symbol="IDX1 150P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="150" expiry="20260220" buySell="SELL" quantity="2"
+               tradePrice="3.10" proceeds="620.00" ibCommission="-2.00" ibCommissionCurrency="USD"
+               currency="USD" fxRateToBase="0.9300" netCash="618.00" tradeTime="20260105 15:31:00"
+               orderTime="20260105 15:30:00" exchange="CBOE" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000002" tradeID="111000002" ibExecID="0001.0002.02.01"
+               ibOrderID="5550001" orderReference="OptionsApp: Trade 42, Leg 2, Open Order 1"
+               conid="100002" symbol="IDX1 160C" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="C" strike="160" expiry="20260220" buySell="BUY" quantity="2"
+               tradePrice="1.05" proceeds="-210.00" ibCommission="-2.00" ibCommissionCurrency="USD"
+               currency="USD" fxRateToBase="0.9300" netCash="-212.00" tradeTime="20260105 15:31:00"
+               orderTime="20260105 15:30:00" exchange="CBOE" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000003" tradeID="111000003" ibExecID="0003.0001.01.01"
+               ibOrderID="5550002" orderReference="ActivityMonitor"
+               conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
+               buySell="BUY" quantity="100" tradePrice="42.50" proceeds="-4250.00"
+               ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
+               fxRateToBase="0.9300" netCash="-4251.00" tradeTime="20260107 15:32:00"
+               orderTime="20260107 15:31:00" exchange="MEMX" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000004" tradeID="111000004" ibExecID="0004.0001.01.01"
+               ibOrderID="5550003" orderReference=""
+               conid="300001" symbol="FUT1 MAR26" underlyingSymbol="FUT1" assetCategory="FUT"
+               buySell="BUY" quantity="1" tradePrice="18000.0" proceeds="-18000.00"
+               ibCommission="-2.50" ibCommissionCurrency="EUR" currency="EUR"
+               fxRateToBase="1.0000" netCash="-18002.50" tradeTime="20260108 09:10:00"
+               orderTime="20260108 09:09:00" exchange="EUREX" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000005" tradeID="111000005" ibExecID="0005.0001.01.01"
+               ibOrderID="5550004" orderReference=""
+               conid="999001" symbol="USD" underlyingSymbol="USD" assetCategory="CASH"
+               buySell="BUY" quantity="5000" tradePrice="0.93" proceeds="-4650.00"
+               ibCommission="-2.00" ibCommissionCurrency="EUR" currency="EUR"
+               fxRateToBase="1.0000" netCash="-4652.00" tradeTime="20260109 10:00:00"
+               orderTime="20260109 10:00:00" exchange="IDEALFX" notes="" openCloseIndicator="" />
+        <Trade transactionID="9000006" tradeID="111000006"
+               orderReference="" conid="100003" symbol="IDX1 150P" underlyingSymbol="IDX1"
+               assetCategory="OPT" putCall="P" strike="150" expiry="20260116" buySell="SELL"
+               quantity="1" tradePrice="0.0" proceeds="0.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="0.00"
+               tradeTime="20260116 21:00:00" orderTime="" exchange="" notes="Ep"
+               openCloseIndicator="" />
+        <Trade transactionID="9000007" tradeID="111000007"
+               orderReference="" conid="100004" symbol="CORP 40P" underlyingSymbol="CORP"
+               assetCategory="OPT" putCall="P" strike="40" expiry="20260116" buySell="SELL"
+               quantity="1" tradePrice="40.0" proceeds="-4000.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="-4000.00"
+               tradeTime="20260116 21:00:01" orderTime="" exchange="" notes="A"
+               openCloseIndicator="" />
+        <Trade transactionID="9000008" tradeID="111000008"
+               orderReference="" conid="100005" symbol="IDX1 170C" underlyingSymbol="IDX1"
+               assetCategory="OPT" putCall="C" strike="170" expiry="20260116" buySell="BUY"
+               quantity="1" tradePrice="0.0" proceeds="0.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="0.00"
+               tradeTime="20260116 21:00:02" orderTime="" exchange="" notes="P"
+               openCloseIndicator="" />
+        <Trade transactionID="9000009" tradeID="111000009" ibExecID="0009.0001.01.01"
+               ibOrderID="5550005" orderReference="OptionsApp: Trade 43, Leg 1, Close Order 1"
+               conid="100006" symbol="IDX1 140P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="140" expiry="20260320" buySell="BUY" quantity="1"
+               tradePrice="2.20" proceeds="-220.00" ibCommission="-1.90" ibCommissionCurrency="EUR"
+               currency="EUR" fxRateToBase="1.0000" netCash="-221.90"
+               tradeTime="20260120 14:45:00" orderTime="20260120 14:44:00" exchange="EUREX"
+               notes="" openCloseIndicator="C" />
+        <Trade transactionID="9000010" tradeID="111000010" ibExecID="0010.0001.01.01"
+               ibOrderID="5550006" orderReference="OptionsApp: Trade 43, Leg 2, Profit Target 1"
+               conid="100007" symbol="IDX1 155P" underlyingSymbol="IDX1" assetCategory="OPT"
+               putCall="P" strike="155" expiry="20260320" buySell="SELL" quantity="1"
+               tradePrice="1.80" proceeds="180.00" ibCommission="-1.90" ibCommissionCurrency="EUR"
+               currency="EUR" fxRateToBase="1.0000" netCash="178.10"
+               tradeTime="20260120 14:45:00" orderTime="20260120 14:44:00" exchange="EUREX"
+               notes="" openCloseIndicator="C" />
+      </Trades>
+      <OpenPositions>
+        <OpenPosition conid="100008" symbol="IDX1 145P" underlyingSymbol="IDX1"
+                      assetCategory="OPT" putCall="P" strike="145" expiry="20260320"
+                      position="2" markPrice="2.50" markValue="500.00" costBasisPrice="3.00"
+                      costBasisMoney="600.00" fifoPnlUnrealized="-100.00" currency="USD"
+                      fxRateToBase="0.9300" />
+      </OpenPositions>
+      <CashTransactions>
+        <CashTransaction currency="USD" fxRateToBase="0.9300" accountId="U7777777"
+                         amount="1.25" type="Interest" dateTime="20260131 04:00:00"
+                         description="Interest on cash" />
+        <CashTransaction currency="USD" fxRateToBase="0.9300" accountId="U7777777"
+                         amount="12.00" type="Dividends" dateTime="20260115 04:00:00"
+                         description="CORP dividend" />
+      </CashTransactions>
+      <CorporateActions />
+      <Transfers />
+      <SecuritiesInfo>
+        <SecurityInfo conid="100001" symbol="IDX1 150P" underlyingSymbol="IDX1"
+                      assetCategory="OPT" putCall="P" strike="150" expiry="20260220"
+                      multiplier="100" currency="USD" />
+        <SecurityInfo conid="200001" symbol="CORP" underlyingSymbol="CORP"
+                      assetCategory="STK" multiplier="1" currency="USD" />
+        <SecurityInfo conid="300001" symbol="FUT1 MAR26" underlyingSymbol="FUT1"
+                      assetCategory="FUT" multiplier="25" currency="EUR" />
+        <SecurityInfo conid="100006" symbol="IDX1 140P" underlyingSymbol="IDX1"
+                      assetCategory="OPT" putCall="P" strike="140" expiry="20260320"
+                      multiplier="100" currency="EUR" />
+      </SecuritiesInfo>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

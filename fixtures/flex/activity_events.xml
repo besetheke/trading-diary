@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260101" toDate="20260131"
+                   period="January2026" whenGenerated="20260201T120000" currency="EUR">
+      <Trades>
+        <Trade transactionID="9100001" tradeID="112000001"
+               orderReference="" conid="100010" symbol="IDX1 135P" underlyingSymbol="IDX1"
+               assetCategory="OPT" putCall="P" strike="135" expiry="20260116" buySell="SELL"
+               quantity="3" tradePrice="0.0" proceeds="0.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="0.00"
+               tradeTime="20260116 21:00:00" orderTime="" exchange="" notes="Ep"
+               openCloseIndicator="" />
+        <Trade transactionID="9100002" tradeID="112000002"
+               orderReference="" conid="100011" symbol="CORP 35P" underlyingSymbol="CORP"
+               assetCategory="OPT" putCall="P" strike="35" expiry="20260116" buySell="BUY"
+               quantity="1" tradePrice="35.0" proceeds="-3500.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="-3500.00"
+               tradeTime="20260116 21:00:01" orderTime="" exchange="" notes="Ex"
+               openCloseIndicator="" />
+        <Trade transactionID="9100003" tradeID="112000003"
+               orderReference="" conid="100012" symbol="CORP 30P" underlyingSymbol="CORP"
+               assetCategory="OPT" putCall="P" strike="30" expiry="20260116" buySell="SELL"
+               quantity="1" tradePrice="30.0" proceeds="-3000.00" ibCommission="0.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="-3000.00"
+               tradeTime="20260116 21:00:02" orderTime="" exchange="" notes="A"
+               openCloseIndicator="" />
+      </Trades>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

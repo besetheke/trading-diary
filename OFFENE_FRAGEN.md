@@ -54,3 +54,20 @@ Der Standardpfad der Entwicklungsdatenbank ist `sqlite:///journal.db`
 (`migrations/env.py`, `journal/db.py` nimmt einen Pfad-Parameter).
 **Offen:** welcher Pfad auf dem Trading-Server (§3) endgültig gelten soll —
 Betriebsentscheidung, nicht Codefrage.
+
+## OF-07 · Ereigniscode `P` ist im Wertebereich von `ereignistyp` nicht unterbringbar
+
+§1.4 nennt vier Ereignistypen (trade/expiry/exercise/assignment); §6.1 zeigt
+aber einen fünften Code: `notes = P` mit 266 Vorkommen im Referenzexport.
+Der AP-02-Auftrag sagt, `P` bleibe „zunächst unklassifiziert" — bei NOT NULL
+plus CHECK ist dafür aber kein Zustand vorgesehen; der Import würde scheitern
+oder still verwerfen, beides verboten.
+**Annahme:** `P` wird als `ereignistyp='unbekannt'` gespeichert (Code bleibt
+in `ereignis_code` erhalten). AP-02 erweitert den CHECK um diesen Wert — per
+Migration, nicht durch Editieren der Initialmigration (Regel 3). P7 bleibt
+gewahrt: Strukturen entstehen nur aus `ereignistyp = 'trade'`, also nie aus
+`unbekannt`.
+**Offen:** was `P` fachlich bedeutet (Kandidaten: Payment in lieu, Partial?).
+Das sollte anhand eines echten Exports geklärt werden; danach kann der Wert
+per Migration auf die richtige Klasse gemappt werden — die Rohzeilen
+(`roh_json`, `ereignis_code`) bleiben unverändert interpretierbar.
