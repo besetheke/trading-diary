@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260501" toDate="20260531"
+                   period="May2026" whenGenerated="20260601T031500" currency="EUR">
+      <Trades />
+      <CashTransactions>
+        <CashTransaction transactionID="7100009" accountId="U7777777" currency="USD"
+                         fxRateToBase="0.9100" amount="3.00" type="Dividends"
+                         dateTime="20260512 04:00:00" description="CORP cash dividend" />
+        <CashTransaction transactionID="7100009" accountId="U7777777" currency="USD"
+                         fxRateToBase="0.9100" amount="-0.45" type="Withholding Tax"
+                         dateTime="20260512 04:00:00" description="CORP withholding" />
+      </CashTransactions>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

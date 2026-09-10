@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260310" toDate="20260331"
+                   period="Last21Days" whenGenerated="20260401T031500" currency="EUR">
+      <Trades>
+        <Trade transactionID="9400001" tradeID="111400001" ibExecID="0041.0001.01.01"
+               ibOrderID="5550041" orderReference=""
+               conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
+               buySell="BUY" quantity="50" tradePrice="40.00" proceeds="-2000.00"
+               ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
+               fxRateToBase="0.9200" netCash="-2001.00" tradeTime="20260305 15:30:00"
+               orderTime="20260305 15:29:00" exchange="MEMX" notes="" openCloseIndicator="" />
+        <Trade transactionID="9400002" tradeID="111400002" ibExecID="0042.0001.01.01"
+               ibOrderID="5550042" orderReference=""
+               conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
+               buySell="SELL" quantity="-10" tradePrice="21.50" proceeds="215.00"
+               ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
+               fxRateToBase="0.9200" netCash="214.00" tradeTime="20260324 15:30:00"
+               orderTime="20260324 15:29:00" exchange="MEMX" notes="" openCloseIndicator="C" />
+      </Trades>
+      <OpenPositions>
+        <OpenPosition accountId="U7777777" reportDate="20260331" conid="200001" symbol="CORP"
+                      underlyingSymbol="CORP" assetCategory="STK" position="210"
+                      markPrice="21.00" markValue="4410.00" costBasisPrice="20.80"
+                      costBasisMoney="4368.00" fifoPnlUnrealized="42.00" currency="USD"
+                      fxRateToBase="0.9200" />
+      </OpenPositions>
+      <CashTransactions>
+        <CashTransaction transactionID="7100002" accountId="U7777777" currency="USD"
+                         fxRateToBase="0.9200" amount="-10.00" type="Other Fees"
+                         dateTime="20260312 04:00:00" description="Market data fee" />
+        <CashTransaction transactionID="7100003" accountId="U7777777" currency="USD"
+                         fxRateToBase="0.9200" amount="25.00" type="Dividends"
+                         dateTime="20260320 04:00:00" description="CORP cash dividend" />
+      </CashTransactions>
+      <CorporateActions>
+        <CorporateAction transactionID="7200001" actionID="880001" accountId="U7777777"
+                         conid="200001" symbol="CORP" assetCategory="STK" type="FS"
+                         dateTime="20260310 20:25:00" quantity="55" currency="USD"
+                         description="CORP(200001) SPLIT 2 FOR 1" />
+      </CorporateActions>
+      <Transfers>
+        <Transfer transactionID="7300001" accountId="U7777777" conid="200001" symbol="CORP"
+                  assetCategory="STK" type="INTERNAL" direction="IN" quantity="5"
+                  dateTime="20260308 10:00:00" currency="USD"
+                  description="Internal transfer from U7777778" />
+      </Transfers>
+      <SecuritiesInfo>
+        <SecurityInfo conid="200001" symbol="CORP" underlyingSymbol="CORP"
+                      assetCategory="STK" multiplier="1" currency="USD" />
+      </SecuritiesInfo>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>
