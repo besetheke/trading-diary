@@ -71,3 +71,79 @@ gewahrt: Strukturen entstehen nur aus `ereignistyp = 'trade'`, also nie aus
 Das sollte anhand eines echten Exports geklärt werden; danach kann der Wert
 per Migration auf die richtige Klasse gemappt werden — die Rohzeilen
 (`roh_json`, `ereignis_code`) bleiben unverändert interpretierbar.
+
+## OF-08 · Unbekannte Ereigniscodes in `notes` führen zum Abbruch
+
+Der AP-02-Auftrag legt die Zuordnung für die vier belegten Codes fest
+(leer/`Ep`/`Ex`/`A`/`P`), sagt aber nichts über weitere Werte in `notes`.
+§6.1 belegt nur diese Codes; ob `notes` in echten Exporten freien Text trägt,
+ist ungeprüft.
+**Annahme:** Jeder nicht leere Code außerhalb der bekannten vier lässt den
+Import mit `ValueError` (Wert genannt) fehlschlagen — konsistent mit der
+Abnahme „unbekannte Feldwerte führen zu einem Fehler, nicht zu stillem
+Verwerfen". Stelle: `ingest/flex.py`, `EREIGNISTYPEN` und
+`_ereignistyp_aus_notes`.
+**Offen:** Tritt in einem echten Export ein fünfter Code oder Freitext auf,
+ist die Zuordnung fachlich zu entscheiden und die Tabelle zu erweitern.
+
+## OF-09 · Idempotenz- und Ergänzungsmodell der Flex-Sektionstabellen
+
+Der Auftrag legt fest, dass jede Sektion eine eigene Tabelle bekommt, aber
+nicht, wie sich wiederholte oder überlappende Importe auf diese Tabellen
+auswirken (die Abnahmekriterien sprechen nur von `executions`).
+**Annahme (`ingest/flex.py`):**
+
+1. **Gleiche Datei** (gleicher SHA-256 in `import_runs.datei_hash`) wird
+   vollständig übersprungen — auch für die Sektionen.
+2. **`flex_securities_info`** ist Stammdaten mit natürlichem Schlüssel
+   `conid`: ein erneuter Import überschreibt den Eintrag mit dem jüngsten
+   Stand (einschließlich `roh_json`).
+3. **`flex_open_positions`, `flex_cash_transactions`, `flex_corporate_actions`,
+   `flex_transfers`** — *nach dem Review von AP-02 neu geregelt* (Migration
+   `8a8d06f09935`, Tests `tests/test_ingest_flex_sektionen.py`). Die erste
+   Fassung fügte diese Zeilen je Lauf ein; jeder erneute oder rollierende
+   Abruf (neuer `whenGenerated`, also neuer Datei-Hash) hätte Zinsen,
+   Gebühren und Kapitalmaßnahmen verdoppelt. Jetzt trägt jede Zeile `konto`
+   und `quell_schluessel`, das Paar ist eindeutig, eine vorhandene Zeile wird
+   nie überschrieben:
+   - mit `transactionID` der Quelle: `tx:<id>`; dieselbe ID zweimal in einer
+     Datei bricht den Import ab;
+   - ohne: `inhalt:<sha256 über roh_json>#<n>`, `n` zählt inhaltsgleiche
+     Zeilen derselben Datei — zwei gleiche Gebühren bleiben zwei Buchungen;
+   - offene Positionen tragen `stichtag` (`reportDate`, sonst `toDate` des
+     Statements) und gehen in den Inhalts-Hash ein: ein Bestand je Stichtag.
+
+   **Annahme, ungeprüft:** Echte Exporte tragen an CashTransactions,
+   CorporateActions und Transfers eine `transactionID` (so die IB-Feldliste;
+   an den Golden-Daten nicht nachgezählt). Fehlt sie, greift der Inhalts-Hash.
+   Dessen Grenze: Ändert IB zwischen zwei Abrufen ein Attribut derselben
+   Buchung, entstehen zwei Zeilen — sichtbar, nicht still verloren. Mit dem
+   ersten echten Export prüfen (starkes Modell, Golden-Daten).
+4. **`instruments`** wird aus Trades und SecuritiesInfo gefüllt: erste
+   Anlage per conid, danach gewinnt der jüngste Import für abweichende
+   nicht-leere Felder; leere Felder überschreiben nichts. tickwert bleibt
+   leer — die Flex-Quelle liefert ihn nicht (§5 nennt ihn, AP-03 braucht
+   ihn je Anlageklasse; dann pflegen oder aus anderer Quelle speisen).
+   Gleiches gilt für `flex_securities_info`. **Achtung beim Nachladen der
+   Historie (§6.2, jahresweise):** „jüngster Import" heißt zuletzt
+   importiert, nicht jüngster Datenstand. Wer 2022/23 nach einem aktuellen
+   Lauf lädt, überschreibt neuere Stammdaten mit älteren — etwa angepasste
+   Multiplikatoren nach einem Split. Bis das geregelt ist: Historie zuerst,
+   dann die laufenden Abrufe.
+
+**Offen:** (a) Die `transactionID`-Annahme aus Punkt 3 am echten Export
+bestätigen. (b) Stammdaten nach Datenstand statt Importreihenfolge
+fortschreiben (Punkt 4) — spätestens, bevor die Historie produktiv
+nachgeladen wird.
+
+## OF-10 · Plan nennt zwei verschiedene Schlüsselfelder für `exec_id`
+
+§5 (Abschnitt `executions`, „Schlüsselgleichheit über Quellen hinweg") nennt
+`tradeID` in IB Flex als Gegenstück zur TDP-Spalte `Transaction ID`. §6.1
+(„Weitere Feldbefunde") belegt am echten Export: `transactionID` entspricht
+`Transaction ID`.
+**Umgesetzt:** `exec_id` = `transactionID` (`ingest/flex.py`), gestützt auf den
+empirischen Befund in §6.1; die AP-02-Abnahmetests setzen es ebenso voraus.
+**Offen:** §5 im Plan korrigieren (Plan ist für die Modelle schreibgeschützt).
+Wichtig für AP-09: Der TDP-Legacy-Import muss auf dieselbe Spalte schlüsseln,
+sonst entstehen Dubletten zwischen Altbestand und Flex.

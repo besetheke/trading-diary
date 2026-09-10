@@ -29,6 +29,7 @@ from sqlalchemy import (
     MetaData,
     Table,
     Text,
+    UniqueConstraint,
     types,
 )
 
@@ -100,8 +101,8 @@ import_runs = Table(
 executions = Table(
     "executions",
     metadata,
-    # Brokerseitige Ausführungs-ID (tradeID im Flex, Transaction ID im
-    # TDP-Export) — der quellenübergreifende Schlüssel, §5.
+    # Brokerseitige Ausführungs-ID (transactionID im Flex, Transaction ID im
+    # TDP-Export, §6.1) — der quellenübergreifende Schlüssel, §5.
     Column("exec_id", Text, primary_key=True),
     Column("konto", Text, nullable=False),
     Column("conid", BigInteger, nullable=False, index=True),
@@ -141,7 +142,10 @@ executions = Table(
     Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
     Column("qualitaetsstufe", Text, nullable=False),
     CheckConstraint(
-        "ereignistyp IN ('trade', 'expiry', 'exercise', 'assignment')",
+        # 'unbekannt' trägt der Ereigniscode P, der keinem der vier Typen aus
+        # §1.4 zugeordnet werden kann (OF-07). P7 bleibt gewahrt: Strukturen
+        # entstehen nur aus ereignistyp = 'trade'.
+        "ereignistyp IN ('trade', 'expiry', 'exercise', 'assignment', 'unbekannt')",
         name="ck_executions_ereignistyp",
     ),
     CheckConstraint(
@@ -219,6 +223,116 @@ corporate_actions = Table(
         "typ IN ('Split', 'Reverse', 'Merger', 'Spinoff')",
         name="ck_corporate_actions_typ",
     ),
+)
+
+# ---------------------------------------------------------------------------
+# Flex-Sektionen (Rohdaten, AP-02)
+#
+# Die Sektionen aus §6.2 werden beim Flex-Import mitgelesen und jede in ihre
+# eigene Tabelle gestellt — Rohdaten im Sinne von P1, jede Zeile trägt das
+# vollständige Attributbild in ``roh_json``. Die Spalten daneben sind die
+# unmittelbar benötigten Felder; alles Weitere bleibt im JSON erschlossen.
+# Die fachliche Verdichtung (z. B. CorporateActions → corporate_actions,
+# SecuritiesInfo → instruments) gehört den Folgpaketen, nicht dem Import.
+#
+# Keine Dubletten über Importläufe hinweg (Abnahme AP-02, OF-09): Jede Zeile
+# trägt Konto und Quellschlüssel, das Paar ist eindeutig. Der Quellschlüssel
+# ist die ``transactionID`` der Quelle, wo sie vorhanden ist, sonst ein
+# Inhalts-Hash mit laufender Nummer je Datei — zwei inhaltsgleiche Buchungen
+# derselben Datei bleiben so zwei Zeilen. Eine schon vorhandene Zeile wird
+# nicht überschrieben; ``import_run_id`` nennt den Lauf, der sie zuerst sah.
+# ---------------------------------------------------------------------------
+
+flex_open_positions = Table(
+    "flex_open_positions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    Column("quell_schluessel", Text, nullable=False),
+    # Bestand zum Stichtag: reportDate der Zeile, sonst toDate des Statements.
+    Column("stichtag", Date, nullable=False),
+    Column("conid", BigInteger, nullable=False, index=True),
+    Column("symbol", Text, nullable=False),
+    Column("asset_class", Text, nullable=False),
+    # Bestandsabgleich an den Periodengrenzen (§6.2): Kostenbasis und
+    # unrealisiertes Ergebnis sind die beiden Abgleichswerte.
+    Column("menge", ExactDecimal, nullable=False),
+    Column("kostenbasis_preis", ExactDecimal, nullable=True),
+    Column("fifo_pnl_unrealisiert", ExactDecimal, nullable=True),
+    Column("waehrung", Text, nullable=False),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_open_positions_quell_schluessel"),
+)
+
+flex_cash_transactions = Table(
+    "flex_cash_transactions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    Column("quell_schluessel", Text, nullable=False),
+    Column("datum", DateTime, nullable=False),
+    # Zinsen, Quellensteuer, Dividenden, Gebühren, Einzahlungen (§6.1)
+    Column("typ", Text, nullable=False),
+    Column("betrag", ExactDecimal, nullable=False),
+    Column("waehrung", Text, nullable=False),
+    Column("beschreibung", Text, nullable=True),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint(
+        "konto", "quell_schluessel", name="uq_flex_cash_transactions_quell_schluessel"
+    ),
+)
+
+flex_corporate_actions = Table(
+    "flex_corporate_actions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    Column("quell_schluessel", Text, nullable=False),
+    Column("conid", BigInteger, nullable=True, index=True),
+    # Rohwert der Quelle (z. B. SSplit); die fachliche Zuordnung auf die
+    # Typen aus corporate_actions macht AP-03.
+    Column("typ", Text, nullable=False),
+    Column("datum", DateTime, nullable=False),
+    Column("beschreibung", Text, nullable=True),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint(
+        "konto", "quell_schluessel", name="uq_flex_corporate_actions_quell_schluessel"
+    ),
+)
+
+flex_transfers = Table(
+    "flex_transfers",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    Column("quell_schluessel", Text, nullable=False),
+    Column("conid", BigInteger, nullable=True, index=True),
+    Column("typ", Text, nullable=False),
+    Column("datum", DateTime, nullable=False),
+    Column("beschreibung", Text, nullable=True),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_transfers_quell_schluessel"),
+)
+
+# Stammdaten: conid ist der natürliche Schlüssel; ein erneuter Import
+# überschreibt den Eintrag mit dem jüngsten Stand (Details in OF-09).
+flex_securities_info = Table(
+    "flex_securities_info",
+    metadata,
+    Column("conid", BigInteger, primary_key=True),
+    Column("symbol", Text, nullable=False),
+    Column("underlying", Text, nullable=True),
+    Column("asset_class", Text, nullable=False),
+    Column("expiry", Date, nullable=True),
+    Column("strike", ExactDecimal, nullable=True),
+    Column("right", Text, nullable=True),
+    Column("multiplikator", ExactDecimal, nullable=True),
+    Column("waehrung", Text, nullable=True),
+    Column("roh_json", Text, nullable=False),
 )
 
 # ---------------------------------------------------------------------------
