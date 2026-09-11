@@ -136,6 +136,12 @@ bestätigen. (b) Stammdaten nach Datenstand statt Importreihenfolge
 fortschreiben (Punkt 4) — spätestens, bevor die Historie produktiv
 nachgeladen wird.
 
+**Stand 10.09.2026:** (b) ist entschieden — Plan §6.2 „Reihenfolgeunabhängigkeit
+des Imports": Stammdaten tragen das Periodenende ihrer Quelle, nur eine jüngere
+Quelle überschreibt. Umsetzung in AP-02a. (a) ist **weiter offen**: Die Messung
+des Planers (19.425 Zeilen, `tradeID` lückenlos) betrifft die Trades-Zeilen,
+nicht `transactionID` auf CashTransactions, CorporateActions und Transfers.
+
 ## OF-10 · Plan nennt zwei verschiedene Schlüsselfelder für `exec_id`
 
 §5 (Abschnitt `executions`, „Schlüsselgleichheit über Quellen hinweg") nennt
@@ -147,3 +153,32 @@ empirischen Befund in §6.1; die AP-02-Abnahmetests setzen es ebenso voraus.
 **Offen:** §5 im Plan korrigieren (Plan ist für die Modelle schreibgeschützt).
 Wichtig für AP-09: Der TDP-Legacy-Import muss auf dieselbe Spalte schlüsseln,
 sonst entstehen Dubletten zwischen Altbestand und Flex.
+
+**Geklärt 10.09.2026:** §5 hatte recht, §6.1 war falsch. Gemessen im
+Überschneidungszeitraum: 175 von 175 TDP-Zeilen treffen `tradeID`, keine
+`transactionID`. Plan und AP-02.md sind korrigiert; `exec_id` = `tradeID`,
+`transactionID` sekundär. Die Umstellung von Code und Test-Erwartungen erfolgt
+in AP-02a. Bis dahin schlüsselt `ingest/flex.py` noch auf `transactionID`.
+
+## OF-11 · AP-02a: drei Punkte vor dem Start klären
+
+1. **Umzusetzen, Punkt 3 („Der Inhalts-Hash als Ersatzschlüssel entfällt")**
+   beruht auf einer ungenauen Formulierung in OF-09. Für `executions` gibt es
+   keinen Inhalts-Hash: eine fehlende ID bricht dort schon heute ab
+   (`ingest/flex.py`, `_pflichtwert`). Der Hash existiert nur als
+   Quellschlüssel der Sektionszeilen (`_quell_schluessel_vergeben`), vor allem
+   für `OpenPositions`, die gar keine ID tragen. Fällt er weg, bricht der
+   Sektionsimport und die Dublettensicherung aus OF-09.
+   **Vorschlag:** Punkt 3 gilt nur für `executions` (Pflichtfeld `tradeID`);
+   die Quellschlüssel der Sektionszeilen bleiben unverändert.
+2. **Freigabe und Abnahme widersprechen sich.** „Ausdrücklich freigegebene
+   Änderungen an Tests — nur diese, keine weiteren" erlaubt nur das Umstellen
+   von Erwartungen; die Abnahme verlangt drei neue Tests (fehlende `tradeID`,
+   Stammdaten-Reihenfolge, überlappende Dateien). Da `fixtures/` tabu ist,
+   müssen deren Testdaten im Test selbst entstehen (`tmp_path`).
+   **Vorschlag:** Neue Tests in `tests/test_ingest_flex.py` mit im Test
+   erzeugten XML-Daten ausdrücklich freigeben; bestehende Tests bleiben bis
+   auf die genannten Erwartungen unberührt.
+3. **Die Abnahme listet `OFFENE_FRAGEN.md` nicht** unter den erlaubten
+   Änderungen, OF-09 und OF-10 müssen aber fortgeschrieben werden.
+   **Vorschlag:** in die Liste aufnehmen.

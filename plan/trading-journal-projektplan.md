@@ -234,7 +234,8 @@ niemals blockieren.
 **Rohdaten (nie verändert)**
 - `import_runs` — id, quelle (flex/legacy_pdf/legacy_csv), datei_hash, importiert_am,
   zeitraum_von, zeitraum_bis, **qualitaetsstufe** (A/B/C), zeilen_gesamt, zeilen_neu
-- `executions` — **exec_id (PK) = brokerseitige Ausführungs-ID**, konto, conid,
+- `executions` — **exec_id (PK) = `tradeID` aus dem Flex-Export**, **transaction_id**
+  (Feld `transactionID`, sekundär, für Abstimmung mit dem Broker), konto, conid,
   symbol, sec_type, expiry,
   strike, right, side, menge, preis, waehrung, multiplikator, kommission,
   kommission_waehrung, handelszeit, **ib_exec_id**, **exec_batch** (erste zwei
@@ -244,11 +245,21 @@ niemals blockieren.
   **ereignistyp** (trade/expiry/exercise/assignment), **ereignis_code** (Rohwert
   der Quelle, z. B. Ep/Ex/A/P), roh_json, import_run_id, qualitaetsstufe
 
-  **Schlüsselgleichheit über Quellen hinweg:** die Spalte `Transaction ID` im
-  Trading-Diary-Pro-Export und das Feld `tradeID` in IB Flex tragen denselben Wert.
-  Damit sind Altbestand ab 2022 und laufende Flex-Importe ohne Dublettenrisiko
-  zusammenführbar, auch bei überlappenden Zeiträumen. Nicht zu verwechseln mit
-  `Contract Id` (= conid, Instrument) und `ID` (TDP-intern, ohne Aussagekraft).
+  **Schlüsselgleichheit über Quellen hinweg (gemessen):** die Spalte
+  `Transaction ID` im Trading-Diary-Pro-Export trägt denselben Wert wie das Feld
+  **`tradeID`** in IB Flex — im Überschneidungszeitraum 175 von 175 Treffern,
+  null Treffer gegen `transactionID`. Der Namensgleichklang zwischen der
+  TDP-Spalte und dem Flex-Feld `transactionID` ist irreführend; entscheidend ist
+  die Messung. Damit sind Altbestand ab 2022 und laufende Flex-Importe ohne
+  Dublettenrisiko zusammenführbar, auch bei überlappenden Zeiträumen.
+  Nicht zu verwechseln mit `Contract Id` (= conid, Instrument) und `ID`
+  (TDP-intern, ohne Aussagekraft).
+
+  **Vollständigkeit (gemessen über drei Exporte, 19.425 Zeilen):** `tradeID` ist
+  lückenlos gefüllt und vollständig eindeutig, auch auf allen 5.944
+  Ereigniszeilen für Verfall, Ausübung und Zuteilung. Eine fehlende `tradeID` ist
+  daher kein zu behandelnder Normalfall, sondern ein Abbruchgrund: der Import
+  bricht mit Nennung der Zeile ab, statt auf einen Ersatzschlüssel auszuweichen.
 - `strategies` — strategy_id (PK, sprechende Konvention), name, quelle
   (optionapp/roller/diskretionaer), aktiv_ab, aktiv_bis, beschreibung,
   backtest_referenz
@@ -327,8 +338,13 @@ Grundlage: Activity-Flex-Export 01.04.2022–31.03.2023, 3.971 Ausführungen
 | Zeitstempel allein | untauglich | 10 Fälle mit mehreren Orders im selben Sekundenwert |
 
 **Weitere Feldbefunde:**
-- `transactionID` entspricht der Spalte `Transaction ID` im
-  Trading-Diary-Pro-Export. Die quellenübergreifende Zusammenführung ist bestätigt.
+- **`tradeID`** entspricht der Spalte `Transaction ID` im Trading-Diary-Pro-Export
+  (175 von 175 Treffern im Überschneidungszeitraum, null gegen `transactionID`).
+  `tradeID` ist damit der Primärschlüssel der Tabelle `executions`. Das Feld
+  `transactionID` wird sekundär mitgeführt, taugt aber nicht als Brücke zum
+  Altbestand.
+- Alle 1.376 Buchungen des Februar-Exports erscheinen mit identischer `tradeID` in
+  der Jahresdatei. Die Dublettenerkennung über überlappende Zeiträume ist belegt.
 - `openCloseIndicator` ist bei 3.243 von 3.971 Zeilen leer und trägt sonst nur „C".
   Unbrauchbar — eigene Zuordnung nach AP-03 zwingend.
 - `fifoPnlRealized` steht auf Ausführungs- und Symbolebene durchgehend auf null.
@@ -444,6 +460,15 @@ Spalten: `Entry Time`, `Strategy`, `Name`, `Strikes`, `Quantity`, `Open`, `Close
 | Corporate Actions | Splits und Kapitalmaßnahmen; ersetzt die manuelle Pflege aus E6 |
 | Transfers | Positionsübertragungen, falls vorhanden |
 | Financial Instrument Information | conid-Stammdaten, Multiplikator, Basiswert-conid |
+
+**Reihenfolgeunabhängigkeit des Imports**
+
+Stammdaten aus `SecuritiesInfo` und `Instruments` tragen das Periodenende ihrer
+Quelldatei. Ein bestehender Datensatz wird nur überschrieben, wenn die neue Quelle
+jünger ist. Damit ist die Importreihenfolge beliebig — eine Bedienanweisung
+„erst Historie, dann Laufendes" wäre eine Fehlerquelle, die man in einem Jahr
+vergisst. Bewegungsdaten sind davon nicht betroffen: sie sind unveränderlich und
+werden bei Schlüsselkollision verworfen, nicht überschrieben.
 
 **Abrufmodus**
 - Format XML, Basiswährung EUR, `fxRateToBase` aktiviert.

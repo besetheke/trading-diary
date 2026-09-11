@@ -6,11 +6,13 @@
   .\ap.ps1 AP-02              Paket bearbeiten
   .\ap.ps1 AP-02 -Review      Diff-Review durch das starke Modell
   .\ap.ps1 -Liste             Alle Auftraege mit Modell und Status
+  .\ap.ps1 AP-01 -Fertig      Status auf 'fertig' setzen, nach bestandenem Review
 #>
 param(
     [Parameter(Position = 0)][string]$Paket,
     [switch]$Review,
     [switch]$Liste,
+    [switch]$Fertig,
     [switch]$Trocken
 )
 
@@ -26,10 +28,11 @@ $Settings = @{
 
 function Kopf-Lesen($datei) {
     $inhalt = Get-Content $datei -Raw -Encoding UTF8
-    $ergebnis = @{ modell = "stark"; status = "offen"; titel = "" }
+    $ergebnis = @{ modell = "stark"; status = "offen"; titel = ""; aendert_tests = $false }
     if ($inhalt -match '(?m)^modell:\s*(\S+)')  { $ergebnis.modell = $Matches[1].ToLower() }
     if ($inhalt -match '(?m)^status:\s*(\S+)')  { $ergebnis.status = $Matches[1] }
     if ($inhalt -match '(?m)^titel:\s*(.+)$')   { $ergebnis.titel  = $Matches[1].Trim() }
+    if ($inhalt -match '(?m)^aendert_tests:\s*ja') { $ergebnis.aendert_tests = $true }
     return $ergebnis
 }
 
@@ -60,6 +63,19 @@ if (-not (Test-Path $AuftragsDatei)) {
 }
 
 $Kopf = Kopf-Lesen $AuftragsDatei
+
+if ($Fertig) {
+    $inhalt = Get-Content $AuftragsDatei -Raw -Encoding UTF8
+    if ($inhalt -notmatch '(?m)^status:\s*\S+') {
+        Write-Host "Kein status-Feld im Auftragskopf gefunden." -ForegroundColor Red
+        exit 1
+    }
+    $neu = $inhalt -replace '(?m)^status:\s*\S+', 'status: fertig'
+    Set-Content $AuftragsDatei -Value $neu -Encoding UTF8 -NoNewline
+    Write-Host "$Paket auf 'fertig' gesetzt." -ForegroundColor Green
+    Write-Host "Erinnerung: Review durchgefuehrt? Diff auf tests/ und fixtures/ geprueft?" -ForegroundColor Yellow
+    exit 0
+}
 
 # Review laeuft grundsaetzlich auf dem starken Modell.
 $Modell = if ($Review) { "stark" } else { $Kopf.modell }
@@ -118,6 +134,14 @@ in OFFENE_FRAGEN.md eingetragen hast.
     $farbe = if ($Modell -eq "stark") { "Cyan" } else { "Green" }
     Write-Host "$Paket : $($Kopf.titel)" -ForegroundColor White
     Write-Host "Modell: $Modell  ($SettingsDatei)" -ForegroundColor $farbe
+    if ($Kopf.aendert_tests) {
+        if ($Modell -ne "stark") {
+            Write-Host "ABBRUCH: Paket darf Tests aendern, laeuft aber nicht auf dem starken Modell." -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "ACHTUNG: Dieses Paket darf Test-Erwartungen aendern." -ForegroundColor Yellow
+        Write-Host "         Pruefe im Review jede Aenderung unter tests/ gegen das Auftragsdokument." -ForegroundColor Yellow
+    }
 }
 
 if ($Trocken) {

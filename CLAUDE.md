@@ -15,13 +15,22 @@ Code plausibel aussieht.
 ## Unverrückbar
 
 1. **Tests, Fixtures und Abnahmekriterien sind unveränderlich — ab AP-01.**
-   AP-01 legt das Testgerüst und die Fixtures an; das ist der einzige Zeitpunkt,
-   zu dem sie entstehen. Danach ändere sie niemals, um einen Testlauf grün zu
-   bekommen. Schlägt ein Test fehl, ist der Code falsch oder die Anforderung
-   unklar. Im zweiten Fall: Eintrag in `OFFENE_FRAGEN.md` und Abbruch.
-   Der Hook setzt das technisch durch: Profil `locker` für AP-01, danach `streng`.
+   AP-01 legt das Testgerüst und die Fixtures an. Danach ändere sie niemals, um
+   einen Testlauf grün zu bekommen. Schlägt ein Test fehl, ist der Code falsch
+   oder die Anforderung unklar. Im zweiten Fall: Eintrag in `OFFENE_FRAGEN.md`
+   und Abbruch.
+   Der Hook setzt das technisch durch: Profil `locker` nur für Pakete, die Tests
+   anlegen oder korrigieren dürfen, sonst `streng`.
    **Fordere niemals, den Schutz zu lockern.** Kommst du an eine Stelle, an der
    das nötig scheint, ist der Auftrag falsch geschnitten — melde das.
+
+1a. **Wenn eine Test-Erwartung fachlich falsch ist**, gibt es genau einen Weg:
+   ein eigenes Korrekturpaket. Es trägt im Kopf `aendert_tests: ja`, läuft unter
+   `locker` und benennt die zu ändernden Erwartungen namentlich. Nur die dort
+   genannten dürfen geändert werden, und die Prüflogik bleibt erhalten — es
+   ändert sich, *was* erwartet wird, nie *ob* geprüft wird. Alles andere bleibt
+   verboten, insbesondere das beiläufige Anpassen eines Tests im Rahmen eines
+   Umsetzungspakets.
 2. **Golden-Fixtures unter `fixtures/golden/`** enthalten echte Kontodaten. Nur
    Pakete des starken Modells lesen sie. Niemals kopieren, niemals ausgeben,
    niemals in Logs schreiben.

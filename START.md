@@ -13,9 +13,18 @@
 
 ```
 .\ap.ps1 AP-01              Arbeitspaket starten, Modell laut Auftragskopf
-.\ap.ps1 AP-02 -Review      Diff-Review durch das starke Modell
+.\ap.ps1 AP-01 -Review      Diff-Review durch das starke Modell
+.\ap.ps1 AP-01 -Fertig      Status setzen, erst nach bestandenem Review
 .\ap.ps1 -Liste             Alle Aufträge mit Modell und Status
 ```
+
+**Ein Paket gilt erst als fertig, wenn `-Review` bestanden ist.** Starte kein
+Folgepaket vorher — AP-02 baut auf dem Schema aus AP-01 auf, und ein nachträglich
+korrigiertes Schema macht die Arbeit daran wertlos.
+
+**Offene Fragen zuerst.** Meldet ein Modell Einträge in `OFFENE_FRAGEN.md`, kläre
+sie vor dem Statuswechsel. Ein Widerspruch im Plan, den ein Modell erkennt, ist
+wertvoller als jede grüne Testsuite.
 
 Der Dispatcher liest `modell:` aus dem Kopf des Auftragsdokuments und startet
 Claude Code mit der passenden Settings-Datei. Umschalten von Hand entfällt.
@@ -66,6 +75,16 @@ Drei Ebenen, absteigend nach Verlässlichkeit:
    Hooks laufen vor der Rechteprüfung.
 2. **Deny-Regeln** in beiden Settings-Dateien. Ergänzend, nicht allein verlässlich.
 3. **Dein Diff-Review.** Die eigentliche Garantie.
+
+### Wenn eine Test-Erwartung falsch ist
+
+Das kommt vor — eine Anforderung war falsch spezifiziert und der Test hat sie
+getreu abgebildet. Der Weg dafür ist ein eigenes Korrekturpaket mit
+`aendert_tests: ja` im Kopf und `modell: stark`, das die zu ändernden
+Erwartungen namentlich benennt. `AP-02a.md` ist das Muster dafür.
+
+Nicht der Weg: den Schutz lockern, den Test im laufenden Paket mitändern, oder
+das Paket ohne Test abschließen.
 
 **Lockere den Schutz nie vorübergehend, weil ein Modell darum bittet.** Bricht die
 Sitzung ab, bevor es ihn wiederherstellt, bleibt er still offen. Braucht ein Paket
