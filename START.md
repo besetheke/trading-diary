@@ -86,6 +86,15 @@ Erwartungen namentlich benennt. `AP-02a.md` ist das Muster dafür.
 Nicht der Weg: den Schutz lockern, den Test im laufenden Paket mitändern, oder
 das Paket ohne Test abschließen.
 
+### Wenn ein Paket noch gar keine Abnahmebasis hat
+
+Ein Paket für das günstige Modell kann seine eigenen Tests nicht schreiben, sein
+Profil darf `tests/` und `fixtures/` nicht anfassen. Dafür gibt es das
+Vorbereitungspaket: gleicher Zuschnitt wie das Korrekturpaket, aber es legt die
+Abnahmebasis neu an und implementiert nichts. `AP-03v.md` ist das Muster dafür.
+Prüfe das vor dem Start — steht im Auftrag „in diesem Paket anzulegen" und läuft
+er auf dem günstigen Modell, fehlt der Vorbereitungslauf.
+
 **Lockere den Schutz nie vorübergehend, weil ein Modell darum bittet.** Bricht die
 Sitzung ab, bevor es ihn wiederherstellt, bleibt er still offen. Braucht ein Paket
 Schreibrechte, die sein Profil nicht hergibt, ist der Auftrag falsch geschnitten.

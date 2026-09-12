@@ -31,6 +31,11 @@ Code plausibel aussieht.
    ändert sich, *was* erwartet wird, nie *ob* geprüft wird. Alles andere bleibt
    verboten, insbesondere das beiläufige Anpassen eines Tests im Rahmen eines
    Umsetzungspakets.
+   Dasselbe gilt für ein **Vorbereitungspaket**, das die Abnahmebasis eines noch
+   nicht begonnenen Pakets neu anlegt: eigener Auftrag, `aendert_tests: ja`,
+   `modell: stark`, und es implementiert nichts. Nach Plan §11.2 schreibt das
+   starke Modell Tests und Fixtures, das günstige implementiert dagegen — wer
+   beides in einer Hand hält, prüft sich selbst.
 2. **Golden-Fixtures unter `fixtures/golden/`** enthalten echte Kontodaten. Nur
    Pakete des starken Modells lesen sie. Niemals kopieren, niemals ausgeben,
    niemals in Logs schreiben.

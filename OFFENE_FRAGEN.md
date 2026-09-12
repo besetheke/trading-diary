@@ -202,6 +202,13 @@ machen.
 Ausführungs-IDs speichert und jederzeit neu berechenbar ist, wäre AP-02a
 zuvor aber die sauberere Reihenfolge.
 
+**Erledigt 12.09.2026 auf Nutzerentscheidung: Weg 1.** `auftraege/AP-03v.md`
+legt die Abnahmebasis an (starkes Modell, `aendert_tests: ja`, implementiert
+nichts), danach läuft AP-03 unverändert auf dem günstigen Modell. Reihenfolge:
+AP-02a, dann AP-03v samt Review, dann AP-03 — der Nebenbefund ist damit
+berücksichtigt. Der Vorbereitungsfall steht jetzt als Regel in `CLAUDE.md`
+(1a) und in `START.md`, weil er bei AP-07 bis AP-10 erneut auftritt.
+
 ## OF-11 · AP-02a: drei Punkte vor dem Start klären
 
 **Erledigt 12.09.2026 auf Nutzerentscheidung:** Alle drei Vorschläge sind in
