@@ -378,20 +378,23 @@ def test_split_laesst_die_kommissionssumme_unveraendert():
 # Futures mit Tickwert (Pflichtfall)
 #
 # conid 500004: Multiplikator 5, Tickwert 25 — beide gesetzt und verschieden.
+#               Preisfaktor ist der Multiplikator; der Tickwert geht nicht in
+#               den P&L ein (Vertrag Regel 3, OF-14, korrigiert in AP-03vk).
 # conid 500005: Multiplikator 20, kein Tickwert.
 # ---------------------------------------------------------------------------
 
 
-def test_futures_tickwert_hat_vorrang_vor_dem_multiplikator():
-    # (18010.0 - 18000.0) * 2 Kontrakte * 25 = 10 * 50 = 500.00
+def test_futures_tickwert_geht_nicht_in_den_pnl_ein():
+    # Preisfaktor ist der Multiplikator, der gesetzte Tickwert 25 bleibt außen vor:
+    # (18010.0 - 18000.0) * 2 Kontrakte * 5 = 10 * 10 = 100.00
     leg = leg_von(bilde("futures_tickwert"), "F1", "F2")
-    assert leg.brutto_pnl == Decimal("500.00")
+    assert leg.brutto_pnl == Decimal("100.00")
 
 
-def test_futures_multiplikator_allein_waere_das_falsche_ergebnis():
-    # Gegenprobe: mit dem Multiplikator 5 wären es (10.0 * 2 * 5) = 100.00.
+def test_futures_tickwert_als_faktor_waere_das_falsche_ergebnis():
+    # Gegenprobe: mit dem Tickwert 25 als Faktor wären es (10.0 * 2 * 25) = 500.00.
     leg = leg_von(bilde("futures_tickwert"), "F1", "F2")
-    assert leg.brutto_pnl != Decimal("100.00")
+    assert leg.brutto_pnl != Decimal("500.00")
 
 
 def test_futures_ohne_tickwert_gilt_der_multiplikator():
@@ -410,6 +413,18 @@ def test_futures_kommission_wird_voll_zugeordnet():
 
 def test_futures_beide_positionen_sind_geschlossen():
     assert offene(legs_von(bilde("futures_tickwert"))) == []
+
+
+def test_fehlender_multiplikator_bricht_ab():
+    """Vertrag Regel 3: ohne Multiplikator kein Preisfaktor — der Lauf endet mit
+    ValueError unter Nennung des conid. Der gesetzte Tickwert 25 darf nicht
+    einspringen, denn er geht nicht in den P&L ein (OF-14)."""
+    fall = lade("futures_tickwert")
+    instrumente = {conid: dict(satz) for conid, satz in fall.instruments.items()}
+    instrumente[500004]["multiplikator"] = None
+    with pytest.raises(ValueError) as fehler:
+        bilde_legs(fall.executions, instrumente, fall.kapitalmassnahmen)
+    assert "500004" in str(fehler.value)
 
 
 # ---------------------------------------------------------------------------

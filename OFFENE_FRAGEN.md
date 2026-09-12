@@ -381,6 +381,12 @@ Anlageklasse korrekt angewandt". Nach dieser Entscheidung wird der Tickwert
 bewusst nicht angewandt; die Formulierung im Plan ist anzupassen (`plan/` ist
 für die Modelle gesperrt).
 
+**Umgesetzt 12.09.2026 in AP-03vk:** die zwei Erwartungen in
+`tests/test_matching.py` umgestellt und umbenannt, ein Test für fehlenden
+`multiplikator` ergänzt, die Beschreibung in `futures_tickwert.json` und der
+Kommentar an `instruments.tickwert` angepasst. Offen bleibt nur der
+Planhinweis oben.
+
 ## OF-15 · Stichtagsgrenze bei Kapitalmaßnahmen
 
 `corporate_actions.stichtag` ist ein Datum ohne Uhrzeit. Der Plan sagt, der

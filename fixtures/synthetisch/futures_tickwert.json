@@ -1,6 +1,6 @@
 {
   "fall": "futures_tickwert",
-  "beschreibung": "Pflichtfall AP-03: Futures-Position mit Tickwert. conid 500004 traegt Multiplikator 5 UND Tickwert 25 - die beiden unterscheiden sich absichtlich, damit sichtbar wird, welcher angewandt wurde (Vertrag: bei FUT/FOP hat ein gesetzter Tickwert Vorrang). conid 500005 traegt keinen Tickwert; dort gilt der Multiplikator. Alles EUR.",
+  "beschreibung": "Pflichtfall AP-03: Futures-Position mit Tickwert. conid 500004 traegt Multiplikator 5 UND Tickwert 25 - die beiden unterscheiden sich absichtlich, damit sichtbar wird, welcher angewandt wurde (Vertrag Regel 3, OF-14: Preisfaktor ist der Multiplikator, der Tickwert geht nicht in den P&L ein). conid 500005 traegt keinen Tickwert; dort gilt ebenfalls der Multiplikator. Alles EUR.",
   "instruments": [
     {
       "conid": 500004,

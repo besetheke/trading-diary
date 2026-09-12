@@ -1,7 +1,7 @@
 ---
 titel: Korrektur der Abnahmebasis AP-03 - Preisfaktor bei Futures (OF-14)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-03v
 aendert_tests: ja
 ---

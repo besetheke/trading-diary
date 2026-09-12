@@ -208,6 +208,9 @@ instruments = Table(
     Column("strike", ExactDecimal, nullable=True),
     Column("right", Text, nullable=True),
     Column("multiplikator", ExactDecimal, nullable=True),
+    # Berichtsgröße, geht nicht in den P&L ein (OF-14): der Punktwert eines
+    # Futures steht in ``multiplikator``. Ein echter Tickwert — der Wert der
+    # kleinsten Preisbewegung — wäre ohne Tickgröße nicht umrechenbar.
     Column("tickwert", ExactDecimal, nullable=True),
     Column("waehrung", Text, nullable=True),
     # Periodenende der Quelldatei, aus der dieser Stand stammt (§6.2,
