@@ -424,3 +424,20 @@ Position bleibt offen. Damit ist der Fall sichtbar statt still.
 matchenden Ereignisarten. Bis dahin bleibt jede Position, die auf einer
 P-Zeile endet, offen und verfälscht die Summenprobe gegen echte Daten — beim
 ersten Golden-Lauf zu erwarten und dort zu erklären.
+
+## OF-17 · `executions.kommission = NULL` im Matching
+
+Der Flex-Import speichert `ibCommission` als NULL, wenn die Quelle das Feld
+leer liefert (`ingest/flex.py`, `_dezimalwert`); das Schema lässt NULL zu
+(`journal/schema.py`). Der AP-03-Vertrag nennt nur die Felder, nicht ihre
+Nullbarkeit.
+
+**Annahme:** NULL heißt „keine Kommission gebucht" und wirkt wie 0 — die
+Verteilung der Kommission auf Teilmengen läuft mit 0 durch, kein Leg trägt
+einen Anteil (`engine/matching.py`, `_buchung`). Die Alternative, NULL als
+„unbekannt" zu lesen und abzubrechen, würde jeden Bestand ohne explizite
+Nullbuchung (etwa Ereigniszeilen) unbrauchbar machen.
+
+**Offen:** Sollten echte Daten NULL in einem Sinne führen, der Geld bedeutet,
+ist das ein Abbruchgrund wie beim fehlenden Multiplikator. Mit dem ersten
+Lauf gegen Golden-Daten prüfen (starkes Modell).
