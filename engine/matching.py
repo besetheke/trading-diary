@@ -20,9 +20,10 @@ Grundsätze:
 - **Zentgenau (Regel 5).** Alle Beträge und Mengen sind ``Decimal``,
   niemals float. Der Brutto-P&L wird auf den Cent gerundet
   (``ROUND_HALF_UP``); die Kommission einer Ausführung wird nach Menge auf
-  ihre Teilmengen verteilt, und die letzte Teilmenge erhält den Rundungsrest
-  — die Summe über alle Legs eines ``conid`` ist damit exakt die Summe der
-  gebuchten Kommissionen.
+  ihre Teilmengen verteilt, auf den Cent gerundet sind nur die Anteile vor
+  der letzten Teilmenge — die letzte trägt den exakten Rest, die gebuchte
+  Kommission wird nie gerundet. Die Summe über alle Legs eines ``conid``
+  ist damit exakt die Summe der gebuchten Kommissionen (OF-18).
 - **Kapitalmaßnahmen vor dem Matching.** Ausführungen vor dem Stichtag
   werden angepasst: Menge × Faktor, Preis ÷ Faktor. Eine Ausführung am
   Stichtag selbst gilt bereits zu neuen Konditionen (OF-15). Die Kommission
@@ -417,10 +418,13 @@ def _brutto_pnl(schluss: _Schluss, multiplikator: Decimal) -> Decimal:
 
 
 def _kommission_verteilen(buchung: _Buchung) -> list[Decimal]:
-    """Kommission nach Menge auf die Teilmengen, zentgenau ROUND_HALF_UP.
+    """Kommission nach Menge auf die Teilmengen.
 
-    Die letzte Teilmenge erhält den Rundungsrest, damit die Summe exakt der
-    gebuchten Kommission entspricht — keine stillen Rundungen (Regel 5).
+    Auf den Cent gehen nur die Anteile vor der letzten Teilmenge
+    (``ROUND_HALF_UP``); die letzte trägt den exakten Rest, ungerundet auch
+    mit mehr als zwei Nachkommastellen — die gebuchte Kommission wird nie
+    gerundet, und die Summe über die Legs geht exakt in ihr auf (OF-18,
+    Regel 5).
     """
     if not buchung.teilmengen:
         if buchung.kommission == 0:
@@ -437,7 +441,5 @@ def _kommission_verteilen(buchung: _Buchung) -> list[Decimal]:
         ).quantize(CENT, rounding=ROUND_HALF_UP)
         anteile.append(anteil)
         verteilt += anteil
-    anteile.append(
-        (buchung.kommission - verteilt).quantize(CENT, rounding=ROUND_HALF_UP)
-    )
+    anteile.append(buchung.kommission - verteilt)
     return anteile

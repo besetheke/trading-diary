@@ -504,3 +504,9 @@ durch das günstige Modell gegen diese Tests.
 präzisiert. Die Tests schlagen gegen den jetzigen `engine/matching.py` fehl und
 bestehen gegen die unabhängige Referenz. **Offen:** Schritt (2), die
 Nachbesserung in AP-03.
+
+**Erledigt 12.09.2026:** Schritt (2) ist umgesetzt — die letzte Teilmenge trägt
+den exakten Rest (`engine/matching.py`, `_kommission_verteilen`). Review: 101
+Tests grün; der Differenztest gegen die unabhängige Referenz ergibt in 3.000
+Szenarien mit Cent-Kommissionen und 3.000 mit vier Nachkommastellen identische
+Legs, die Kommissionssumme je `conid` geht in allen 6.000 exakt auf.
