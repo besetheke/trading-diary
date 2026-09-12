@@ -71,7 +71,12 @@ if ($Fertig) {
         exit 1
     }
     $neu = $inhalt -replace '(?m)^status:\s*\S+', 'status: fertig'
-    Set-Content $AuftragsDatei -Value $neu -Encoding UTF8 -NoNewline
+    # UTF-8 ohne Byte-Reihenfolge-Marke: Set-Content -Encoding UTF8 setzt in
+    # Windows PowerShell eine BOM an den Dateianfang und veraendert damit jede
+    # Auftragsdatei still im Diff (Befund beim Abschluss von AP-02a).
+    [System.IO.File]::WriteAllText(
+        $AuftragsDatei, $neu, (New-Object System.Text.UTF8Encoding($false))
+    )
     Write-Host "$Paket auf 'fertig' gesetzt." -ForegroundColor Green
     Write-Host "Erinnerung: Review durchgefuehrt? Diff auf tests/ und fixtures/ geprueft?" -ForegroundColor Yellow
     exit 0

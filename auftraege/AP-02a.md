@@ -1,7 +1,7 @@
 ---
 titel: Schluesselkorrektur exec_id auf tradeID
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-02
 aendert_tests: ja
 ---
