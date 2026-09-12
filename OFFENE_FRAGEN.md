@@ -142,6 +142,16 @@ Quelle überschreibt. Umsetzung in AP-02a. (a) ist **weiter offen**: Die Messung
 des Planers (19.425 Zeilen, `tradeID` lückenlos) betrifft die Trades-Zeilen,
 nicht `transactionID` auf CashTransactions, CorporateActions und Transfers.
 
+**Gemessen 12.09.2026 an beiden Golden-Exporten (nur Zählwerte):** Der
+Referenzexport 2022/23 enthält keine dieser Sektionen. Im Export 2026 tragen
+211 von 327 CashTransactions eine `transactionID` (116 ohne, gut ein Drittel),
+8 von 12 CorporateActions; Transfers gibt es keine. Die Annahme aus Punkt 3
+trägt damit nur teilweise: Der Inhalts-Hash ist kein theoretischer Rückfall,
+sondern für rund ein Drittel der Kassenbuchungen der tatsächliche Schlüssel —
+und seine Grenze (ein zwischen zwei Abrufen geändertes Attribut erzeugt eine
+zweite Zeile) betrifft genau diese Zeilen. **Offen:** welche Buchungsarten ohne
+`transactionID` kommen; danach entscheiden, ob der Inhalts-Hash für sie genügt.
+
 **Erledigt 12.09.2026 in AP-02a — Punkt (b), Stammdaten nach Datenstand.**
 `instruments` und `flex_securities_info` tragen die Spalte
 `quell_periodenende`: das `toDate` des FlexStatements, aus dem der Satz stammt.
@@ -334,6 +344,16 @@ Widerspruch zwischen `side` und dem Vorzeichen von `menge` sinnvoll: sie
 fände Importfehler, die der jetzige Vertrag stillschweigend überdeckt. Mit dem
 ersten echten Export prüfen (starkes Modell, Golden-Daten).
 
+**Gemessen 12.09.2026 an beiden Golden-Exporten (18.049 Trades):** Das
+Vorzeichen ist in echten Daten verlässlich — jede SELL-Zeile trägt eine
+negative, jede BUY-Zeile eine positive `quantity` (Export 1: 2.019 und 1.952,
+Export 2: 7.045 und 7.033, keine Ausnahme). Uneinheitlich sind nur die
+synthetischen AP-01-Fixtures. `side` plus `abs(menge)` bleibt richtig.
+**Vorschlag, nicht dringend:** Eine Widerspruchsprüfung zwischen `side` und
+Vorzeichen im Import würde echte Daten nie stören und Importfehler finden. Sie
+bräche aber `fixtures/flex/activity_2026_01.xml` (SELL mit positiver Menge) und
+bräuchte deshalb ein Korrekturpaket.
+
 ## OF-14 · Verhältnis von `tickwert` und `multiplikator` bei Futures
 
 §5 nennt beide Felder auf `instruments`, der Plan verlangt in AP-03
@@ -441,3 +461,40 @@ Nullbuchung (etwa Ereigniszeilen) unbrauchbar machen.
 **Offen:** Sollten echte Daten NULL in einem Sinne führen, der Geld bedeutet,
 ist das ein Abbruchgrund wie beim fehlenden Multiplikator. Mit dem ersten
 Lauf gegen Golden-Daten prüfen (starkes Modell).
+
+**Gemessen 12.09.2026 an beiden Golden-Exporten:** In 18.049 Trades ist
+`ibCommission` kein einziges Mal leer, weder in Handels- noch in
+Ereigniszeilen — IB bucht dort eine ausdrückliche 0. Der Fall NULL kommt in
+echten Daten nicht vor; die Begründung „jeder Bestand ohne explizite
+Nullbuchung wäre unbrauchbar" trifft nicht zu. Eine NULL wäre damit ein
+Importdefekt. **Empfehlung, nicht blockierend:** auf Abbruch umstellen, wie
+beim fehlenden Multiplikator.
+
+## OF-18 · Kommissionsverteilung rundet den letzten Anteil — Summe nicht exakt
+
+**Befund aus dem Review von AP-03 (12.09.2026), blockiert die Abnahme.**
+`engine/matching.py`, `_kommission_verteilen`, rundet auch den letzten Anteil
+auf den Cent. Hat die gebuchte Kommission mehr als zwei Nachkommastellen, geht
+die Summe über die Legs nicht mehr in der gebuchten Kommission auf; bei einer
+ungeteilten Ausführung wird sie ohne jede Aufteilung still gerundet (etwa
+−1,0472 → −1,05). Das verletzt Vertrag Regel 5 („damit die Summe exakt
+bleibt") und CLAUDE.md Regel 5 („keine stillen Rundungen").
+
+**Belege:** Differenztest gegen eine unabhängige Referenz, je 3.000
+Zufallsszenarien: bei Kommissionen auf den Cent identisch (3.000 von 3.000);
+bei Kommissionen mit vier Nachkommastellen bleibt die Summe je `conid` nur in
+7 von 3.000 Szenarien exakt. An den Golden-Exporten tragen 3.102 von 3.971
+(78 %) und 8.538 von 14.078 (61 %) Ausführungen eine Kommission mit mehr als
+zwei Nachkommastellen — der Fehler träfe die Mehrheit der echten Buchungen und
+ließe die Summenprobe gegen die Broker-Summe (Plan §6, AP-03) scheitern.
+
+**Warum die Tests es nicht fanden:** Kein Fixture der Abnahmebasis enthält eine
+Kommission mit mehr als zwei Nachkommastellen. Das ist eine Lücke in AP-03v,
+die das Review von AP-03v hätte finden müssen.
+
+**Vorschlag:** (1) Nachtrag zur Abnahmebasis durch das starke Modell — ein
+Fixture mit gebrochenen Kommissionen, Tests für die ungeteilte Ausführung, für
+die Aufteilung mit exaktem Rest und für die exakte Summe; Vertrag Regel 5
+präzisieren: die ersten Teilmengen auf den Cent, die letzte trägt den exakten
+Rest, die gebuchte Kommission wird nie gerundet. (2) Nachbesserung von AP-03
+durch das günstige Modell gegen diese Tests.
