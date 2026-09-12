@@ -142,6 +142,40 @@ Quelle überschreibt. Umsetzung in AP-02a. (a) ist **weiter offen**: Die Messung
 des Planers (19.425 Zeilen, `tradeID` lückenlos) betrifft die Trades-Zeilen,
 nicht `transactionID` auf CashTransactions, CorporateActions und Transfers.
 
+**Erledigt 12.09.2026 in AP-02a — Punkt (b), Stammdaten nach Datenstand.**
+`instruments` und `flex_securities_info` tragen die Spalte
+`quell_periodenende`: das `toDate` des FlexStatements, aus dem der Satz stammt.
+Zusammengeführt wird in `_stammsatz_verschmelzen` (`ingest/flex.py`) nach einer
+Regel, die in beide Richtungen dasselbe Ergebnis liefert:
+
+- Eine **ältere** Quelle überschreibt nichts, sie füllt nur leere Felder.
+- Jede andere Quelle setzt ihre besetzten Felder durch; `None` löscht nie.
+- Gespeichert wird das spätere der beiden Periodenenden.
+
+Damit entfällt die Bedienanweisung „erst Historie, dann Laufendes". Punkt 4
+oben ist in diesem Teil überholt: „jüngster Import" heißt jetzt jüngste
+Quellperiode. Die Warnung zum Nachladen der Historie gilt nicht mehr.
+
+**Annahme, dokumentiert:** Ein fehlendes `toDate` heißt „Periode unbekannt"
+und ist die schwächere Angabe — es überschreibt keinen datierten Stand, wird
+aber von jedem datierten Stand überschrieben. Echte Flex-Statements tragen
+immer ein `toDate`; der Fall ist Absicherung, kein Normalfall.
+
+**Rest, bewusst offengelassen:** Tragen zwei *verschiedene* Quelldateien
+dasselbe Periodenende und widersprechen sich in einem besetzten Feld, gewinnt
+die zuletzt importierte. Innerhalb einer Datei ist genau das gewollt — Trades
+werden zuerst übernommen, die Sektion `SecuritiesInfo` danach, und sie ist die
+bessere Quelle für Multiplikator und Währung. Über Dateigrenzen hinweg fehlt
+für gleiche Perioden jede Grundlage, eine der beiden Quellen vorzuziehen; eine
+Reihenfolgeregel wäre geraten. Fällt das im Betrieb auf, braucht es ein
+zusätzliches Merkmal (etwa `whenGenerated`) und eine fachliche Entscheidung.
+
+Punkt (a) — `transactionID` auf CashTransactions, CorporateActions und
+Transfers — bleibt **weiter offen**. AP-02a hat daran nichts geändert: die
+Quellschlüssel der Sektionszeilen (`_quell_schluessel_vergeben`) sind
+unverändert, `tx:<id>` beziehungsweise `inhalt:<sha256>#<n>`. Nur `executions`
+ist umgeschlüsselt worden.
+
 ## OF-10 · Plan nennt zwei verschiedene Schlüsselfelder für `exec_id`
 
 §5 (Abschnitt `executions`, „Schlüsselgleichheit über Quellen hinweg") nennt
@@ -159,6 +193,37 @@ sonst entstehen Dubletten zwischen Altbestand und Flex.
 `transactionID`. Plan und AP-02.md sind korrigiert; `exec_id` = `tradeID`,
 `transactionID` sekundär. Die Umstellung von Code und Test-Erwartungen erfolgt
 in AP-02a. Bis dahin schlüsselt `ingest/flex.py` noch auf `transactionID`.
+
+**Erledigt 12.09.2026 in AP-02a.** `exec_id` trägt `tradeID`; das Feld
+`transactionID` steht in der neuen Spalte `executions.transaction_id`,
+indiziert, ohne Eindeutigkeitszwang — Beleg für die Abstimmung mit dem Broker,
+nicht Schlüssel. Eine fehlende `tradeID` bricht den Import unter Nennung der
+Trades-Zeile ab, statt auf einen Ersatzschlüssel auszuweichen (§5,
+Vollständigkeit über 19.425 Zeilen belegt).
+
+Die Migration `c4b1f0a9d2e7` schlüsselt vorhandene Zeilen **um**, statt sie zu
+verwerfen: `roh_json` trägt das vollständige Attributbild, `tradeID` also
+inbegriffen. Die Verweise aus `legs` und `assignment_links` wandern mit — an
+`assignment_links` hängen mit `erkennung = 'manuell'` Benutzerdaten, die nach
+Regel 4 nicht verlorengehen dürfen. Fehlt einer vorhandenen Zeile die `tradeID`
+in `roh_json`, oder ist ein Wert doppelt, bricht die Migration mit Nennung der
+Zeilen ab.
+
+**Offen, kein Blocker:** Für den Umschlüsselungspfad der Migration gibt es
+keinen automatischen Test. Die Testsuite fährt jede Migration gegen eine leere
+Datenbank (`tests/conftest.py`, Fixture `migrated_db`), und die Testfreigabe
+von AP-02a nennt ausschließlich `tests/test_ingest_flex.py` mit drei
+namentlich verlangten neuen Tests — ein Migrationstest gehörte nicht dazu.
+Nachgewiesen wurde der Pfad in AP-02a von Hand gegen einen künstlichen
+Altbestand (Hin- und Rückweg, Verweise und Benutzerdaten erhalten, keine
+Fremdschlüsselverstöße). **Vorschlag für ein Folgepaket:** einen Migrationstest
+in `tests/` ergänzen, der einen Bestand auf `8a8d06f09935` anlegt und den
+Upgrade prüft; das gilt allgemein, nicht nur für diese Migration.
+
+**Ebenfalls ohne eigenen Test:** dass `executions.transaction_id` beim Import
+gefüllt wird. Auch das lag außerhalb der drei freigegebenen Tests. Die Spalte
+ist heute reiner Beleg; spätestens wenn AP-09 oder eine Broker-Abstimmung sie
+liest, gehört eine Erwartung dazu.
 
 ## OF-12 · AP-03: Auftrag verlangt das Anlegen der Abnahmebasis, das Profil des Pakets verweigert es
 
@@ -235,3 +300,17 @@ Planer — bei Widerspruch gilt dessen Fassung.
 3. **Die Abnahme listet `OFFENE_FRAGEN.md` nicht** unter den erlaubten
    Änderungen, OF-09 und OF-10 müssen aber fortgeschrieben werden.
    **Vorschlag:** in die Liste aufnehmen.
+
+**Geschlossen 12.09.2026 mit der Umsetzung von AP-02a.** Alle drei Punkte sind
+in der umgesetzten Fassung so gehalten, wie der geschärfte Auftrag sie
+vorgibt: die Quellschlüssel der Sektionszeilen sind unverändert (Punkt 1), die
+drei neuen Tests erzeugen ihre Daten in `tmp_path` und lassen `fixtures/`
+unberührt (Punkt 2), OF-09 und OF-10 sind fortgeschrieben (Punkt 3).
+
+**Eine Abweichung, die zu melden ist:** In `tests/test_ingest_flex.py` wurde
+zusätzlich eine Leerzeile zwischen zwei Importzeilen entfernt. Sie war ein
+seit AP-02 bestehender `ruff`-Verstoß (I001) — `ruff check .` war auf `master`
+nicht sauber, und AP-02 lief unter `streng` und konnte ihn nicht beheben. Die
+Abnahme von AP-02a verlangt einen sauberen Lauf; ohne diese Änderung wäre sie
+nicht zu erfüllen gewesen. Es ist eine reine Formatierung: keine Erwartung,
+keine Prüflogik, kein Testverhalten ist davon berührt.

@@ -1,7 +1,7 @@
 """Flex-Query-XML → Rohdaten (AP-02).
 
 Liest einen Activity-Flex-Export (§6.2) vollständig ein: die Trades-Sektion
-nach ``executions`` (Primärschlüssel ``transactionID``, der quellenübergreifende
+nach ``executions`` (Primärschlüssel ``tradeID``, der quellenübergreifende
 Schlüssel aus §5) und die Sektionen OpenPositions, CashTransactions,
 CorporateActions, Transfers und SecuritiesInfo je in ihre eigene Tabelle.
 Dazu die Instrument-Normalisierung: ``instruments`` wird aus Trades und
@@ -13,6 +13,11 @@ Grundsätze:
   überlappende Dateien und erneute Abrufe vereinigen sich ohne Duplikate —
   ``executions`` über ``exec_id``, die Sektionstabellen über
   ``(konto, quell_schluessel)`` (siehe ``_quell_schluessel_vergeben``, OF-09).
+- **Reihenfolgeunabhängig.** Stammdaten (``instruments``,
+  ``flex_securities_info``) tragen das Periodenende ihrer Quelle; überschrieben
+  wird nur aus einer jüngeren Quelle, eine ältere ergänzt allein Leerstellen
+  (§6.2, ``_stammsatz_verschmelzen``). Bewegungsdaten sind unveränderlich und
+  werden bei Schlüsselkollision verworfen, nicht überschrieben.
 - **Kein stilles Verwerfen.** Unbekannte ``assetCategory``, unbekannte
   Ereigniscodes, fehlende Pflichtfelder und nicht parsbare Werte führen zu
   ``ValueError`` mit Nennung des Werts — Abnahme AP-02. Die Datei wird
@@ -204,9 +209,37 @@ def _roh_json(attribute: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _execution_zeile(konto: str, trade: ET.Element) -> dict:
+def _trade_kontext(attribute: dict, nummer: int) -> str:
+    """Benennt eine Trades-Zeile auch dann, wenn ihr Schlüssel fehlt.
+
+    Reihenfolge in der Datei, dazu die Merkmale, an denen die Zeile im Export
+    wiederzufinden ist. Ohne das wäre eine Fehlermeldung zur fehlenden
+    ``tradeID`` nicht nachverfolgbar.
+    """
+    kennzeichen = ("transactionID", "ibExecID", "conid", "symbol", "tradeTime")
+    merkmale = [
+        f"{name} {attribute[name]!r}"
+        for name in kennzeichen
+        if attribute.get(name, "").strip()
+    ]
+    zusatz = f" ({', '.join(merkmale)})" if merkmale else ""
+    return f"Trades-Zeile {nummer}{zusatz}"
+
+
+def _execution_zeile(konto: str, trade: ET.Element, nummer: int) -> dict:
     attribute = dict(trade.attrib)
-    exec_id = _pflichtwert(attribute, "transactionID", "Trade")
+    # exec_id ist tradeID, nicht transactionID (§5, OF-10). Fehlt sie, bricht
+    # der Import ab: über drei Exporte mit 19.425 Zeilen ist tradeID lückenlos
+    # und eindeutig, auch auf allen 5.944 Ereigniszeilen. Eine Lücke wäre ein
+    # Defekt des Exports und soll auffallen, nicht kompensiert werden.
+    exec_id = attribute.get("tradeID", "").strip()
+    if not exec_id:
+        raise ValueError(
+            f"{_trade_kontext(attribute, nummer)}: Pflichtfeld 'tradeID' fehlt oder ist leer. "
+            "tradeID ist der Primärschlüssel von executions (§5) und im Export "
+            "lückenlos gefüllt; eine fehlende tradeID ist ein Defekt der Quelle "
+            "und kein Fall für einen Ersatzschlüssel."
+        )
     kontext = f"Ausführung {exec_id}"
     side = _pflichtwert(attribute, "buySell", kontext)
     if side not in SEITEN:
@@ -221,6 +254,9 @@ def _execution_zeile(konto: str, trade: ET.Element) -> dict:
     expiry = attribute.get("expiry", "").strip()
     return {
         "exec_id": exec_id,
+        # Sekundär, für die Abstimmung mit dem Broker (§5). Ohne Pflicht: der
+        # Schlüssel ist tradeID, transactionID ist Beleg.
+        "transaction_id": attribute.get("transactionID", "").strip() or None,
         "konto": konto,
         "conid": _ganzzahlwert(attribute, "conid", kontext),
         "symbol": _pflichtwert(attribute, "symbol", kontext),
@@ -319,7 +355,7 @@ def _ereignis_zeile(konto: str, ereignis: ET.Element, sektion: str) -> dict:
     }
 
 
-def _securities_info_zeile(info: ET.Element) -> dict:
+def _securities_info_zeile(info: ET.Element, periodenende: date | None) -> dict:
     attribute = dict(info.attrib)
     kontext = f"SecurityInfo conid {attribute.get('conid', '?')}"
     expiry = attribute.get("expiry", "").strip()
@@ -334,10 +370,11 @@ def _securities_info_zeile(info: ET.Element) -> dict:
         "multiplikator": _dezimalwert(attribute, "multiplier", kontext),
         "waehrung": attribute.get("currency", "").strip() or None,
         "roh_json": _roh_json(attribute),
+        "quell_periodenende": periodenende,
     }
 
 
-def _instrument_daten(attribute: dict, kontext: str) -> dict:
+def _instrument_daten(attribute: dict, kontext: str, periodenende: date | None) -> dict:
     """Instrumentenfelder aus Trade- oder SecurityInfo-Attributen."""
     expiry = attribute.get("expiry", "").strip()
     return {
@@ -350,20 +387,71 @@ def _instrument_daten(attribute: dict, kontext: str) -> dict:
         "right": attribute.get("putCall", "").strip() or None,
         "multiplikator": _dezimalwert(attribute, "multiplier", kontext),
         "waehrung": attribute.get("currency", "").strip() or None,
+        "quell_periodenende": periodenende,
     }
 
 
-def _instrument_uebernehmen(inhalt: _DateiInhalt, attribute: dict, kontext: str) -> None:
-    """Führt Instrumentendaten zusammen: Trades zuerst, SecuritiesInfo danach.
+def _ist_aelter(neu: date | None, alt: date | None) -> bool:
+    """Liegt das Periodenende von ``neu`` vor dem von ``alt``?
 
-    Neuere Angaben ergänzen leere Felder und überschreiben abweichende —
-    der jüngste Stand der Quelle gewinnt (OF-09); ``None`` löscht nichts.
+    Ein leeres Periodenende heißt „unbekannt": gegen eine datierte Quelle ist
+    es die schwächere Angabe, gegen eine ebenfalls undatierte gleichrangig.
     """
-    daten = _instrument_daten(attribute, kontext)
+    if alt is None:
+        return False
+    if neu is None:
+        return True
+    return neu < alt
+
+
+def _stammsatz_verschmelzen(vorhanden: dict, neu: dict) -> dict:
+    """Führt zwei Stände desselben Stammsatzes zusammen (§6.2, AP-02a).
+
+    Maßgeblich ist das Periodenende der Quelle, nicht die Importreihenfolge:
+
+    - Eine **ältere** Quelle füllt nur, was noch leer ist. Sie überschreibt
+      nichts — das ist der Kern der Reihenfolgeunabhängigkeit.
+    - Jede andere Quelle setzt ihre besetzten Felder durch.
+    - ``None`` löscht nie einen vorhandenen Wert.
+
+    Damit liefern beide Importreihenfolgen dasselbe Ergebnis, solange sich die
+    Perioden unterscheiden: Die jüngere Quelle gewinnt, ob sie nun zuerst oder
+    zuletzt eingelesen wurde.
+
+    Bei **gleichem** Periodenende gewinnt der spätere Stand. Innerhalb einer
+    Datei ist das gewollt: Trades werden zuerst übernommen, die eigens dafür
+    vorgesehene Sektion ``SecuritiesInfo`` danach — sie liefert Multiplikator
+    und Währung des Instruments und soll die Beifelder der Handelszeile
+    ablösen. Über Dateigrenzen hinweg bleibt für gleiche Perioden ein Rest an
+    Reihenfolgeabhängigkeit; er ist ohne weitere Grundlage nicht auflösbar und
+    in OF-09 festgehalten.
+    """
+    neu_gewinnt = not _ist_aelter(neu["quell_periodenende"], vorhanden["quell_periodenende"])
+    zusammen = dict(vorhanden)
+    for feld, wert in neu.items():
+        if wert is None or feld == "quell_periodenende":
+            continue
+        if neu_gewinnt or zusammen.get(feld) is None:
+            zusammen[feld] = wert
+    if neu_gewinnt:
+        zusammen["quell_periodenende"] = neu["quell_periodenende"]
+    return zusammen
+
+
+def _instrument_uebernehmen(
+    inhalt: _DateiInhalt, attribute: dict, kontext: str, periodenende: date | None
+) -> None:
+    """Führt Instrumentendaten innerhalb einer Datei zusammen.
+
+    Dieselbe Regel wie gegen die Datenbank (``_stammsatz_verschmelzen``): eine
+    Datei kann mehrere FlexStatements mit verschiedenen Perioden enthalten.
+    """
+    daten = _instrument_daten(attribute, kontext, periodenende)
     conid = daten["conid"]
-    aktuell = inhalt.instruments.get(conid, {})
-    aktuell.update({feld: wert for feld, wert in daten.items() if wert is not None})
-    inhalt.instruments[conid] = aktuell
+    vorhanden = inhalt.instruments.get(conid)
+    inhalt.instruments[conid] = (
+        daten if vorhanden is None else _stammsatz_verschmelzen(vorhanden, daten)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -397,15 +485,15 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
                 bis if inhalt.zeitraum_bis is None else max(inhalt.zeitraum_bis, bis)
             )
 
-        for trade in statement.findall("./Trades/Trade"):
-            zeile = _execution_zeile(konto, trade)
+        for nummer, trade in enumerate(statement.findall("./Trades/Trade"), start=1):
+            zeile = _execution_zeile(konto, trade, nummer)
             if zeile["exec_id"] in gesehene_exec_ids:
-                raise ValueError(
-                    f"{datei}: transactionID {zeile['exec_id']} mehrfach in der Datei"
-                )
+                raise ValueError(f"{datei}: tradeID {zeile['exec_id']} mehrfach in der Datei")
             gesehene_exec_ids.add(zeile["exec_id"])
             inhalt.executions.append(zeile)
-            _instrument_uebernehmen(inhalt, dict(trade.attrib), f"Ausführung {zeile['exec_id']}")
+            _instrument_uebernehmen(
+                inhalt, dict(trade.attrib), f"Ausführung {zeile['exec_id']}", bis
+            )
 
         for position in statement.findall("./OpenPositions/OpenPosition"):
             inhalt.open_positions.append(_open_position_zeile(konto, position, bis))
@@ -416,10 +504,10 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
         for transfer in statement.findall("./Transfers/Transfer"):
             inhalt.transfers.append(_ereignis_zeile(konto, transfer, "Transfer"))
         for info in statement.findall("./SecuritiesInfo/SecurityInfo"):
-            zeile = _securities_info_zeile(info)
+            zeile = _securities_info_zeile(info, bis)
             inhalt.securities_info.append(zeile)
             _instrument_uebernehmen(
-                inhalt, dict(info.attrib), f"SecurityInfo conid {zeile['conid']}"
+                inhalt, dict(info.attrib), f"SecurityInfo conid {zeile['conid']}", bis
             )
 
     _quell_schluessel_vergeben(inhalt.open_positions, "OpenPositions", datei)
@@ -528,37 +616,43 @@ def _sektionszeilen_schreiben(verbindung, tabelle, zeilen: list[dict], lauf_id: 
     verbindung.execute(anweisung, [{**zeile, "import_run_id": lauf_id} for zeile in zeilen])
 
 
-def _securities_info_schreiben(verbindung, zeilen: list[dict]) -> None:
-    """Stammdaten: conid ist der Schlüssel, der jüngste Stand gewinnt (OF-09)."""
-    for zeile in zeilen:
+def _stammsatz_schreiben(verbindung, tabelle, daten: dict) -> None:
+    """Legt einen Stammsatz an oder schreibt ihn nach §6.2 fort.
+
+    Der vorhandene Satz wird gelesen, mit dem neuen verschmolzen
+    (``_stammsatz_verschmelzen``) und nur bei tatsächlicher Änderung
+    geschrieben — die Importreihenfolge bleibt dadurch beliebig. Felder,
+    die die Flex-Quelle gar nicht liefert (etwa ``instruments.tickwert``),
+    bleiben unangetastet: sie stehen nicht in ``daten``.
+    """
+    conid = daten["conid"]
+    vorhanden = verbindung.execute(
+        select(tabelle).where(tabelle.c.conid == conid)
+    ).mappings().first()
+    if vorhanden is None:
+        verbindung.execute(insert(tabelle).values(**daten))
+        return
+    alter_stand = {feld: vorhanden[feld] for feld in daten}
+    neuer_stand = _stammsatz_verschmelzen(alter_stand, daten)
+    aenderungen = {
+        feld: wert for feld, wert in neuer_stand.items() if wert != alter_stand[feld]
+    }
+    if aenderungen:
         verbindung.execute(
-            sqlite_insert(flex_securities_info)
-            .values(**zeile)
-            .on_conflict_do_update(
-                index_elements=[flex_securities_info.c.conid],
-                set_={feld: zeile[feld] for feld in zeile if feld != "conid"},
-            )
+            update(tabelle).where(tabelle.c.conid == conid).values(**aenderungen)
         )
 
 
+def _securities_info_schreiben(verbindung, zeilen: list[dict]) -> None:
+    """Stammdaten: conid ist der Schlüssel, die jüngere Quelle gewinnt (§6.2)."""
+    for zeile in zeilen:
+        _stammsatz_schreiben(verbindung, flex_securities_info, zeile)
+
+
 def _instrumente_schreiben(verbindung, daten_je_conid: dict[int, dict]) -> None:
-    """``instruments`` anlegen beziehungsweise auf den jüngsten Stand heben."""
-    for conid, daten in daten_je_conid.items():
-        vorhanden = verbindung.execute(
-            select(instruments).where(instruments.c.conid == conid)
-        ).mappings().first()
-        if vorhanden is None:
-            verbindung.execute(insert(instruments).values(**daten))
-            continue
-        neue_werte = {
-            feld: wert
-            for feld, wert in daten.items()
-            if wert is not None and vorhanden[feld] != wert
-        }
-        if neue_werte:
-            verbindung.execute(
-                update(instruments).where(instruments.c.conid == conid).values(**neue_werte)
-            )
+    """``instruments`` anlegen beziehungsweise auf den jüngeren Stand heben."""
+    for daten in daten_je_conid.values():
+        _stammsatz_schreiben(verbindung, instruments, daten)
 
 
 def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path) -> ImportErgebnis:

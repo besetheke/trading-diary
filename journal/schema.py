@@ -101,9 +101,16 @@ import_runs = Table(
 executions = Table(
     "executions",
     metadata,
-    # Brokerseitige Ausführungs-ID (transactionID im Flex, Transaction ID im
-    # TDP-Export, §6.1) — der quellenübergreifende Schlüssel, §5.
+    # Brokerseitige Ausführungs-ID: das Flex-Feld ``tradeID``, gleichbedeutend
+    # mit der Spalte ``Transaction ID`` im TDP-Export (§5, gemessen: 175 von
+    # 175 Treffern im Überschneidungszeitraum, null gegen ``transactionID``).
+    # Der quellenübergreifende Schlüssel, §5 — der Namensgleichklang mit dem
+    # Flex-Feld ``transactionID`` ist irreführend (OF-10).
     Column("exec_id", Text, primary_key=True),
+    # Das Flex-Feld ``transactionID``, sekundär: dient der Abstimmung mit dem
+    # Broker, taugt aber nicht als Brücke zum Altbestand (§5). Bewusst ohne
+    # Eindeutigkeitszwang — die Spalte ist Beleg, nicht Schlüssel.
+    Column("transaction_id", Text, nullable=True, index=True),
     Column("konto", Text, nullable=False),
     Column("conid", BigInteger, nullable=False, index=True),
     Column("symbol", Text, nullable=False),
@@ -203,6 +210,11 @@ instruments = Table(
     Column("multiplikator", ExactDecimal, nullable=True),
     Column("tickwert", ExactDecimal, nullable=True),
     Column("waehrung", Text, nullable=True),
+    # Periodenende der Quelldatei, aus der dieser Stand stammt (§6.2,
+    # „Reihenfolgeunabhängigkeit des Imports"): nur eine jüngere Quelle
+    # überschreibt, eine ältere ergänzt nur Leerstellen. Leer heißt
+    # „Periode unbekannt" und verliert damit gegen jede datierte Quelle.
+    Column("quell_periodenende", Date, nullable=True),
     CheckConstraint(
         "asset_class IN ('OPT', 'FOP', 'FUT', 'STK', 'CASH')",
         name="ck_instruments_asset_class",
@@ -318,8 +330,9 @@ flex_transfers = Table(
     UniqueConstraint("konto", "quell_schluessel", name="uq_flex_transfers_quell_schluessel"),
 )
 
-# Stammdaten: conid ist der natürliche Schlüssel; ein erneuter Import
-# überschreibt den Eintrag mit dem jüngsten Stand (Details in OF-09).
+# Stammdaten: conid ist der natürliche Schlüssel. Überschrieben wird nur aus
+# einer jüngeren Quelle — maßgeblich ist das Periodenende der Quelldatei, nicht
+# die Importreihenfolge (§6.2, AP-02a; Details in OF-09).
 flex_securities_info = Table(
     "flex_securities_info",
     metadata,
@@ -333,6 +346,8 @@ flex_securities_info = Table(
     Column("multiplikator", ExactDecimal, nullable=True),
     Column("waehrung", Text, nullable=True),
     Column("roh_json", Text, nullable=False),
+    # Wie bei ``instruments``: Periodenende der Quelldatei (§6.2).
+    Column("quell_periodenende", Date, nullable=True),
 )
 
 # ---------------------------------------------------------------------------
