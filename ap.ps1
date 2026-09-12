@@ -112,6 +112,25 @@ klares Urteil: abnahmefaehig ja oder nein.
     Write-Host "REVIEW $Paket  ->  starkes Modell" -ForegroundColor Cyan
 }
 else {
+    # Korrekturpakete (aendert_tests: ja) duerfen genau die im Auftragsdokument
+    # benannten Test-Erwartungen aendern — CLAUDE.md, Regel 1a. Fuer alle
+    # anderen Pakete bleibt tests/ tabu.
+    $Schutzabsatz = if ($Kopf.aendert_tests) {
+@"
+Dies ist ein Korrekturpaket nach CLAUDE.md, Regel 1a. fixtures/, plan/ und
+.claude/ bleiben tabu. Unter tests/ darfst du ausschliesslich die Erwartungen
+aendern, die auftraege/$Paket.md namentlich benennt; die Prueflogik bleibt
+erhalten. Es aendert sich, WAS erwartet wird, nie OB geprueft wird. Wuerde ein
+Test dadurch inhaltlich schwaecher, melde das, statt ihn abzuschwaechen.
+Ist die Anforderung unklar, trage sie in OFFENE_FRAGEN.md ein und brich ab.
+"@
+    } else {
+@"
+Aendere unter keinen Umstaenden Dateien unter tests/, fixtures/, plan/ oder
+.claude/. Faellt ein Test, ist der Code falsch. Ist die Anforderung unklar,
+trage sie in OFFENE_FRAGEN.md ein und brich ab.
+"@
+    }
     $Prompt = @"
 Bearbeite das Arbeitspaket $Paket.
 
@@ -124,9 +143,7 @@ Setze ausschliesslich dieses Arbeitspaket um. Erweitere den Umfang nicht.
 Fertig bist du, wenn die Abnahmekriterien erfuellt sind und 'pytest' sowie
 'ruff check .' sauber durchlaufen.
 
-Aendere unter keinen Umstaenden Dateien unter tests/, fixtures/, plan/ oder
-.claude/. Faellt ein Test, ist der Code falsch. Ist die Anforderung unklar,
-trage sie in OFFENE_FRAGEN.md ein und brich ab.
+$Schutzabsatz
 
 Melde am Ende: welche Abnahmekriterien erfuellt sind, welche nicht, und was du
 in OFFENE_FRAGEN.md eingetragen hast.
