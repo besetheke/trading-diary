@@ -160,6 +160,48 @@ sonst entstehen Dubletten zwischen Altbestand und Flex.
 `transactionID` sekundär. Die Umstellung von Code und Test-Erwartungen erfolgt
 in AP-02a. Bis dahin schlüsselt `ingest/flex.py` noch auf `transactionID`.
 
+## OF-12 · AP-03: Auftrag verlangt das Anlegen der Abnahmebasis, das Profil des Pakets verweigert es
+
+**Gemeldet 12.09.2026, Umsetzung abgebrochen, kein Code geschrieben.**
+
+`auftraege/AP-03.md` legt die Testdaten „in diesem Paket" an: synthetische
+Fixtures unter `fixtures/synthetisch/` und mindestens 35 Tests mit von Hand
+nachgerechneten Erwartungswerten (Regel 8), kommentiert im Test. Das Paket
+läuft laut Kopf auf dem günstigen Modell — Profil `streng`: `tests/` und
+`fixtures/` sind schreibgeschützt (Hook, Deny-Regeln, CLAUDE.md Regel 1).
+
+Nach dem Arbeitsmuster §11.2 schreibt das starke Modell Abnahmetests und
+Fixtures eines Pakets *vor* der Umsetzung — so war es bei AP-02 („Abnahmebasis
+liegt vor: `tests/test_ingest_flex.py` und `fixtures/flex/` sind von AP-01
+nach §11.2 geschrieben"). Für AP-03 fehlt dieser Schritt: es gibt kein
+Verzeichnis `fixtures/synthetisch/` und kein Matching-Testmodul in `tests/`
+(nur die 37 Tests aus AP-01/AP-02). Der Auftrag ist für das zugewiesene
+Profil falsch geschnitten.
+
+**Zwei Wege, den Widerspruch zu lösen (Entscheidung beim Nutzer, nicht beim
+Modell):**
+
+1. Das starke Modell schreibt die Abnahmebasis vorab — eigener Vorbereitungs-
+   Lauf analog zur AP-02-Vorbereitung oder als Teil des AP-03-Auftrags mit
+   `modell: stark` und explicitem Vorbereitungsschritt. Danach läuft die
+   Umsetzung wie geplant auf dem günstigen Modell.
+2. AP-03 wird vollständig an das starke Modell vergeben (`modell: stark` im
+   Kopf), das Tests und Umsetzung in einer Hand hält.
+
+Nicht zulässig: den Schutz für diese Session lockern (CLAUDE.md, Regel 1) oder
+das Matching ohne Abnahmebasis umsetzen. Die 35 Tests sind Abnahmekriterium,
+und die Fachdetails — Rundungsreste auf die letzte Teilmenge,
+Kommissionsaufteilung, Split-Wirkung auf Menge *und* Preis, Rolle des
+Tickwerts, Behandlung von Ereigniszeilen beim Matching — werden erst durch
+handgerechnete Erwartungswerte verbindlich. Sie im Rahmen der Umsetzung selbst
+zu entscheiden, wäre Raterei gegen Regel 10 und würde die Abnahme zirkulär
+machen.
+
+**Nebenbefund, kein formaler Blocker:** AP-02a (Schlüsselkorrektur `exec_id` =
+`tradeID`) steht auf `offen`; AP-03 hängt formal nur an AP-02. Da `legs`
+Ausführungs-IDs speichert und jederzeit neu berechenbar ist, wäre AP-02a
+zuvor aber die sauberere Reihenfolge.
+
 ## OF-11 · AP-02a: drei Punkte vor dem Start klären
 
 **Erledigt 12.09.2026 auf Nutzerentscheidung:** Alle drei Vorschläge sind in
