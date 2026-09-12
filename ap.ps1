@@ -117,11 +117,13 @@ else {
     # anderen Pakete bleibt tests/ tabu.
     $Schutzabsatz = if ($Kopf.aendert_tests) {
 @"
-Dies ist ein Korrekturpaket nach CLAUDE.md, Regel 1a. fixtures/, plan/ und
-.claude/ bleiben tabu. Unter tests/ darfst du ausschliesslich die Erwartungen
-aendern, die auftraege/$Paket.md namentlich benennt; die Prueflogik bleibt
-erhalten. Es aendert sich, WAS erwartet wird, nie OB geprueft wird. Wuerde ein
-Test dadurch inhaltlich schwaecher, melde das, statt ihn abzuschwaechen.
+Dieses Paket darf an der Abnahmebasis arbeiten (CLAUDE.md, Regel 1a). plan/ und
+.claude/ bleiben tabu. Unter tests/ und fixtures/ darfst du ausschliesslich das
+anlegen oder aendern, was auftraege/$Paket.md namentlich benennt; alles andere
+dort bleibt unveraendert. Die Prueflogik bleibt erhalten: es aendert sich, WAS
+erwartet wird, nie OB geprueft wird. Wuerde ein Test dadurch inhaltlich
+schwaecher, melde das, statt ihn abzuschwaechen. Faellt ein bestehender Test,
+ist das ein Abbruchgrund und kein Anlass, ihn anzupassen.
 Ist die Anforderung unklar, trage sie in OFFENE_FRAGEN.md ein und brich ab.
 "@
     } else {
@@ -136,7 +138,8 @@ Bearbeite das Arbeitspaket $Paket.
 
 1. Lies CLAUDE.md. Die Regeln dort gelten ohne Ausnahme.
 2. Lies $PlanDatei und dort den Abschnitt zu $Paket, inklusive der
-   Abnahmekriterien.
+   Abnahmekriterien. Traegt das Paket einen Zusatzbuchstaben (etwa AP-03V),
+   gilt der Abschnitt des Grundpakets (AP-03); der Plan kennt nur dieses.
 3. Lies auftraege/$Paket.md fuer den konkreten Auftrag.
 
 Setze ausschliesslich dieses Arbeitspaket um. Erweitere den Umfang nicht.
