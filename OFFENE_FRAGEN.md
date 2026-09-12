@@ -360,6 +360,27 @@ Entscheidung anders aus, sind `futures_tickwert.json` und die vier
 Futures-Tests über ein Korrekturpaket nach Regel 1a anzupassen; die übrigen
 53 Tests sind davon nicht berührt.
 
+**Entschieden 12.09.2026 auf Nutzerentscheidung: Variante (a).**
+`multiplikator` trägt bei allen Anlageklassen den Preisfaktor, bei Futures den
+Punktwert; `tickwert` geht nicht in den P&L ein. Begründung: Die Auslegung aus
+AP-03v öffnet eine stille Falle. Beim ES (Multiplikator 50, Tickgröße 0,25,
+Tickwert 12,50) würde ein nach seinem Namen befülltes Feld `tickwert` den
+Futures-P&L um den Faktor 4 verfälschen, ohne dass ein Test anschlägt. IB
+liefert `tickwert` nicht, und der Tickwert ist aus Multiplikator und Tickgröße
+ableitbar, nicht umgekehrt.
+
+**Gegenprobe:** Eine unabhängige Referenz, geschrieben nur aus dem Vertrag,
+besteht alle 57 Tests der Basis aus AP-03v. Nach Variante (a) fallen genau
+**zwei** Tests, nicht vier:
+`test_futures_tickwert_hat_vorrang_vor_dem_multiplikator` und
+`test_futures_multiplikator_allein_waere_das_falsche_ergebnis`. Umsetzung im
+Korrekturpaket `AP-03vk`; der Vertrag in `AP-03.md`, Regel 3, ist angepasst.
+
+**Offen für den Planer:** §6, AP-03 verlangt „Multiplikator und Tickwert je
+Anlageklasse korrekt angewandt". Nach dieser Entscheidung wird der Tickwert
+bewusst nicht angewandt; die Formulierung im Plan ist anzupassen (`plan/` ist
+für die Modelle gesperrt).
+
 ## OF-15 · Stichtagsgrenze bei Kapitalmaßnahmen
 
 `corporate_actions.stichtag` ist ein Datum ohne Uhrzeit. Der Plan sagt, der

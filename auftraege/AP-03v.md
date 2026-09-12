@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer AP-03 (Leg-Matching)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-02a
 aendert_tests: ja
 ---
