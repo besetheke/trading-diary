@@ -152,6 +152,13 @@ und seine Grenze (ein zwischen zwei Abrufen geändertes Attribut erzeugt eine
 zweite Zeile) betrifft genau diese Zeilen. **Offen:** welche Buchungsarten ohne
 `transactionID` kommen; danach entscheiden, ob der Inhalts-Hash für sie genügt.
 
+**Korrigiert 12.09.2026 (siehe OF-22):** Die Folgerung im vorigen Absatz ist
+falsch. Die 116 CashTransactions ohne `transactionID` sind ausnahmslos Zeilen
+der Ebene `SUMMARY`, also Aggregate; jede Einzelbuchung (`DETAIL`) trägt eine
+ID. Der Inhalts-Hash ist damit nicht für ein Drittel der Kassenbuchungen der
+tatsächliche Schlüssel — das eigentliche Problem ist, dass der Import beide
+Ebenen übernimmt und Geldflüsse doppelt bucht.
+
 **Erledigt 12.09.2026 in AP-02a — Punkt (b), Stammdaten nach Datenstand.**
 `instruments` und `flex_securities_info` tragen die Spalte
 `quell_periodenende`: das `toDate` des FlexStatements, aus dem der Satz stammt.
@@ -510,3 +517,110 @@ den exakten Rest (`engine/matching.py`, `_kommission_verteilen`). Review: 101
 Tests grün; der Differenztest gegen die unabhängige Referenz ergibt in 3.000
 Szenarien mit Cent-Kommissionen und 3.000 mit vier Nachkommastellen identische
 Legs, die Kommissionssumme je `conid` geht in allen 6.000 exakt auf.
+
+## OF-19 · Der Flex-Import liest das echte IB-Format nicht
+
+**Befund aus dem Golden-Lauf (12.09.2026), blockiert jeden Import echter
+Daten.** Die synthetischen Fixtures bilden ein Format ab, das die echten
+Exporte nicht haben; alle Tests laufen gegen dieses Format grün.
+
+| | Import und Fixtures | Echte Exporte (beide) |
+|---|---|---|
+| Handelszeit der Trades | Attribut `tradeTime` | kein `tradeTime`, stattdessen `dateTime` |
+| Zeitformat | `JJJJMMTT HH:MM:SS` | `JJJJMMTT;HHMMSS`; bei CashTransactions 158 von 327 und CorporateActions 4 von 12 nur `JJJJMMTT` |
+| `FlexStatement.whenGenerated` | `JJJJMMTTTHHMMSS` | `JJJJMMTT;HHMMSS` |
+| nur in den Fixtures | `FlexStatement.currency`, `OpenPosition.markValue` | — |
+
+Ohne Anpassung scheitert der Import an der ersten Ausführung beider Exporte
+(Pflichtfeld `tradeTime` fehlt). Mit einer provisorischen Anpassung nur im
+Speicher lassen sich alle 18.049 Ausführungen lesen; die Umstellung auf
+`dateTime` greift dabei 18.049-mal, das Zeitformat 18.226-mal, die reine
+Datumsform 162-mal. Die übrigen vom Import gelesenen Attribute kommen im echten
+Format vor.
+
+**Vorschlag:** Korrekturpaket zu AP-02 (starkes Modell, `aendert_tests: ja`):
+Fixtures unter `fixtures/flex/` auf das echte Attributschema und die echten
+Zeitformen umstellen; danach Nachbesserung des Imports gegen diese Fixtures.
+Für künftige Abnahmebasen: Ein synthetisches Fixture wird am Attributschema
+eines echten Exports geprüft, bevor es unveränderlich wird.
+
+## OF-20 · `notes = P` ist eine Teilausführung, kein unklassifiziertes Ereignis
+
+**Befund aus dem Golden-Lauf (12.09.2026); widerlegt die Annahme aus OF-07 und
+die Behandlung in OF-16.** In beiden Exporten (266 und 1.972 Zeilen) haben
+P-Zeilen dasselbe Profil wie gewöhnliche Börsenausführungen:
+`transactionType = ExchTrade`, eigene `ibExecID`, Börse und Preis gesetzt, und
+jede P-Zeile gehört zu einer Order mit mehreren Ausführungen. Echte Ereignisse
+(`Ep`, `A`, `Ex`) sind dagegen `BookTrade` ohne `ibExecID`. `P` kennzeichnet
+die Teilausführung einer Order.
+
+**Wirkung im Matching** (Export 2026, provisorischer Import im Speicher):
+
+| | P = unbekannt (wie implementiert) | P = trade |
+|---|---|---|
+| Ausführungen nicht gematcht | 1.972 (14 %) | 0 |
+| IB-Schließungen (`C`), die im Matching voll schließen | 2.122 von 2.377 (89,3 %) | 2.365 von 2.377 (99,5 %) |
+| offene Positionen am Stichtag gleich IB | 171 | 174 von 180 |
+| nur im Matching offen | 552 | 44 |
+
+Die 12 verbleibenden C-Zeilen sind jeweils die erste Ausführung ihrer `conid`,
+schließen also Bestand aus der Zeit vor dem Export.
+
+**Vorschlag:** Der Import ordnet `P` dem `ereignistyp = 'trade'` zu,
+`ereignis_code = 'P'` bleibt erhalten. Das betrifft `ingest/flex.py` und den
+Test `test_unclassified_event_code_p_is_stored_as_unbekannt`, gehört also in
+dasselbe Korrekturpaket wie OF-19. OF-16 bleibt als Regel für künftig
+unbekannte Codes bestehen, trifft `P` aber nicht mehr.
+
+## OF-21 · Die Abnahme von AP-03 ist mit den vorliegenden Exporten nicht belegbar
+
+**Befund aus dem Golden-Lauf (12.09.2026).** Plan §6 verlangt für AP-03 die
+Summenprobe gegen die Broker-Summe und den Abgleich gegen die
+Closed-Lots-Ebene. Beides geht mit diesen Exporten nicht:
+
+1. **Kein Broker-P&L:** `fifoPnlRealized` ist in allen 18.049 Trades 0; eine
+   P&L-Zusammenfassung enthält keiner der Exporte.
+2. **Keine Closed Lots:** Die Trades liegen nur auf der Ebene `EXECUTION` vor.
+3. **Lücke in der Historie:** Die Exporte decken 04/2022–03/2023 und
+   01–09/2026 ab. Bestände aus der Zeit dazwischen sind unbekannt.
+
+**Was an Echtdaten trotzdem belegt ist** (mit `P = trade`, provisorischem
+Import im Speicher, nur Zählwerte): 174 von 180 offenen Positionen stimmen am
+Stichtag exakt mit IBs OpenPositions überein; 99,5 % der IB-Schließungen
+schließen im Matching voll. Die übrigen 50 abweichenden `conid`s sind einzeln
+eingeordnet. 48 passen zur Lücke in der Historie — die erste Ausführung
+schließt einen unbekannten Bestand (etwa 15 Aktienverkäufe ohne vorherigen Kauf,
+12 Optionen aus vermutetem Vortrag) oder ein Bestand hat im Zeitraum gar keine
+Ausführung. Belegen lässt sich diese Erklärung erst mit den fehlenden
+Jahresexporten. Nicht so erklärbar sind 2: ein Optionsleg mit Verfallsbuchung,
+das ohne vermuteten Vortrag offen bleibt, und eine Aktie mit Zuteilung.
+
+**Nötig für eine belastbare Abnahme (AP-00, Portal):** in der Flex-Abfrage den
+realisierten P&L und die Ebene Closed Lots aktivieren; die fehlenden
+Jahresexporte 2023/24, 2024/25 und 2025/26 abrufen (§6.2).
+
+## OF-22 · CashTransactions: doppelte `transactionID`s und doppelte Buchung über SUMMARY-Zeilen
+
+**Befund aus dem Golden-Lauf (12.09.2026); blockiert den Import des Exports
+2026 und würde Geldflüsse doppelt buchen.**
+
+1. **Abbruch:** Dieselbe `transactionID` kommt in drei Fällen zweimal vor,
+   jeweils als Paar `Broker Interest Paid` und `Broker Interest Received` mit
+   gleichem Datum und gleicher Währung. Nach OF-09 Punkt 3 bricht der Import
+   dann ab.
+2. **Doppelte Buchung:** Der Export liefert CashTransactions auf zwei Ebenen —
+   211 Zeilen `DETAIL`, alle mit `transactionID`, und 116 Zeilen `SUMMARY`,
+   alle ohne. Jede Buchungsart kommt auf beiden Ebenen vor. Die SUMMARY-Zeilen
+   sind Aggregate: Bei 110 von 116 entspricht ihr Betrag genau der Summe der
+   DETAIL-Zeilen gleicher Art, Währung, `conid` und gleichen Tages; 6 weichen
+   bei dieser Schlüsselwahl ab. Auch CorporateActions enthalten 4
+   SUMMARY-Zeilen. Der Import übernimmt heute beide Ebenen — Zinsen,
+   Dividenden, Quellensteuer und Gebühren stünden damit doppelt in der
+   Datenbank.
+
+**Vorschlag, Entscheidung nötig:** (a) Der Import übernimmt nur
+`levelOfDetail = DETAIL`; SUMMARY-Zeilen werden nicht gebucht, aber gezählt und
+im Importbericht ausgewiesen, eine unbekannte Ebene bricht ab. (b) Zusätzlich
+die Flex-Abfrage im Portal auf DETAIL beschränken (AP-00). Für die Paare: der
+Quellschlüssel besteht aus `transactionID` und `type`. Beides gehört in das
+Korrekturpaket zu AP-02, zusammen mit OF-19 und OF-20.
