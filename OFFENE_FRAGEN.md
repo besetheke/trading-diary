@@ -162,6 +162,10 @@ in AP-02a. Bis dahin schlüsselt `ingest/flex.py` noch auf `transactionID`.
 
 ## OF-11 · AP-02a: drei Punkte vor dem Start klären
 
+**Erledigt 12.09.2026 auf Nutzerentscheidung:** Alle drei Vorschläge sind in
+`auftraege/AP-02a.md` eingearbeitet. Entschieden hat der Nutzer, nicht der
+Planer — bei Widerspruch gilt dessen Fassung.
+
 1. **Umzusetzen, Punkt 3 („Der Inhalts-Hash als Ersatzschlüssel entfällt")**
    beruht auf einer ungenauen Formulierung in OF-09. Für `executions` gibt es
    keinen Inhalts-Hash: eine fehlende ID bricht dort schon heute ab
