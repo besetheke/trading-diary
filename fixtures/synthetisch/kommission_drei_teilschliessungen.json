@@ -1,0 +1,77 @@
+{
+  "fall": "kommission_drei_teilschliessungen",
+  "beschreibung": "Pflichtfall AP-03: Eine Eroeffnung ueber 3 Kontrakte wird in drei Schritten zu je 1 Kontrakt geschlossen. Die Eroeffnungskommission von -1.00 laesst sich nicht glatt dritteln (-0.3333...); der Rundungsrest muss auf die letzte Teilmenge fallen, damit die Summe exakt bleibt. Multiplikator 100, EUR.",
+  "instruments": [
+    {
+      "conid": 500002,
+      "symbol": "IDX1 110C",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-03-20",
+      "strike": "110",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "K1",
+      "konto": "U7777777",
+      "conid": 500002,
+      "symbol": "IDX1 110C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "3",
+      "preis": "1.00",
+      "waehrung": "EUR",
+      "kommission": "-1.00",
+      "handelszeit": "2026-01-05 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "K2",
+      "konto": "U7777777",
+      "conid": 500002,
+      "symbol": "IDX1 110C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "1.50",
+      "waehrung": "EUR",
+      "kommission": "-0.35",
+      "handelszeit": "2026-01-06 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "K3",
+      "konto": "U7777777",
+      "conid": 500002,
+      "symbol": "IDX1 110C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "1.60",
+      "waehrung": "EUR",
+      "kommission": "-0.35",
+      "handelszeit": "2026-01-07 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "K4",
+      "konto": "U7777777",
+      "conid": 500002,
+      "symbol": "IDX1 110C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "1.70",
+      "waehrung": "EUR",
+      "kommission": "-0.35",
+      "handelszeit": "2026-01-08 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

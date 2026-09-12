@@ -1,0 +1,89 @@
+{
+  "fall": "futures_tickwert",
+  "beschreibung": "Pflichtfall AP-03: Futures-Position mit Tickwert. conid 500004 traegt Multiplikator 5 UND Tickwert 25 - die beiden unterscheiden sich absichtlich, damit sichtbar wird, welcher angewandt wurde (Vertrag: bei FUT/FOP hat ein gesetzter Tickwert Vorrang). conid 500005 traegt keinen Tickwert; dort gilt der Multiplikator. Alles EUR.",
+  "instruments": [
+    {
+      "conid": 500004,
+      "symbol": "FUT1 JUN26",
+      "underlying": "FUT1",
+      "asset_class": "FUT",
+      "expiry": "2026-06-19",
+      "strike": null,
+      "right": null,
+      "multiplikator": "5",
+      "tickwert": "25",
+      "waehrung": "EUR"
+    },
+    {
+      "conid": 500005,
+      "symbol": "FUT2 JUN26",
+      "underlying": "FUT2",
+      "asset_class": "FUT",
+      "expiry": "2026-06-19",
+      "strike": null,
+      "right": null,
+      "multiplikator": "20",
+      "tickwert": null,
+      "waehrung": "EUR"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "F1",
+      "konto": "U7777777",
+      "conid": 500004,
+      "symbol": "FUT1 JUN26",
+      "sec_type": "FUT",
+      "side": "BUY",
+      "menge": "2",
+      "preis": "18000.0",
+      "waehrung": "EUR",
+      "kommission": "-4.00",
+      "handelszeit": "2026-04-01 09:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "F2",
+      "konto": "U7777777",
+      "conid": 500004,
+      "symbol": "FUT1 JUN26",
+      "sec_type": "FUT",
+      "side": "SELL",
+      "menge": "2",
+      "preis": "18010.0",
+      "waehrung": "EUR",
+      "kommission": "-4.00",
+      "handelszeit": "2026-04-02 09:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "F3",
+      "konto": "U7777777",
+      "conid": 500005,
+      "symbol": "FUT2 JUN26",
+      "sec_type": "FUT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "100.0",
+      "waehrung": "EUR",
+      "kommission": "-2.00",
+      "handelszeit": "2026-04-01 09:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "F4",
+      "konto": "U7777777",
+      "conid": 500005,
+      "symbol": "FUT2 JUN26",
+      "sec_type": "FUT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "100.5",
+      "waehrung": "EUR",
+      "kommission": "-2.00",
+      "handelszeit": "2026-04-03 09:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

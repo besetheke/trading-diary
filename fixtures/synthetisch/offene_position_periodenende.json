@@ -1,0 +1,89 @@
+{
+  "fall": "offene_position_periodenende",
+  "beschreibung": "Pflichtfall AP-03: offene Position am Periodenende, hier aus einer Short-Eroeffnung. conid 500006 verkauft 5 und kauft 2 zurueck - 3 bleiben offen. conid 500010 prueft das Vorzeichen der Short-Rechnung: steigender Preis ist fuer den Verkaeufer ein Verlust. Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500006,
+      "symbol": "IDX1 90P",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "90",
+      "right": "P",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500010,
+      "symbol": "IDX1 95P",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "95",
+      "right": "P",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "O1",
+      "konto": "U7777777",
+      "conid": 500006,
+      "symbol": "IDX1 90P",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "5",
+      "preis": "3.00",
+      "waehrung": "USD",
+      "kommission": "-5.00",
+      "handelszeit": "2026-05-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "O2",
+      "konto": "U7777777",
+      "conid": 500006,
+      "symbol": "IDX1 90P",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "2",
+      "preis": "1.00",
+      "waehrung": "USD",
+      "kommission": "-2.00",
+      "handelszeit": "2026-05-10 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "O3",
+      "konto": "U7777777",
+      "conid": 500010,
+      "symbol": "IDX1 95P",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "2.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-05-02 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "O4",
+      "konto": "U7777777",
+      "conid": 500010,
+      "symbol": "IDX1 95P",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "3.50",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-05-12 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

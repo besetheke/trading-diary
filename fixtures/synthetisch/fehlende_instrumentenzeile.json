@@ -1,0 +1,35 @@
+{
+  "fall": "fehlende_instrumentenzeile",
+  "beschreibung": "Fehlerpfad AP-03: Zu conid 599999 gibt es keine Zeile in 'instruments'. Multiplikator und Tickwert waeren damit unbekannt. Der Lauf muss mit Nennung des conid abbrechen - kein stiller Standardwert von 1 (AP-03.md, Regel 10). Die Instrumentenliste ist absichtlich nicht leer, damit der Fehler nicht bloss an fehlenden Stammdaten ueberhaupt haengt.",
+  "instruments": [
+    {
+      "conid": 500001,
+      "symbol": "IDX1 100C",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-03-20",
+      "strike": "100",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "M1",
+      "konto": "U7777777",
+      "conid": 599999,
+      "symbol": "UNBEKANNT",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "1.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "fall": "fifo_reihenfolge",
+  "beschreibung": "Zwei Eroeffnungen zu verschiedenen Preisen, danach eine Schliessung ueber genau eine Losgroesse. FIFO muss das AELTERE Los (10 zu 10.00) schliessen, nicht das juengere (10 zu 20.00) - die beiden Preise sind so gewaehlt, dass LIFO ein anderes Ergebnis liefern wuerde. Multiplikator 1, USD.",
+  "instruments": [
+    {
+      "conid": 500013,
+      "symbol": "REIHE",
+      "underlying": "REIHE",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "G1",
+      "konto": "U7777777",
+      "conid": 500013,
+      "symbol": "REIHE",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "10",
+      "preis": "10.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-09-01 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "G2",
+      "konto": "U7777777",
+      "conid": 500013,
+      "symbol": "REIHE",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "10",
+      "preis": "20.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-09-02 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "G3",
+      "konto": "U7777777",
+      "conid": 500013,
+      "symbol": "REIHE",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "10",
+      "preis": "30.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-09-03 15:30:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

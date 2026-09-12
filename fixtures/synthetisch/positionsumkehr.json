@@ -1,0 +1,49 @@
+{
+  "fall": "positionsumkehr",
+  "beschreibung": "Eine Ausfuehrung schliesst mehr, als offen ist: 10 Stueck long, Verkauf ueber 15. Die ersten 10 schliessen das Long-Leg, die restlichen 5 eroeffnen eine Short-Position. Prueft, dass der Ueberhang nicht verworfen wird und dass die Kommission der umkehrenden Ausfuehrung zwischen schliessendem und eroeffnendem Anteil aufgeteilt wird. Multiplikator 1, USD.",
+  "instruments": [
+    {
+      "conid": 500012,
+      "symbol": "FLIP",
+      "underlying": "FLIP",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "P1",
+      "konto": "U7777777",
+      "conid": 500012,
+      "symbol": "FLIP",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "10",
+      "preis": "10.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "P2",
+      "konto": "U7777777",
+      "conid": 500012,
+      "symbol": "FLIP",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "15",
+      "preis": "12.00",
+      "waehrung": "USD",
+      "kommission": "-1.50",
+      "handelszeit": "2026-07-02 15:30:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

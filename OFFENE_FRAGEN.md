@@ -314,3 +314,86 @@ nicht sauber, und AP-02 lief unter `streng` und konnte ihn nicht beheben. Die
 Abnahme von AP-02a verlangt einen sauberen Lauf; ohne diese Änderung wäre sie
 nicht zu erfüllen gewesen. Es ist eine reine Formatierung: keine Erwartung,
 keine Prüflogik, kein Testverhalten ist davon berührt.
+
+## OF-13 · Vorzeichen von `executions.menge` ist uneinheitlich
+
+Der Flex-Export führt `quantity` bei Verkäufen teils negativ, teils positiv.
+Belegt an den eigenen Fixtures aus AP-01: `activity_2026_01.xml` schreibt
+`buySell="SELL" quantity="2"`, `activity_2026_02_overlap.xml` und
+`activity_2026_03b.xml` schreiben `buySell="SELL" quantity="-10"`. AP-02
+speichert den Rohwert unverändert, was richtig ist (P1) — für das Matching
+bleibt damit aber offen, woran die Richtung hängt.
+
+**Entscheidung für den AP-03-Vertrag:** Die Richtung kommt aus `side`, die
+Stückzahl aus `abs(menge)`. Das ist gegen beide Schreibweisen robust.
+
+**Offen:** Welche Schreibweise der echte Export tatsächlich verwendet, ist
+nicht nachgemessen — die Fixtures sind synthetisch und widersprechen sich.
+Führt der echte Export das Vorzeichen verlässlich, wäre eine Prüfung auf
+Widerspruch zwischen `side` und dem Vorzeichen von `menge` sinnvoll: sie
+fände Importfehler, die der jetzige Vertrag stillschweigend überdeckt. Mit dem
+ersten echten Export prüfen (starkes Modell, Golden-Daten).
+
+## OF-14 · Verhältnis von `tickwert` und `multiplikator` bei Futures
+
+§5 nennt beide Felder auf `instruments`, der Plan verlangt in AP-03
+„Multiplikator und Tickwert je Anlageklasse korrekt angewandt", sagt aber
+nicht, wie sie sich zueinander verhalten. Ein Tickwert im engeren Sinn — der
+Geldwert einer kleinsten Preisbewegung — ließe sich ohne **Tickgröße** gar
+nicht in einen P&L umrechnen, und eine Tickgröße gibt es im Schema nicht.
+OF-09 hält außerdem fest, dass die Flex-Quelle `tickwert` nicht liefert; er
+müsste gepflegt oder aus anderer Quelle gespeist werden.
+
+**Entscheidung für den AP-03-Vertrag:** Bei `FUT` und `FOP` gilt ein gesetzter
+`tickwert` als **Geldwert einer Preiseinheit** (eines vollen Punkts) und hat
+Vorrang vor `multiplikator`; ist er leer, gilt `multiplikator`. Bei allen
+anderen Anlageklassen gilt `multiplikator`. Das Fixture
+`fixtures/synthetisch/futures_tickwert.json` setzt beide Felder absichtlich
+verschieden (5 gegen 25), damit im Test sichtbar wird, welcher angewandt wurde.
+
+**Offen, und vor AP-03 zu entscheiden:** Ob diese Auslegung die gewollte ist.
+Zwei Alternativen wären vertretbar: (a) `tickwert` ist reine Berichtsgröße und
+geht nicht in den P&L ein — dann trägt `multiplikator` bei Futures den
+Punktwert; (b) `tickwert` ist der Wert einer kleinsten Preisbewegung — dann
+fehlt dem Schema die Tickgröße und es braucht eine Migration. Fällt die
+Entscheidung anders aus, sind `futures_tickwert.json` und die vier
+Futures-Tests über ein Korrekturpaket nach Regel 1a anzupassen; die übrigen
+53 Tests sind davon nicht berührt.
+
+## OF-15 · Stichtagsgrenze bei Kapitalmaßnahmen
+
+`corporate_actions.stichtag` ist ein Datum ohne Uhrzeit. Der Plan sagt, der
+Split-Faktor werde „auf die Bestandsmenge angewandt, bevor gematcht wird",
+nicht aber, ob eine Ausführung **am** Stichtag noch zu alten oder schon zu
+neuen Konditionen gebucht ist.
+
+**Entscheidung für den AP-03-Vertrag:** Angepasst werden Ausführungen mit
+`handelszeit.date() < stichtag`. Eine Ausführung am Stichtag selbst gilt
+bereits zu neuen Konditionen. Begründung: Der Split ist zum Handelsbeginn des
+Stichtags wirksam, die Kurse des Tages sind bereits bereinigt; eine an diesem
+Tag gehandelte Menge wäre sonst doppelt angepasst. `aktiensplit.json` prüft
+die Grenze mit conid 500009 ausdrücklich.
+
+**Offen:** Am echten Export gegenprüfen, sobald eine Kapitalmaßnahme im
+Datenbestand liegt — die Frage entscheidet sich an der Buchungspraxis von IB,
+nicht am Plan. Ebenfalls offen: `faktor` ist im Vertrag als „Zahl neuer Stücke
+je altem Stück" definiert (Split 2:1 → 2, Reverse 1:10 → 0.1). Woher der Wert
+kommt und in welcher Form IB ihn liefert, klärt erst das Paket, das
+`corporate_actions` befüllt — `flex_corporate_actions` trägt bisher nur den
+Rohtyp (z. B. `FS`) und die Beschreibung.
+
+## OF-16 · Behandlung von `ereignistyp = 'unbekannt'` im Matching
+
+Der Ereigniscode `P` liegt seit AP-02 als `ereignistyp = 'unbekannt'` in
+`executions` (OF-07, 266 Zeilen im Referenzexport). Was das Matching damit tun
+soll, sagt weder Plan noch Auftrag. Beide denkbaren Wege sind falsch: als
+Schließung buchen hieße raten, verwerfen hieße Positionen verlieren.
+
+**Entscheidung für den AP-03-Vertrag:** Solche Zeilen nehmen nicht am Matching
+teil und werden mit Grund in `nicht_gematcht` gemeldet; die betroffene
+Position bleibt offen. Damit ist der Fall sichtbar statt still.
+
+**Offen:** Sobald `P` fachlich geklärt ist (OF-07), gehört er in die Liste der
+matchenden Ereignisarten. Bis dahin bleibt jede Position, die auf einer
+P-Zeile endet, offen und verfälscht die Summenprobe gegen echte Daten — beim
+ersten Golden-Lauf zu erwarten und dort zu erklären.

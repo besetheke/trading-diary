@@ -1,0 +1,157 @@
+{
+  "fall": "summenprobe",
+  "beschreibung": "Abnahmekriterium AP-03: Summe aller Leg-P&L plus offene Positionen entspricht der Broker-Summe auf den Cent, getrennt fuer Optionen, Futures und Aktien. Je Anlageklasse ein abgeschlossener Vorgang; bei den Aktien bleibt ein Rest offen, dessen unrealisiertes Ergebnis der Broker in 'offene_positionen' ausweist. 'broker_summe' ist die ausgewiesene Gegenrechnung des Brokers: realisiert_brutto zaehlt nur geschlossene Legs, kommission zaehlt jede gebuchte Kommission der Anlageklasse (auch die der offenen), gesamt ist die Summe der drei Teile.",
+  "instruments": [
+    {
+      "conid": 510001,
+      "symbol": "IDX9 100C",
+      "underlying": "IDX9",
+      "asset_class": "OPT",
+      "expiry": "2026-09-18",
+      "strike": "100",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    },
+    {
+      "conid": 510002,
+      "symbol": "FUT9 SEP26",
+      "underlying": "FUT9",
+      "asset_class": "FUT",
+      "expiry": "2026-09-18",
+      "strike": null,
+      "right": null,
+      "multiplikator": "50",
+      "tickwert": null,
+      "waehrung": "EUR"
+    },
+    {
+      "conid": 510003,
+      "symbol": "AKTIE9",
+      "underlying": "AKTIE9",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "A1",
+      "konto": "U7777777",
+      "conid": 510001,
+      "symbol": "IDX9 100C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "2",
+      "preis": "1.00",
+      "waehrung": "EUR",
+      "kommission": "-2.00",
+      "handelszeit": "2026-08-03 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "A2",
+      "konto": "U7777777",
+      "conid": 510001,
+      "symbol": "IDX9 100C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "2",
+      "preis": "1.75",
+      "waehrung": "EUR",
+      "kommission": "-2.00",
+      "handelszeit": "2026-08-10 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "B1",
+      "konto": "U7777777",
+      "conid": 510002,
+      "symbol": "FUT9 SEP26",
+      "sec_type": "FUT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "200.00",
+      "waehrung": "EUR",
+      "kommission": "-3.00",
+      "handelszeit": "2026-08-04 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "B2",
+      "konto": "U7777777",
+      "conid": 510002,
+      "symbol": "FUT9 SEP26",
+      "sec_type": "FUT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "198.00",
+      "waehrung": "EUR",
+      "kommission": "-3.00",
+      "handelszeit": "2026-08-11 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "C1",
+      "konto": "U7777777",
+      "conid": 510003,
+      "symbol": "AKTIE9",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "100",
+      "preis": "10.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-08-05 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "C2",
+      "konto": "U7777777",
+      "conid": 510003,
+      "symbol": "AKTIE9",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "40",
+      "preis": "12.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-08-12 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ],
+  "offene_positionen": [
+    {
+      "conid": 510003,
+      "stichtag": "2026-08-31",
+      "menge": "60",
+      "fifo_pnl_unrealisiert": "30.00"
+    }
+  ],
+  "broker_summe": {
+    "OPT": {
+      "realisiert_brutto": "150.00",
+      "kommission": "-4.00",
+      "unrealisiert": "0.00",
+      "gesamt": "146.00"
+    },
+    "FUT": {
+      "realisiert_brutto": "-100.00",
+      "kommission": "-6.00",
+      "unrealisiert": "0.00",
+      "gesamt": "-106.00"
+    },
+    "STK": {
+      "realisiert_brutto": "80.00",
+      "kommission": "-2.00",
+      "unrealisiert": "30.00",
+      "gesamt": "108.00"
+    }
+  }
+}

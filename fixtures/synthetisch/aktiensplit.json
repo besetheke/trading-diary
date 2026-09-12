@@ -1,0 +1,102 @@
+{
+  "fall": "aktiensplit",
+  "beschreibung": "Pflichtfall AP-03: Aktiensplit 2:1 vor dem Matching. conid 500003 wird vor dem Stichtag gekauft (100 zu 40.00) und nach dem Stichtag teilweise verkauft; die Eroeffnung muss auf 200 zu 20.00 angepasst werden - Menge UND Preis. conid 500009 prueft die Stichtagsgrenze: die Eroeffnung liegt genau AUF dem Stichtag und wird deshalb nicht mehr angepasst. Multiplikator 1, USD.",
+  "instruments": [
+    {
+      "conid": 500003,
+      "symbol": "CORP",
+      "underlying": "CORP",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500009,
+      "symbol": "DEMO",
+      "underlying": "DEMO",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [
+    {
+      "conid": 500003,
+      "typ": "Split",
+      "stichtag": "2026-03-10",
+      "faktor": "2"
+    },
+    {
+      "conid": 500009,
+      "typ": "Split",
+      "stichtag": "2026-03-10",
+      "faktor": "2"
+    }
+  ],
+  "executions": [
+    {
+      "exec_id": "S1",
+      "konto": "U7777777",
+      "conid": 500003,
+      "symbol": "CORP",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "100",
+      "preis": "40.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-02-01 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "S2",
+      "konto": "U7777777",
+      "conid": 500003,
+      "symbol": "CORP",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "150",
+      "preis": "21.00",
+      "waehrung": "USD",
+      "kommission": "-1.50",
+      "handelszeit": "2026-03-15 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "S3",
+      "konto": "U7777777",
+      "conid": 500009,
+      "symbol": "DEMO",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "10",
+      "preis": "50.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-03-10 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "S4",
+      "konto": "U7777777",
+      "conid": 500009,
+      "symbol": "DEMO",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "10",
+      "preis": "55.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-03-20 15:30:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

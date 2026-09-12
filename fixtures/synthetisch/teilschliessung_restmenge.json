@@ -1,0 +1,63 @@
+{
+  "fall": "teilschliessung_restmenge",
+  "beschreibung": "Pflichtfall AP-03: Eine Eroeffnung ueber 10 Kontrakte wird in zwei Schritten teilweise geschlossen (4 und 3); 3 Kontrakte bleiben offen. Prueft die Aufteilung einer Eroeffnung auf mehrere Legs, die anteilige Kommission und das offene Restleg. Alle Betraege in EUR, Multiplikator 100.",
+  "instruments": [
+    {
+      "conid": 500001,
+      "symbol": "IDX1 100C",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-03-20",
+      "strike": "100",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "T1",
+      "konto": "U7777777",
+      "conid": 500001,
+      "symbol": "IDX1 100C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "10",
+      "preis": "2.00",
+      "waehrung": "EUR",
+      "kommission": "-10.00",
+      "handelszeit": "2026-01-05 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "T2",
+      "konto": "U7777777",
+      "conid": 500001,
+      "symbol": "IDX1 100C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "4",
+      "preis": "3.00",
+      "waehrung": "EUR",
+      "kommission": "-4.00",
+      "handelszeit": "2026-01-06 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "T3",
+      "konto": "U7777777",
+      "conid": 500001,
+      "symbol": "IDX1 100C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "3",
+      "preis": "2.50",
+      "waehrung": "EUR",
+      "kommission": "-3.00",
+      "handelszeit": "2026-01-07 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "fall": "ereigniszeile_kein_trade",
+  "beschreibung": "Fehlerpfad AP-03: Ereigniszeilen, die keine regulaeren Trades sind (Plan Paragraf 1.4). conid 500007: Verfall schliesst das Short-Leg zu 0. conid 500011: Ausuebung schliesst das Long-Leg. conid 500008: der fachlich nicht klassifizierte Ereigniscode P (ereignistyp 'unbekannt', OF-07) darf nicht still gematcht und nicht still verworfen werden - er gehoert in 'nicht_gematcht', die Position bleibt offen. Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500007,
+      "symbol": "IDX1 80P",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "80",
+      "right": "P",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500008,
+      "symbol": "IDX1 120C",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "120",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500011,
+      "symbol": "IDX1 130C",
+      "underlying": "IDX1",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "130",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "E1",
+      "konto": "U7777777",
+      "conid": 500007,
+      "symbol": "IDX1 80P",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "2.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "E2",
+      "konto": "U7777777",
+      "conid": 500007,
+      "symbol": "IDX1 80P",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-06-19 21:00:00",
+      "ereignistyp": "expiry"
+    },
+    {
+      "exec_id": "E3",
+      "konto": "U7777777",
+      "conid": 500008,
+      "symbol": "IDX1 120C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "5.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-02 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "E4",
+      "konto": "U7777777",
+      "conid": 500008,
+      "symbol": "IDX1 120C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-06-19 21:00:00",
+      "ereignistyp": "unbekannt"
+    },
+    {
+      "exec_id": "E5",
+      "konto": "U7777777",
+      "conid": 500011,
+      "symbol": "IDX1 130C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "4.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-03 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "E6",
+      "konto": "U7777777",
+      "conid": 500011,
+      "symbol": "IDX1 130C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "6.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-06-19 21:00:00",
+      "ereignistyp": "exercise"
+    }
+  ]
+}
