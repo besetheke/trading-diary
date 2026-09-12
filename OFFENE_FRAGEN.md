@@ -498,3 +498,9 @@ die Aufteilung mit exaktem Rest und für die exakte Summe; Vertrag Regel 5
 präzisieren: die ersten Teilmengen auf den Cent, die letzte trägt den exakten
 Rest, die gebuchte Kommission wird nie gerundet. (2) Nachbesserung von AP-03
 durch das günstige Modell gegen diese Tests.
+
+**Stand 12.09.2026:** Schritt (1) ist mit AP-03vn erledigt — Fixture
+`kommission_nachkommastellen.json`, drei Tests und Vertrag Regel 5
+präzisiert. Die Tests schlagen gegen den jetzigen `engine/matching.py` fehl und
+bestehen gegen die unabhängige Referenz. **Offen:** Schritt (2), die
+Nachbesserung in AP-03.

@@ -1,0 +1,143 @@
+{
+  "fall": "kommission_nachkommastellen",
+  "beschreibung": "Nachtrag AP-03vn (OF-18): Kommissionen mit mehr als zwei Nachkommastellen, wie IB sie bei der Mehrheit der Ausfuehrungen bucht. Die gebuchte Kommission wird nie gerundet: nur Anteile vor der letzten Teilmenge gehen auf den Cent, die letzte traegt den exakten Rest. conid 520001 ungeteilt, 520002 Aufteilung auf zwei Schliessungen, 520003 Short mit offenem Rest. SELL mit negativer Menge wie im echten Export (OF-13). Alles EUR.",
+  "instruments": [
+    {
+      "conid": 520001,
+      "symbol": "IDX2 120C",
+      "underlying": "IDX2",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "120",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    },
+    {
+      "conid": 520002,
+      "symbol": "CORP2",
+      "underlying": "CORP2",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "EUR"
+    },
+    {
+      "conid": 520003,
+      "symbol": "IDX2 100P",
+      "underlying": "IDX2",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "100",
+      "right": "P",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "EUR"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "N1",
+      "konto": "U7777777",
+      "conid": 520001,
+      "symbol": "IDX2 120C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "2.00",
+      "waehrung": "EUR",
+      "kommission": "-1.0472",
+      "handelszeit": "2026-04-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "N2",
+      "konto": "U7777777",
+      "conid": 520001,
+      "symbol": "IDX2 120C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "-1",
+      "preis": "2.50",
+      "waehrung": "EUR",
+      "kommission": "-1.0472",
+      "handelszeit": "2026-04-02 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "M1",
+      "konto": "U7777777",
+      "conid": 520002,
+      "symbol": "CORP2",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "3",
+      "preis": "10.00",
+      "waehrung": "EUR",
+      "kommission": "-2.3456",
+      "handelszeit": "2026-04-01 11:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "M2",
+      "konto": "U7777777",
+      "conid": 520002,
+      "symbol": "CORP2",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "-1",
+      "preis": "11.00",
+      "waehrung": "EUR",
+      "kommission": "-0.35",
+      "handelszeit": "2026-04-02 11:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "M3",
+      "konto": "U7777777",
+      "conid": 520002,
+      "symbol": "CORP2",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "-2",
+      "preis": "12.00",
+      "waehrung": "EUR",
+      "kommission": "-0.35",
+      "handelszeit": "2026-04-03 11:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "R1",
+      "konto": "U7777777",
+      "conid": 520003,
+      "symbol": "IDX2 100P",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "-5",
+      "preis": "4.00",
+      "waehrung": "EUR",
+      "kommission": "-1.2345",
+      "handelszeit": "2026-04-01 12:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "R2",
+      "konto": "U7777777",
+      "conid": 520003,
+      "symbol": "IDX2 100P",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "2",
+      "preis": "3.00",
+      "waehrung": "EUR",
+      "kommission": "-0.5555",
+      "handelszeit": "2026-04-02 12:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

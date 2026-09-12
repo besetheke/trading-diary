@@ -679,3 +679,52 @@ def test_summenprobe_anlageklassen_werden_nicht_vermischt():
     assert conids["OPT"] & conids["FUT"] == set()
     verteilt = [len(_je_anlageklasse(ergebnis, fall, k)) for k in ("OPT", "FUT", "STK")]
     assert verteilt == [1, 1, 2]
+
+
+# ---------------------------------------------------------------------------
+# Kommissionen mit mehr als zwei Nachkommastellen (Nachtrag AP-03vn, OF-18)
+#
+# IB bucht Kommissionen meist mit mehr als zwei Nachkommastellen (gemessen:
+# 61 bis 78 % der Ausführungen). Die gebuchte Kommission wird nie gerundet: nur
+# die Anteile vor der letzten Teilmenge gehen auf den Cent, die letzte trägt
+# den exakten Rest (Vertrag Regel 5).
+#
+# conid 520001: N1 BUY 1 @ 2.00 (-1.0472), N2 SELL 1 @ 2.50 (-1.0472)
+# conid 520002: M1 BUY 3 @ 10.00 (-2.3456), M2 SELL 1 @ 11.00 (-0.35),
+#               M3 SELL 2 @ 12.00 (-0.35)
+# conid 520003: R1 SELL 5 @ 4.00 (-1.2345), R2 BUY 2 @ 3.00 (-0.5555)
+# ---------------------------------------------------------------------------
+
+
+def test_ungeteilte_gebrochene_kommission_bleibt_exakt():
+    # Beide Ausführungen ungeteilt, also keine Rundung:
+    # -1.0472 + -1.0472 = -2.0944 (gerundet wären es -1.05 + -1.05 = -2.10)
+    leg = leg_von(bilde("kommission_nachkommastellen"), "N1", "N2")
+    assert leg.kommission_gesamt == Decimal("-2.0944")
+
+
+def test_gebrochene_kommission_letzte_teilmenge_traegt_den_exakten_rest():
+    ergebnis = bilde("kommission_nachkommastellen")
+    # M1: -2.3456 * 1/3 = -0.781866... -> -0.78; dazu M2 ungeteilt -0.35 = -1.13
+    assert leg_von(ergebnis, "M1", "M2").kommission_gesamt == Decimal("-1.13")
+    # Rest von M1: -2.3456 - (-0.78) = -1.5656 (nicht -1.57); dazu M3 -0.35 = -1.9156
+    assert leg_von(ergebnis, "M1", "M3").kommission_gesamt == Decimal("-1.9156")
+    # R1: -1.2345 * 2/5 = -0.4938 -> -0.49; dazu R2 ungeteilt -0.5555 = -1.0455
+    assert leg_von(ergebnis, "R1", "R2").kommission_gesamt == Decimal("-1.0455")
+    # offener Rest von R1: -1.2345 - (-0.49) = -0.7445 (nicht -0.74)
+    assert leg_von(ergebnis, "R1", None).kommission_gesamt == Decimal("-0.7445")
+
+
+def test_gebrochene_kommission_summe_je_conid_ist_exakt():
+    """Die Summe allein genügt nicht als Beleg: bei conid 520003 ergäben die
+    gerundeten Anteile -1.05 + -0.74 zufällig ebenfalls -1.79. Deshalb prüft
+    der Test davor jedes Leg einzeln."""
+    ergebnis = bilde("kommission_nachkommastellen")
+    erwartet = {
+        520001: Decimal("-2.0944"),  # -1.0472 + -1.0472
+        520002: Decimal("-3.0456"),  # -2.3456 + -0.35 + -0.35
+        520003: Decimal("-1.7900"),  # -1.2345 + -0.5555
+    }
+    for conid, wert in erwartet.items():
+        gerechnet = summe(leg.kommission_gesamt for leg in legs_von(ergebnis, conid=conid))
+        assert gerechnet == wert, conid
