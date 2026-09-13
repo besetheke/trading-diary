@@ -775,6 +775,52 @@ nichts. Ergänzt um:
 jeweiligen Ausführung — IBs eigener Buchungskurs, mit Bezugszeitpunkt
 gespeichert (P4). Basiswährung ist EUR; die EUR-Zeilen tragen den Kurs 1.
 
+**Gemessen 13.09.2026, zur Bestätigung:** IB rechnet das realisierte Ergebnis
+einer Schließung **vollständig mit dem `fxRateToBase` der schließenden
+Ausführung** um — nicht die Anschaffungskosten zum Eröffnungskurs und den Erlös
+zum Schließkurs. In den Zeiträumen 04/2023 bis 09/2026 entspricht IBs Summe in
+EUR bei 11.757 `conid`s in Fremdwährung genau der Summe von
+`fifoPnlRealized × fxRateToBase` ihrer Ausführungen; 13 haben keine
+Entsprechung. „Maßgeblich ist `fxRateToBase` an der jeweiligen Ausführung" ist
+damit zu präzisieren: an der schließenden. Eine getrennte Umrechnung von Kosten
+und Erlös wäre eine andere Methodik und verfehlt den Abgleich deutlich; ob sie
+für die Steuer (AP-10) geboten ist, ist eine eigene Frage.
+
+## OF-24 · Prämie bei Zuteilung und Ausübung: IB verrechnet sie in die Aktienbasis
+
+**Befund aus dem Geldtest (13.09.2026); Entscheidung nötig.** Verglichen wurde
+je schließender Ausführung IBs `fifoPnlRealized` mit Brutto plus Kommission des
+Matchings, in lokaler Währung, über 32.475 Ausführungen 04/2022–09/2026
+(provisorischer Import im Speicher, nur Zählwerte):
+
+- Optionen: 14.040 von 15.261 centgenau; Futures und FOP: alle. Die
+  Abweichungen bei Optionen liegen fast ausschließlich an Zuteilungen und
+  Ausübungen — bei 603 davon meldet IB ein realisiertes Ergebnis von 0.
+- Aktien: 407 Abweichungen, fast alle an Aktien aus Zuteilung oder Ausübung,
+  mit denselben Lots wie IB, aber anderem Betrag.
+
+**Nachweis je Basiswert** (Differenz Matching − IB über die ganze Historie,
+Optionen und Aktien zusammen): exakt bei 126 von 127 Basiswerten ohne
+Zuteilung (der letzte ≤ 1 €); bei den 161 Basiswerten mit Zuteilung oder
+Ausübung exakt bei 106 und ≤ 1 € bei 17. IB verrechnet die Prämie also in
+Anschaffungskosten beziehungsweise Erlös der Aktie; das Matching realisiert sie
+an der Option. Offen in der Einzelzuordnung: 13 Basiswerte mit noch offener
+Aktie aus Zuteilung, bei denen die Prämie in IBs Anschaffungskosten steckt, und
+25 weitere.
+
+**Zu entscheiden:** Welche Methode führt das Journal?
+
+- (a) **Wie IB:** Prämie in die Aktienbasis. Der Abgleich gegen IB wird exakt,
+  eine zugeteilte Option zeigt aber kein eigenes Ergebnis.
+- (b) **Wie bisher:** Ergebnis an der Option. Der Geldtest vergleicht dann je
+  Basiswert statt je Anlageklasse und weist die in offenen Aktien steckende
+  Prämie gesondert aus.
+
+Zu bedenken: Für Strategie- und Kettenauswertung (AP-04, AP-05) ist die Prämie
+Teil des Optionsergebnisses. Steuerlich (AP-10) muss die deutsche Behandlung von
+Stillhalterprämien nicht IBs Methodik folgen; das ist eigens zu prüfen und nicht
+aus IBs Zahlen abzuleiten.
+
 **Nachtrag 13.09.2026:** Die ohne Modell gezogenen Exporte enthalten
 Kapitalmaßnahmen auch auf der Ebene `CLOSED_LOT`, genau zwei (TC und ED). Beide
 tragen `fifoPnlRealized = 0` — sie realisieren nichts, die Regel bleibt
