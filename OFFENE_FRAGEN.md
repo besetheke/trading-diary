@@ -640,6 +640,42 @@ Solange die Flex-Abfrage keine Closed Lots liefert, gilt der Bestandsabgleich
 je Stichtag als Ersatz für die Summenprobe; Kapitalmaßnahmen werden als
 bekannte, eigens zu lösende Ursache ausgewiesen.
 
+**Entscheidung und Nachtrag 13.09.2026:** Closed Lots sind endgültig kein
+Weg — auch mit den Optionen Execution und Closed Lots liefert die Abfrage keine
+Lot-Zeilen (drei Testexporte). Der Bestandsabgleich ist als Ersatz dafür
+angenommen, **als Abnahme von AP-03 aber nicht ausreichend**: Er prüft, welche
+Positionen offen sind, nicht, wie viel Geld realisiert wurde. Dafür kommt ein
+Geldtest hinzu (realisiertes Ergebnis je Jahr und Anlageklasse gegen die
+Jahressummen der Kontoauszüge).
+
+**Jede Abweichung zugeordnet.** Mit zwei Regeln verschwinden alle
+Abweichungen an allen fünf Stichtagen (30.12.2022, 29.12.2023, 31.12.2024,
+31.12.2025, 11.09.2026). Jede einzelne ist einer konkreten Ursache
+zugewiesen; die Liste liegt pseudonymisiert vor, Klarnamen gehören nach
+Regel 2 nicht ins Repo.
+
+1. **Stichtag nach Buchungstag (`reportDate`), nicht nach Handelstag.** IB
+   zählt eine Buchung zum Bestand eines Stichtags, wenn ihr `reportDate`
+   nicht danach liegt. Das erklärt alle Verfälle am Stichtag (7, 5 und 7 Fälle
+   2022–2024) und 4 weitere am 31.12.2024 gehandelte, aber erst im Januar
+   gebuchte Ausführungen (2 Aktien, 2 Optionen). Eine pauschale Regel „am
+   Stichtag verfallende Optionen zählen noch zum Bestand" wäre falsch: Sie
+   erzeugt am 31.12.2025 und 11.09.2026 16 bzw. 34 neue Abweichungen, weil
+   Verfall und Buchung dort auf denselben Tag fallen.
+2. **Kapitalmaßnahmen als Abgang und Zugang je `conid`.** So gebucht, lösen sie
+   alle übrigen Abweichungen auf — 6 am 31.12.2024, 14 am 31.12.2025, 15 am
+   11.09.2026 —, jede einer bestimmten Maßnahme mit Art, Richtung und Datum
+   zugeordnet. Wie das im Vertrag abzubilden ist, steht in OF-23.
+
+**Ergebnis: 0 Abweichungen an allen fünf Stichtagen.** Die 17 Abweichungen am
+31.12.2024 (13 IB-Positionen und 4 nur im Matching) teilen sich auf in 11 nach
+Buchungstag und 6 nach Kapitalmaßnahme.
+
+**Offen:** (a) Für Bestände zum Stichtag gilt der Buchungstag; `executions`
+führt ihn bisher nur in `roh_json`. Ob er eine eigene Spalte braucht, ist mit
+dem Paket zu entscheiden, das Bestandsauswertungen baut. (b) Der Geldtest
+braucht die Jahressummen des realisierten Ergebnisses; sie liegen nicht vor.
+
 ## OF-22 · CashTransactions: doppelte `transactionID`s und doppelte Buchung über SUMMARY-Zeilen
 
 **Befund aus dem Golden-Lauf (12.09.2026); blockiert den Import des Exports
@@ -677,3 +713,29 @@ Dateien eindeutig.** Die übrigen Sektionen tragen andere Ebenen:
 Ebenen-Regel muss deshalb je Sektion gelten — CashTransactions und
 CorporateActions nur `DETAIL`, OpenPositions `SUMMARY`, Transfers `TRANSFER`;
 jede andere Ebene bricht ab.
+
+## OF-23 · Kapitalmaßnahmen: Vertrag von AP-03 passt nicht zu IBs Buchungsform
+
+**Befund 13.09.2026; Entscheidung nötig vor der Umsetzung.** Vertrag Regel 6
+sieht einen Faktor auf derselben `conid` vor (Menge × Faktor, Preis ÷ Faktor).
+IB bucht Kapitalmaßnahmen anders. Von den 10 Maßnahmen in den Exporten
+2022–2026 buchen 7 einen Abgang auf der alten und einen Zugang auf einer
+**neuen** `conid` (3 × RS, je 1 × FI, FS, TO, TC); 2 (DI) sind reine Zugänge;
+1 (ED) betrifft keinen gehandelten Titel. Bei den Optionsanpassungen (FS, FI)
+weicht das Mengenverhältnis vom Split-Verhältnis ab — IB ändert dort offenbar
+auch Kontraktgröße oder Lieferumfang.
+
+**Für den Bestand genügt Abgang und Zugang** (belegt in OF-21: 0 Abweichungen).
+**Für das Geld nicht:** Würde der Abgang wie ein Verkauf zu 0 gebucht,
+entstünde ein realisierter Scheinverlust in Höhe der Anschaffungskosten und
+beim späteren Verkauf der neuen `conid` ein Scheingewinn. Eine
+Kapitalmaßnahme darf nichts realisieren.
+
+**Vorschlag:** Regel 6 neu fassen — eine Kapitalmaßnahme überträgt die offenen
+Lots der alten auf die neue `conid`: Menge nach IB-Buchung, Anschaffungskosten
+je Lot unverändert (der Preis je Stück wird entsprechend umgerechnet),
+Eröffnungsausführung und Eröffnungszeit bleiben erhalten, realisiert wird
+nichts. Für reine Zugänge (DI) ist zu entscheiden, ob sie ein Lot mit Kosten 0
+oder mit IBs Kostenangabe eröffnen. Umsetzung: Vorbereitungspaket mit
+Fixtures je Maßnahmenart (starkes Modell), dann Nachbesserung von AP-03 und
+Befüllen von `corporate_actions` im Import.
