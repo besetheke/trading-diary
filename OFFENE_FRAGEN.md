@@ -572,6 +572,16 @@ Test `test_unclassified_event_code_p_is_stored_as_unbekannt`, gehört also in
 dasselbe Korrekturpaket wie OF-19. OF-16 bleibt als Regel für künftig
 unbekannte Codes bestehen, trifft `P` aber nicht mehr.
 
+**Nachtrag 13.09.2026 (Jahresexporte 2022–2026):** Weitere Codes treten auf:
+`IA` (8), `L` (1) und die zusammengesetzten Codes `IA;P` (1) und `FP;P` (1).
+Alle diese Zeilen sind `ExchTrade` mit eigener `ibExecID` und Börse, also
+gewöhnliche Ausführungen mit Zusatzkennzeichen. `notes` ist damit eine durch
+`;` getrennte Liste. **Vorschlag:** `Ep`, `Ex` und `A` bestimmen den
+Ereignistyp; die gemessenen Zusatzkennzeichen `P`, `IA`, `FP` und `L` ergeben
+`trade`; jeder andere Code bricht weiter ab (OF-08) — Kennzeichen etwa für
+stornierte oder korrigierte Ausführungen dürfen nicht still als Trade
+durchgehen.
+
 ## OF-21 · Die Abnahme von AP-03 ist mit den vorliegenden Exporten nicht belegbar
 
 **Befund aus dem Golden-Lauf (12.09.2026).** Plan §6 verlangt für AP-03 die
@@ -599,6 +609,37 @@ das ohne vermuteten Vortrag offen bleibt, und eine Aktie mit Zuteilung.
 realisierten P&L und die Ebene Closed Lots aktivieren; die fehlenden
 Jahresexporte 2023/24, 2024/25 und 2025/26 abrufen (§6.2).
 
+**Nachtrag 13.09.2026:** Die Jahresexporte 2022 bis 2026 schließen die Lücke.
+**Closed Lots und realisierter P&L fehlen aber weiterhin in allen sechs
+Dateien**, auch im Export bis 11.09.2026: Trades nur auf Ebene `EXECUTION`,
+`fifoPnlRealized` überall 0. Die Summenprobe bleibt damit unmöglich.
+
+Ersatzweise ist das Matching über die ganze Historie gegen IBs Bestände
+geprüft — provisorischer Import im Speicher, 32.475 Ausführungen nach Entfernen
+von 14.078 dateiübergreifenden Dubletten über `tradeID`, nur Zählwerte:
+
+| Stichtag | IB-Positionen | gleich | nur IB | nur Matching | Menge verschieden |
+|---|---|---|---|---|---|
+| 30.12.2022 | 143 | 136 | 7 | 0 | 0 |
+| 29.12.2023 | 43 | 38 | 5 | 0 | 0 |
+| 31.12.2024 | 61 | 48 | 10 | 4 | 3 |
+| 31.12.2025 | 49 | 48 | 0 | 13 | 1 |
+| 01.09.2026 | 180 | 179 | 1 | 14 | 0 |
+| 11.09.2026 | 180 | 179 | 1 | 14 | 0 |
+
+Die Abweichungen haben zwei Ursachen: Optionen mit Verfall am oder vor dem
+Stichtag, die IBs Bestand noch führt (21 Fälle 2022–2024), und
+Kapitalmaßnahmen, die das Matching noch nicht anwendet, weil
+`corporate_actions` bisher nicht befüllt wird (OF-15). Alle Abweichungen 2025
+und 2026 tragen eine Kapitalmaßnahme. Ohne erkennbare Ursache bleiben zwei
+Aktien mit abweichender Menge am 31.12.2024. Ein Fehler des Matchings selbst
+ist nicht erkennbar.
+
+**Vorschlag für die Abnahme von AP-03 (Entscheidung Planer und Nutzer):**
+Solange die Flex-Abfrage keine Closed Lots liefert, gilt der Bestandsabgleich
+je Stichtag als Ersatz für die Summenprobe; Kapitalmaßnahmen werden als
+bekannte, eigens zu lösende Ursache ausgewiesen.
+
 ## OF-22 · CashTransactions: doppelte `transactionID`s und doppelte Buchung über SUMMARY-Zeilen
 
 **Befund aus dem Golden-Lauf (12.09.2026); blockiert den Import des Exports
@@ -624,3 +665,15 @@ im Importbericht ausgewiesen, eine unbekannte Ebene bricht ab. (b) Zusätzlich
 die Flex-Abfrage im Portal auf DETAIL beschränken (AP-00). Für die Paare: der
 Quellschlüssel besteht aus `transactionID` und `type`. Beides gehört in das
 Korrekturpaket zu AP-02, zusammen mit OF-19 und OF-20.
+
+**Nachtrag 13.09.2026 (alle sechs Exporte):** Die neuen Jahresexporte liefern
+CashTransactions und CorporateActions nur noch auf Ebene `DETAIL`;
+SUMMARY-Zeilen enthält nur noch der ältere Export bis 01.09.2026. Doppelte
+`transactionID`s treten 2023, 2025 und in beiden 2026-Exporten auf (3–4 je
+Datei), ausnahmslos als Paar `Broker Interest Paid` / `Broker Interest
+Received`; **die Kombination aus `transactionID` und `type` ist in allen sechs
+Dateien eindeutig.** Die übrigen Sektionen tragen andere Ebenen:
+`OpenPosition` kommt als `SUMMARY`, `Transfer` als `TRANSFER`. Die
+Ebenen-Regel muss deshalb je Sektion gelten — CashTransactions und
+CorporateActions nur `DETAIL`, OpenPositions `SUMMARY`, Transfers `TRANSFER`;
+jede andere Ebene bricht ab.
