@@ -884,6 +884,12 @@ Basiswerte **und** die 17 mit Abweichung bis 1 €.
   (B01–B17): Der Rest entspricht weder der Kommission der zugeteilten Optionen
   noch dem Barausgleich. Noch ohne Ursache; als Nächstes je Lieferung statt je
   Basiswert zu prüfen.
+- **Die 17 knappen (B01–B17):** Der Rest liegt bei allen innerhalb einer
+  Rundung je gelieferter Aktie — 14 × höchstens 0,0001 € je Aktie, 3 ×
+  höchstens 0,005 €. Das spricht für eine Rundung, mit der IB die Prämie je
+  Aktie in die Basis umlegt. Die exakte Rundungsregel ist noch nicht belegt.
+- **B19 und B29** haben keine Aktienlieferung, gehören also zum Barausgleich,
+  enthalten aber noch einen weiteren Anteil.
 
 ## OF-25 · Barausgleich bei Zuteilung und Ausübung fehlt im Matching
 
@@ -899,6 +905,16 @@ Basiswerten erklärt genau das den gesamten Rest.
 (`closePrice`, `mtmPnl`, eine Kassenbuchung am selben Tag oder nur implizit im
 `fifoPnlRealized`). Erst dann lässt sich Regel 7 für barausgeglichene Optionen
 fassen und in Tests gießen — ohne diese Kenntnis wäre jede Regel geraten.
+
+**Geklärt 13.09.2026:** Bei **allen 501 Zeilen** entspricht die fehlende
+Differenz genau `−quantity × multiplier × closePrice` (gleichbedeutend mit
+`−mtmPnl`). Der Ausgleichsbetrag steht im `closePrice` der Ereigniszeile.
+**Vorschlag für Vertrag Regel 7:** Eine Zuteilung oder Ausübung ohne
+zugehörige Aktienlieferung schließt zum `closePrice`, nicht zum `tradePrice`.
+Das erfordert, dass der Import `closePrice` an der Ausführung führt, und eine
+feste Erkennung „ohne Lieferung" — bisher nur provisorisch über eine
+Aktienzeile zur selben Zeit am selben Basiswert. Entscheidung nötig vor den
+Tests.
 
 **Zu entscheiden:** Welche Methode führt das Journal?
 
