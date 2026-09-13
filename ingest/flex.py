@@ -1,14 +1,20 @@
-"""Flex-Query-XML → Rohdaten (AP-02).
+"""Flex-Query-XML → Rohdaten (AP-02, nachgebessert nach AP-02k).
 
 Liest einen Activity-Flex-Export (§6.2) vollständig ein: die Trades-Sektion
 nach ``executions`` (Primärschlüssel ``tradeID``, der quellenübergreifende
 Schlüssel aus §5) und die Sektionen OpenPositions, CashTransactions,
 CorporateActions, Transfers und SecuritiesInfo je in ihre eigene Tabelle.
 Dazu die Instrument-Normalisierung: ``instruments`` wird aus Trades und
-SecuritiesInfo gefüllt, ``asset_class`` aus der ``assetCategory``.
+SecuritiesInfo gefüllt, ``asset_class`` aus der ``assetCategory``, die
+Abwicklungsart aus ``settlementPolicyMethod`` (OF-25).
 
 Grundsätze:
 
+- **Echtes IB-Format** (OF-19, AP-02k): Die Handelszeit steht in ``dateTime``
+  im Flex-Zeitformat ``JJJJMMTT;HHMMSS`` (reine Datumsform ergibt Mitternacht
+  — dokumentierte Annahme); ``tradeTime`` wird nicht gelesen. Jede Zeile trägt
+  ``levelOfDetail``; je Sektion bestimmen die erlaubten Ebenen, ob eine Zeile
+  gebucht, nur gezählt oder abgelehnt wird.
 - **Idempotent.** Gleicher Dateiinhalt (SHA-256) wird nicht erneut gelaufen;
   überlappende Dateien und erneute Abrufe vereinigen sich ohne Duplikate —
   ``executions`` über ``exec_id``, die Sektionstabellen über
@@ -19,9 +25,11 @@ Grundsätze:
   (§6.2, ``_stammsatz_verschmelzen``). Bewegungsdaten sind unveränderlich und
   werden bei Schlüsselkollision verworfen, nicht überschrieben.
 - **Kein stilles Verwerfen.** Unbekannte ``assetCategory``, unbekannte
-  Ereigniscodes, fehlende Pflichtfelder und nicht parsbare Werte führen zu
-  ``ValueError`` mit Nennung des Werts — Abnahme AP-02. Die Datei wird
-  vollständig geparst und geprüft, bevor die erste Zeile geschrieben wird.
+  Ereignis- oder Zusatzkennzeichen in ``notes``, unerwartete Ebenen,
+  unbekannte Abwicklungsarten, fehlende Pflichtfelder und nicht parsbare
+  Werte führen zu ``ValueError`` mit Nennung des Werts — Abnahme AP-02k. Die
+  Datei wird vollständig geparst und geprüft, bevor die erste Zeile
+  geschrieben wird.
 - **Raw erhalten.** Jede Zeile trägt das vollständige Attributbild in
   ``roh_json``; ``order_reference`` wird roh gespeichert und zusätzlich
   geparst (OA-Muster aus §6.1). Passt der Wert nicht auf das Muster — etwa
@@ -57,14 +65,34 @@ from journal.schema import (
 # Anlageklassen nach §1.1 — der Wertebereich von instruments.asset_class.
 BEKANNTE_ASSET_CLASSES = frozenset({"OPT", "FOP", "FUT", "STK", "CASH"})
 
-# Ereigniscodes aus §6.1, Zuordnung nach AP-02-Auftrag. Leer heißt trade.
-# Der Code P ist fachlich nicht klassifiziert (OF-07) und trägt 'unbekannt'.
-EREIGNISTYPEN = {
-    "": "trade",
-    "Ep": "expiry",
-    "Ex": "exercise",
-    "A": "assignment",
-    "P": "unbekannt",
+# Codes in ``notes`` (§6.1, AP-02k Regel 2): ``notes`` ist eine durch ``;``
+# getrennte Liste. Ep/Ex/A bestimmen den Ereignistyp, P/IA/FP/L sind
+# Zusatzkennzeichen einer gewöhnlichen Ausführung — P etwa eine Teilausführung
+# (OF-07, OF-20). Zwei Ereigniscodes in einer Liste sind mehrdeutig und brechen
+# ab; jeder andere Code ebenfalls (OF-08).
+EREIGNIS_CODES = {"Ep": "expiry", "Ex": "exercise", "A": "assignment"}
+ZUSATZ_CODES = frozenset({"P", "IA", "FP", "L"})
+
+# SecurityInfo.settlementPolicyMethod → instruments.abwicklungsart (OF-25,
+# AP-02k Regel 6). Fehlt das Feld, bleibt die Spalte leer; ein anderer
+# gesetzter Wert bricht ab.
+ABWICKLUNGSARTEN = {"Delivery": "lieferung", "Cash": "barausgleich"}
+
+# Ebenen je Sektion (AP-02k Regel 3): gebucht wird nur die Buchungsebene;
+# Zusammenfassungen (SUMMARY, CLOSED_LOT) werden gezählt, aber nicht gebucht.
+# Alles andere bricht mit Nennung der Sektion und Ebene ab. <Lot>-Elemente
+# sind ein eigener Tag und werden von ``./Trades/Trade`` ohnehin nicht
+# gefunden; der Abschnitt FIFOPerformanceSummaryInBase wird nicht gelesen.
+BUCH_EBENEN = {
+    "Trades": frozenset({"EXECUTION"}),
+    "OpenPositions": frozenset({"SUMMARY"}),
+    "CashTransactions": frozenset({"DETAIL"}),
+    "CorporateActions": frozenset({"DETAIL"}),
+    "Transfers": frozenset({"TRANSFER"}),
+}
+ZAEHL_EBENEN = {
+    "CashTransactions": frozenset({"SUMMARY"}),
+    "CorporateActions": frozenset({"SUMMARY", "CLOSED_LOT"}),
 }
 
 # Strukturierte OptionApp-Referenz nach §6.1. Order-Nummern sind nicht global
@@ -79,10 +107,16 @@ RECHTE = frozenset({"P", "C"})
 
 @dataclass(frozen=True)
 class ImportErgebnis:
-    """Bericht über einen Importlauf: gelesen, neu, übersprungen (AP-02)."""
+    """Bericht über einen Importlauf: gelesen, neu, übersprungen (AP-02).
+
+    ``nicht_gebuchte_zeilen`` zählt die nach AP-02k Regel 3 gelesenen, aber
+    nicht gebuchten Zeilen (SUMMARY, CLOSED_LOT) — sie sind kein Fehler, aber
+    auch kein Bestandteil der Rohdaten.
+    """
 
     zeilen_gesamt: int
     zeilen_neu: int
+    nicht_gebuchte_zeilen: int = 0
 
     @property
     def zeilen_uebersprungen(self) -> int:
@@ -102,6 +136,8 @@ class _DateiInhalt:
     # conid → zusammengeführte Instrumentendaten; Trades zuerst, dann
     # SecuritiesInfo (liefert den Multiplikator).
     instruments: dict[int, dict] = field(default_factory=dict)
+    # Gezählte, aber nicht gebuchte Zeilen (SUMMARY/CLOSED_LOT, Regel 3).
+    nicht_gebuchte_zeilen: int = 0
     zeitraum_von: date | None = None
     zeitraum_bis: date | None = None
 
@@ -150,11 +186,25 @@ def _datumwert(rohwert: str, kontext: str) -> date:
         raise ValueError(f"{kontext}: Datum unlesbar: {rohwert!r}") from fehler
 
 
-def _zeitpunktwert(rohwert: str, kontext: str) -> datetime:
+def _zeitpunktwert(rohwert: str, feld: str, kontext: str) -> datetime:
+    """Flex-Zeitform ``JJJJMMTT;HHMMSS`` (AP-02k Regel 1, OF-19).
+
+    Die reine Datumsform ``JJJJMMTT`` ergibt 00:00:00 — eine dokumentierte
+    Annahme, die Quelle liefert keine Uhrzeit dazu. Jede andere Form (etwa
+    die ISO-T-Form, die IB in anderen Reporten nutzt) bricht mit Nennung des
+    Felds und Werts ab.
+    """
     try:
-        return datetime.strptime(rohwert, "%Y%m%d %H:%M:%S")
+        return datetime.strptime(rohwert, "%Y%m%d;%H%M%S")
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(rohwert, "%Y%m%d")
     except ValueError as fehler:
-        raise ValueError(f"{kontext}: Zeitpunkt unlesbar: {rohwert!r}") from fehler
+        raise ValueError(
+            f"{kontext}: Feld {feld!r} ist keine der Zeitformen JJJJMMTT;HHMMSS "
+            f"oder JJJJMMTT: {rohwert!r}"
+        ) from fehler
 
 
 def _asset_class(attribute: dict, kontext: str) -> str:
@@ -168,15 +218,78 @@ def _asset_class(attribute: dict, kontext: str) -> str:
 
 
 def _ereignistyp_aus_notes(attribute: dict, kontext: str) -> tuple[str, str | None]:
-    """Liefert (ereignistyp, ereignis_code) aus ``notes`` (§6.1, OF-07/OF-08)."""
-    code = attribute.get("notes", "").strip()
-    if code not in EREIGNISTYPEN:
+    """Liefert (ereignistyp, ereignis_code) aus ``notes`` (§6.1, AP-02k Regel 2).
+
+    ``notes`` ist eine durch ``;`` getrennte Liste: Ep/Ex/A bestimmen den
+    Ereignistyp (höchstens einer), P/IA/FP/L sind Zusatzkennzeichen und
+    ergeben ``trade``. ``ereignis_code`` trägt den vollen Rohwert.
+    """
+    rohwert = attribute.get("notes", "").strip()
+    if not rohwert:
+        return "trade", None
+    ereignisse: list[str] = []
+    for code in rohwert.split(";"):
+        if code in EREIGNIS_CODES:
+            ereignisse.append(code)
+        elif code not in ZUSATZ_CODES:
+            raise ValueError(
+                f"{kontext}: unbekannter Code {code!r} in notes {rohwert!r} — "
+                f"Ereigniscodes: {sorted(EREIGNIS_CODES)}, Zusatzkennzeichen: "
+                f"{sorted(ZUSATZ_CODES)}. Abbruch statt stillem Verwerfen (OF-08)."
+            )
+    if len(ereignisse) > 1:
         raise ValueError(
-            f"{kontext}: unbekannter Ereigniscode in notes: {code!r} — bekannte "
-            f"Codes: {sorted(code for code in EREIGNISTYPEN if code)}. "
-            "Abbruch statt stillem Verwerfen (OF-08)."
+            f"{kontext}: mehrdeutige Ereigniscodes {sorted(ereignisse)} in notes "
+            f"{rohwert!r} — nur einer darf gesetzt sein, sonst wäre die Zuordnung geraten."
         )
-    return EREIGNISTYPEN[code], (code or None)
+    if ereignisse:
+        return EREIGNIS_CODES[ereignisse[0]], rohwert
+    return "trade", rohwert
+
+
+def _ebene_pruefen(attribute: dict, sektion: str, kontext: str) -> bool:
+    """Prüft ``levelOfDetail`` einer Sektionszeile (AP-02k Regel 3).
+
+    Rückgabe ``True`` heißt buchen (Buchungsebene der Sektion), ``False``
+    heißt zählen, aber nicht buchen (Zusammenfassungsebene). Jede andere oder
+    fehlende Ebene bricht mit Nennung von Sektion und Ebene ab.
+    """
+    ebene = attribute.get("levelOfDetail", "").strip()
+    if not ebene:
+        raise ValueError(
+            f"{kontext}: Pflichtfeld 'levelOfDetail' fehlt (Sektion {sektion})"
+        )
+    if ebene in BUCH_EBENEN[sektion]:
+        return True
+    if ebene in ZAEHL_EBENEN.get(sektion, frozenset()):
+        return False
+    raise ValueError(
+        f"{kontext}: unerwartete Ebene levelOfDetail={ebene!r} (Sektion {sektion}) — "
+        f"gebucht werden {sorted(BUCH_EBENEN[sektion])}"
+        + (
+            f", gezählt {sorted(ZAEHL_EBENEN[sektion])}"
+            if sektion in ZAEHL_EBENEN
+            else ""
+        )
+        + ". Abbruch statt stillem Verwerfen."
+    )
+
+
+def _abwicklungsart(attribute: dict, kontext: str) -> str | None:
+    """``settlementPolicyMethod`` → ``abwicklungsart`` (OF-25, AP-02k Regel 6).
+
+    Nur SecurityInfo-Zeilen tragen das Feld; auf Trade-Zeilen bleibt es leer
+    und überschreibt dadurch beim Verschmelzen keinen vorhandenen Stand.
+    """
+    rohwert = attribute.get("settlementPolicyMethod", "").strip()
+    if not rohwert:
+        return None
+    if rohwert not in ABWICKLUNGSARTEN:
+        raise ValueError(
+            f"{kontext}: unbekannter Wert in settlementPolicyMethod: {rohwert!r} — "
+            f"bekannte Werte: {sorted(ABWICKLUNGSARTEN)}. Abbruch statt stillem Verwerfen."
+        )
+    return ABWICKLUNGSARTEN[rohwert]
 
 
 def _exec_batch(ib_exec_id: str | None, kontext: str) -> str | None:
@@ -216,7 +329,7 @@ def _trade_kontext(attribute: dict, nummer: int) -> str:
     wiederzufinden ist. Ohne das wäre eine Fehlermeldung zur fehlenden
     ``tradeID`` nicht nachverfolgbar.
     """
-    kennzeichen = ("transactionID", "ibExecID", "conid", "symbol", "tradeTime")
+    kennzeichen = ("transactionID", "ibExecID", "conid", "symbol", "dateTime")
     merkmale = [
         f"{name} {attribute[name]!r}"
         for name in kennzeichen
@@ -248,7 +361,11 @@ def _execution_zeile(konto: str, trade: ET.Element, nummer: int) -> dict:
     if right is not None and right not in RECHTE:
         raise ValueError(f"{kontext}: unbekanntes Recht {right!r} in putCall")
     ereignistyp, ereignis_code = _ereignistyp_aus_notes(attribute, kontext)
-    handelszeit = _zeitpunktwert(_pflichtwert(attribute, "tradeTime", kontext), kontext)
+    # Regel 1: Die Handelszeit steht in dateTime (JJJJMMTT;HHMMSS); das Feld
+    # tradeTime existiert im echten Export nicht und wird nicht gelesen (OF-19).
+    handelszeit = _zeitpunktwert(
+        _pflichtwert(attribute, "dateTime", kontext), "dateTime", kontext
+    )
     ib_exec_id = attribute.get("ibExecID", "").strip() or None
     order_reference = attribute.get("orderReference", "").strip() or None
     expiry = attribute.get("expiry", "").strip()
@@ -280,14 +397,27 @@ def _execution_zeile(konto: str, trade: ET.Element, nummer: int) -> dict:
         "boerse": attribute.get("exchange", "").strip() or None,
         "ereignistyp": ereignistyp,
         "ereignis_code": ereignis_code,
+        # Regel 6: closePrice ist der Abrechnungskurs von Zuteilung und
+        # Ausübung (OF-25); bei gewöhnlichen Ausführungen bleibt er leer.
+        "schlusskurs": _dezimalwert(attribute, "closePrice", kontext),
         "roh_json": _roh_json(attribute),
         "qualitaetsstufe": "A",
     }
 
 
-def _quell_id(attribute: dict) -> str | None:
-    """``transactionID`` einer Sektionszeile, falls die Quelle eine liefert."""
-    return attribute.get("transactionID", "").strip() or None
+def _quell_id(attribute: dict, typ: str | None) -> str | None:
+    """Identität einer Sektionszeile mit ID (AP-02k Regel 4).
+
+    ``transactionID`` **und** ``type`` zusammen — die Interest-Paid/-Received-
+    Paare echter Exporte teilen sich eine transactionID und sind doch zwei
+    Buchungen. OpenPositions tragen keinen type; dort bleibt er leer. Ohne
+    transactionID liefert die Funktion None und die Identität bildet sich aus
+    dem Inhalt (``_quell_schluessel_vergeben``).
+    """
+    transaction_id = attribute.get("transactionID", "").strip()
+    if not transaction_id:
+        return None
+    return f"{transaction_id}|{typ or ''}"
 
 
 def _open_position_zeile(konto: str, position: ET.Element, statement_bis: date | None) -> dict:
@@ -304,7 +434,7 @@ def _open_position_zeile(konto: str, position: ET.Element, statement_bis: date |
         )
     return {
         "konto": konto,
-        "quell_id": _quell_id(attribute),
+        "quell_id": _quell_id(attribute, None),
         "stichtag": stichtag,
         "conid": _ganzzahlwert(attribute, "conid", kontext),
         "symbol": _pflichtwert(attribute, "symbol", kontext),
@@ -320,11 +450,14 @@ def _open_position_zeile(konto: str, position: ET.Element, statement_bis: date |
 def _cash_transaction_zeile(konto: str, buchung: ET.Element) -> dict:
     attribute = dict(buchung.attrib)
     kontext = f"CashTransaction {attribute.get('type', '?')}"
+    typ = _pflichtwert(attribute, "type", kontext)
     return {
         "konto": konto,
-        "quell_id": _quell_id(attribute),
-        "datum": _zeitpunktwert(_pflichtwert(attribute, "dateTime", kontext), kontext),
-        "typ": _pflichtwert(attribute, "type", kontext),
+        "quell_id": _quell_id(attribute, typ),
+        "datum": _zeitpunktwert(
+            _pflichtwert(attribute, "dateTime", kontext), "dateTime", kontext
+        ),
+        "typ": typ,
         "betrag": _pflichtdezimal(attribute, "amount", kontext),
         "waehrung": _pflichtwert(attribute, "currency", kontext),
         "beschreibung": attribute.get("description", "").strip() or None,
@@ -336,6 +469,7 @@ def _ereignis_zeile(konto: str, ereignis: ET.Element, sektion: str) -> dict:
     """Gemeinsame Form für CorporateActions und Transfers (Rohdaten, AP-02)."""
     attribute = dict(ereignis.attrib)
     kontext = f"{sektion} {attribute.get('type', '?')}"
+    typ = _pflichtwert(attribute, "type", kontext)
     conid = attribute.get("conid", "").strip()
     if conid:
         try:
@@ -346,10 +480,12 @@ def _ereignis_zeile(konto: str, ereignis: ET.Element, sektion: str) -> dict:
         conid_wert = None
     return {
         "konto": konto,
-        "quell_id": _quell_id(attribute),
+        "quell_id": _quell_id(attribute, typ),
         "conid": conid_wert,
-        "typ": _pflichtwert(attribute, "type", kontext),
-        "datum": _zeitpunktwert(_pflichtwert(attribute, "dateTime", kontext), kontext),
+        "typ": typ,
+        "datum": _zeitpunktwert(
+            _pflichtwert(attribute, "dateTime", kontext), "dateTime", kontext
+        ),
         "beschreibung": attribute.get("description", "").strip() or None,
         "roh_json": _roh_json(attribute),
     }
@@ -387,6 +523,7 @@ def _instrument_daten(attribute: dict, kontext: str, periodenende: date | None) 
         "right": attribute.get("putCall", "").strip() or None,
         "multiplikator": _dezimalwert(attribute, "multiplier", kontext),
         "waehrung": attribute.get("currency", "").strip() or None,
+        "abwicklungsart": _abwicklungsart(attribute, kontext),
         "quell_periodenende": periodenende,
     }
 
@@ -486,6 +623,10 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
             )
 
         for nummer, trade in enumerate(statement.findall("./Trades/Trade"), start=1):
+            # <Lot>-Elemente sind ein eigener Tag und werden hier nicht
+            # gefunden; eine <Trade>-Zeile unerwarteter Ebene bricht ab.
+            attribute = dict(trade.attrib)
+            _ebene_pruefen(attribute, "Trades", _trade_kontext(attribute, nummer))
             zeile = _execution_zeile(konto, trade, nummer)
             if zeile["exec_id"] in gesehene_exec_ids:
                 raise ValueError(f"{datei}: tradeID {zeile['exec_id']} mehrfach in der Datei")
@@ -496,12 +637,28 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
             )
 
         for position in statement.findall("./OpenPositions/OpenPosition"):
+            attribute = dict(position.attrib)
+            kontext = f"OpenPosition conid {attribute.get('conid', '?')}"
+            _ebene_pruefen(attribute, "OpenPositions", kontext)
             inhalt.open_positions.append(_open_position_zeile(konto, position, bis))
         for buchung in statement.findall("./CashTransactions/CashTransaction"):
-            inhalt.cash_transactions.append(_cash_transaction_zeile(konto, buchung))
+            attribute = dict(buchung.attrib)
+            kontext = f"CashTransaction {attribute.get('type', '?')}"
+            if _ebene_pruefen(attribute, "CashTransactions", kontext):
+                inhalt.cash_transactions.append(_cash_transaction_zeile(konto, buchung))
+            else:
+                inhalt.nicht_gebuchte_zeilen += 1
         for ereignis in statement.findall("./CorporateActions/CorporateAction"):
-            inhalt.corporate_actions.append(_ereignis_zeile(konto, ereignis, "CorporateAction"))
+            attribute = dict(ereignis.attrib)
+            kontext = f"CorporateAction {attribute.get('type', '?')}"
+            if _ebene_pruefen(attribute, "CorporateActions", kontext):
+                inhalt.corporate_actions.append(_ereignis_zeile(konto, ereignis, "CorporateAction"))
+            else:
+                inhalt.nicht_gebuchte_zeilen += 1
         for transfer in statement.findall("./Transfers/Transfer"):
+            attribute = dict(transfer.attrib)
+            kontext = f"Transfer {attribute.get('type', '?')}"
+            _ebene_pruefen(attribute, "Transfers", kontext)
             inhalt.transfers.append(_ereignis_zeile(konto, transfer, "Transfer"))
         for info in statement.findall("./SecuritiesInfo/SecurityInfo"):
             zeile = _securities_info_zeile(info, bis)
@@ -520,8 +677,10 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
 def _quell_schluessel_vergeben(zeilen: list[dict], sektion: str, datei: pathlib.Path) -> None:
     """Vergibt je Sektionszeile den Quellschlüssel (eindeutig je Konto, OF-09).
 
-    - Mit ``transactionID``: ``tx:<id>``. Dieselbe ID zweimal in einer Datei
-      ist ein Fehler — welche der beiden Zeilen gilt, wäre geraten.
+    - Mit ``transactionID``: ``tx:<id>|<typ>`` — Identität ist das Paar aus
+      transactionID und type (AP-02k Regel 4). Dieselbe Kombination zweimal
+      in einer Datei ist ein Fehler — welche der beiden Zeilen gilt, wäre
+      geraten.
     - Ohne: ``inhalt:<sha256>#<n>`` über ``roh_json`` (bei offenen Positionen
       zusätzlich über den Stichtag). ``n`` zählt inhaltsgleiche Zeilen
       derselben Datei durch: Zwei gleiche Gebühren bleiben zwei Buchungen, ein
@@ -535,8 +694,8 @@ def _quell_schluessel_vergeben(zeilen: list[dict], sektion: str, datei: pathlib.
         if quell_id is not None:
             if (konto, quell_id) in gesehene_ids:
                 raise ValueError(
-                    f"{datei}: transactionID {quell_id} mehrfach in Sektion {sektion} "
-                    f"(Konto {konto})"
+                    f"{datei}: Identität {quell_id!r} (transactionID|type) mehrfach "
+                    f"in Sektion {sektion} (Konto {konto})"
                 )
             gesehene_ids.add((konto, quell_id))
             zeile["quell_schluessel"] = f"tx:{quell_id}"
@@ -677,7 +836,11 @@ def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
         ).first()
         if bekannter_lauf is not None:
             # Gleicher Dateiinhalt: nichts zu tun (P1, Abnahme AP-02).
-            return ImportErgebnis(zeilen_gesamt=len(inhalt.executions), zeilen_neu=0)
+            return ImportErgebnis(
+                zeilen_gesamt=len(inhalt.executions),
+                zeilen_neu=0,
+                nicht_gebuchte_zeilen=inhalt.nicht_gebuchte_zeilen,
+            )
 
         lauf_id = _import_run_anlegen(verbindung, datei_hash, inhalt)
         zeilen_neu = _executions_schreiben(verbindung, inhalt, lauf_id)
@@ -695,4 +858,8 @@ def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
         _securities_info_schreiben(verbindung, inhalt.securities_info)
         _instrumente_schreiben(verbindung, inhalt.instruments)
 
-        return ImportErgebnis(zeilen_gesamt=len(inhalt.executions), zeilen_neu=zeilen_neu)
+        return ImportErgebnis(
+            zeilen_gesamt=len(inhalt.executions),
+            zeilen_neu=zeilen_neu,
+            nicht_gebuchte_zeilen=inhalt.nicht_gebuchte_zeilen,
+        )

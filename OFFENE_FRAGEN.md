@@ -1010,3 +1010,18 @@ für realisierende Maßnahmen, hat sich damit nicht bestätigt. Offen bleibt nur
 der Fall einer Maßnahme mit Barausgleich; in den Daten kommt keine vor. Die
 CLOSED_LOT-Zeile der TC-Maßnahme trägt eine eigene `transactionID`, die der
 ED-Maßnahme dieselbe wie ihre DETAIL-Zeile.
+
+## OF-26 · Identität einer OpenPosition mit `transactionID`, aber ohne `type`
+
+AP-02k, Regel 4 definiert die Identität einer Sektionszeile mit ID über Konto,
+`transactionID` **und** `type`. Die Regel ist an den CashTransactions gemessen,
+wo `type` gesetzt ist; kein gemessener Export liefert eine `transactionID` auf
+OpenPositions, und OpenPositions haben kein `type`-Feld — die Regel schweigt
+über diese Kombination.
+
+**Annahme:** `ingest/flex.py`, `_quell_id`: Fehlt `type`, bleibt der Typ-Teil
+der Identität leer; die Identität einer solchen Zeile ist dann (Konto,
+`transactionID`). Sollte ein künftiger Export `transactionID`s auf
+OpenPositions tragen, ist die Regel dafür neu zu entscheiden — bis dahin
+fallen offene Positionen über den Inhaltsschlüssel (Stichtag + `roh_json`),
+wie es die Abnahmetests verlangen.

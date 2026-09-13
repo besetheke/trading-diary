@@ -145,6 +145,10 @@ executions = Table(
     Column("ereignistyp", Text, nullable=False),
     # Rohwert der Quelle, z. B. Ep / Ex / A / P.
     Column("ereignis_code", Text, nullable=True),
+    # Trade.closePrice: der Kurs, zu dem Zuteilung oder Ausübung abgerechnet
+    # wird — der Barausgleich steht hier, nicht im tradePrice (OF-25, AP-02k
+    # Regel 6). Leer bei gewöhnlichen Ausführungen.
+    Column("schlusskurs", ExactDecimal, nullable=True),
     Column("roh_json", Text, nullable=False),
     Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
     Column("qualitaetsstufe", Text, nullable=False),
@@ -218,9 +222,18 @@ instruments = Table(
     # überschreibt, eine ältere ergänzt nur Leerstellen. Leer heißt
     # „Periode unbekannt" und verliert damit gegen jede datierte Quelle.
     Column("quell_periodenende", Date, nullable=True),
+    # SecurityInfo.settlementPolicyMethod: entscheidet bei Zuteilung und
+    # Ausübung zwischen Lieferung des Basiswerts und Barausgleich (OF-25,
+    # AP-02k Regel 6). Leer, wenn die Quelle nichts liefert — das Matching
+    # (AP-03) bricht dann bei einer betroffenen Zeile ab.
+    Column("abwicklungsart", Text, nullable=True),
     CheckConstraint(
         "asset_class IN ('OPT', 'FOP', 'FUT', 'STK', 'CASH')",
         name="ck_instruments_asset_class",
+    ),
+    CheckConstraint(
+        "abwicklungsart IN ('lieferung', 'barausgleich')",
+        name="ck_instruments_abwicklungsart",
     ),
 )
 
