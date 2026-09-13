@@ -295,13 +295,49 @@ Scheingewinn in gleicher Höhe.
   späteren Verkauf einen Scheingewinn in voller Höhe und ist über AP-10 steuerlich
   relevant.
 
+**Behandlung von Zuteilung und Ausübung**
+
+IB verrechnet die Prämie einer zugeteilten oder ausgeübten Option in die
+Anschaffungskosten der Aktie. Das Journal tut das **nicht**: das Ergebnis wird an
+der Option realisiert.
+
+Begründung: aus dieser Darstellung lässt sich IBs jederzeit herstellen, umgekehrt
+nicht — ist die Prämie einmal in der Aktienbasis, ist das eigenständige Ergebnis
+der Option unwiederbringlich. Fachlich käme hinzu, dass unter IBs Methode
+ausgerechnet die zugeteilte Option kein Ergebnis zeigt, obwohl das die Fälle sind,
+über die die Auswertung am meisten aussagen soll; das Ergebnis erschiene erst beim
+späteren Aktienverkauf und wanderte damit aus einer Optionsstrategie in eine
+diskretionäre Aktienentscheidung.
+
+**Auflage:** die in einer offenen Aktienposition geparkte Prämie wird je Zuteilung
+als eigener Wert gespeichert, nicht erst beim Abgleich errechnet. Nur so schließt
+die Überleitung zu IBs Zahlen exakt, und die IB-Sicht bleibt für Abgleich und
+Steuerexport ableitbar.
+
+Für AP-10 ist eigens zu prüfen, wie Stillhalterprämien in Deutschland zu behandeln
+sind. IBs Methodik ist dafür nicht maßgeblich, und Prämie und Aktienposition
+fallen ohnehin in unterschiedliche Verlusttöpfe. Diese Darstellung hält beide Wege
+offen.
+
 **Währungsumrechnung**
 
-Maßgeblich ist `fxRateToBase` an der jeweiligen Ausführung — IBs eigener
-Buchungskurs. Er steht an jeder Zeile, braucht keine externe Kursquelle und wird
-mit Bezugszeitpunkt gespeichert (P4). Beim Abgleich gegen IBs Summen weisen
-Abweichungen dadurch auf die Rechnung hin, nicht auf die Kursmethodik.
-Basiswährung ist EUR; die EUR-Zeilen tragen durchgehend den Kurs 1.
+Maßgeblich gerechnet wird in Instrumentwährung (P4). Die EUR-Darstellung ist eine
+abgeleitete Sicht, und es gibt zwei davon:
+
+- **IB-vergleichbar:** Kurs der schließenden Ausführung auf das gesamte
+  realisierte Ergebnis. Das ist IBs Konvention, gemessen an 11.757 von 11.770
+  Fremdwährungs-conids ab April 2023. Nur für den Abgleich.
+- **Wirtschaftlich:** jeder Zahlungsstrom mit dem Kurs seiner eigenen Ausführung.
+  Die Differenz zur IB-Sicht wird als Währungseffekt gesondert ausgewiesen.
+
+Grund für die Trennung: IBs Konvention presst einen Währungseffekt in das
+Handelsergebnis — die Prämie floss bei Eröffnung zu einem anderen Kurs zu, als der
+Rückkauf abfließt. Ohne die Trennung lässt sich später nicht beantworten, ob eine
+Strategie Geld verdient hat oder nur der Dollar.
+
+Kursquelle ist durchgehend `fxRateToBase` an der jeweiligen Ausführung; eine
+externe Kursquelle wird nicht benötigt. Basiswährung ist EUR, die EUR-Zeilen
+tragen den Kurs 1.
 
 **Abgeleitet (jederzeit neu berechenbar)**
 - `legs` — leg_id, conid, open_exec_id, close_exec_id, menge, matching_methode,
@@ -571,6 +607,15 @@ die Positionszahlen unberührt und entwerten trotzdem jede spätere Auswertung.
 *Closed Lots entfallen.* Über sechs Exporte hinweg liefert das Konto keine
 Lot-Ebene, `fifoPnlRealized` steht durchgehend auf null. Beide Abnahmehälften
 kommen ohne aus.
+
+*Überleitung statt Toleranz.* Wo das Journal bewusst anders rechnet als IB —
+Zuteilung und Ausübung, siehe §5 — schließt der Abgleich über einen ausgewiesenen
+Überleitungsposten exakt, nicht über eine Toleranzschwelle. Ungeklärte Einzelfälle
+sind vor der Abnahme zu benennen; eine Restmenge ohne zugeordnete Ursache gilt
+nicht als erklärt. Das betrifft derzeit 19 Basiswerte im Geldtest und 13
+Fremdwährungs-conids bei der Umrechnung — bei letzteren ist zuerst zu prüfen, ob
+es Positionen mit mehreren Schließungen zu unterschiedlichen Kursen sind; wenn ja,
+wird die Umrechnungsregel verfeinert statt die Fälle geduldet.
 
 *Reihenfolge:* Jahresexporte ziehen, Kapitalmaßnahmen anwenden, Bestandsabgleich
 wiederholen, Jahressummen prüfen. Keine Abnahme vor diesem Durchlauf.

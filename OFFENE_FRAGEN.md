@@ -786,6 +786,21 @@ damit zu präzisieren: an der schließenden. Eine getrennte Umrechnung von Koste
 und Erlös wäre eine andere Methodik und verfehlt den Abgleich deutlich; ob sie
 für die Steuer (AP-10) geboten ist, ist eine eigene Frage.
 
+**Entschieden 13.09.2026 (Planer, im Plan nachgezogen), getrennt nach Zweck:**
+Für den **Abgleich mit IB** gilt IBs Konvention — der Kurs der schließenden
+Ausführung auf das gesamte realisierte Ergebnis. Für das **Journal** ist die
+maßgebliche Zahl das Ergebnis in Instrumentwährung (P4). Daraus werden zwei
+Sichten abgeleitet: die IB-vergleichbare mit dem Schlusskurs und die
+wirtschaftliche mit dem jeweiligen Kurs je Zahlungsstrom; deren Differenz wird
+als Währungseffekt ausgewiesen.
+
+**Vor der Abnahme offen:** Die 13 Ausnahmen von der Umrechnungsregel sind
+einzeln zu benennen. Bestätigt sich eine gemeinsame Ursache, wird die Regel
+verfeinert, statt die Fälle zu dulden. Die Messung rechnet bereits je
+Ausführung mit deren eigenem Kurs; mehrere Schließungen zu verschiedenen
+Kursen sind darin enthalten. Zu prüfen sind deshalb vor allem `costAdj` und
+`transferredPnl` der IB-Zusammenfassung.
+
 ## OF-24 · Prämie bei Zuteilung und Ausübung: IB verrechnet sie in die Aktienbasis
 
 **Befund aus dem Geldtest (13.09.2026); Entscheidung nötig.** Verglichen wurde
@@ -823,6 +838,26 @@ der Historie, einer eine Kapitalmaßnahme; bei 8 weichen nur die Optionen ab,
 bei 11 Optionen und Aktien. Rest gemessen am IB-Ergebnisvolumen des
 Basiswerts: 5 × unter 1 %, 8 × 1–10 %, 6 × über 10 %. Diese 19 sind noch nicht
 einer konkreten Ursache zugeordnet.
+
+**Entschieden 13.09.2026 (Planer, im Plan nachgezogen): (b).** Nicht als
+Kompromiss, sondern weil (a) Information vernichtet: Aus (b) lässt sich (a)
+jederzeit herstellen, indem die Prämie in die Basis geschoben wird — umgekehrt
+ist das eigenständige Ergebnis der Option nicht mehr rekonstruierbar. Unter (a)
+zeigte ausgerechnet die zugeteilte Option kein Ergebnis, und die Performance
+einer automatisierten Optionsstrategie wanderte in eine spätere, diskretionäre
+Aktienentscheidung, womöglich in ein anderes Jahr.
+
+**Auflage:** Die in offenen Aktien geparkte Prämie wird **je Zuteilung als
+eigener Wert gespeichert**, nicht nur beim Abgleich errechnet. Die Überleitung
+zu IB schließt damit exakt, und die IB-Sicht bleibt für Abgleich,
+Steuerexport und künftige Fragen ableitbar.
+
+**Steuer:** vor AP-10 mit dem Steuerberater zu klären. (b) hält beide Wege
+offen, (a) nur einen.
+
+**Vor der Abnahme offen:** Die Überleitung muss exakt schließen, nicht
+innerhalb einer Toleranz. Einzeln zuzuordnen sind deshalb die 19 offenen
+Basiswerte **und** die 17 mit Abweichung bis 1 €.
 
 **Zu entscheiden:** Welche Methode führt das Journal?
 
