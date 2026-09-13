@@ -891,6 +891,14 @@ Basiswerte **und** die 17 mit Abweichung bis 1 €.
 - **B19 und B29** haben keine Aktienlieferung, gehören also zum Barausgleich,
   enthalten aber noch einen weiteren Anteil.
 
+**Stand nach provisorischem Barausgleich (OF-25), 13.09.2026:** Basiswerte
+ohne Zuteilung 127 exakt, 1 bis 1 €; mit Zuteilung oder Ausübung 114 exakt,
+13 durch Prämie in offener Aktienbasis belegt, 19 bis 1 € (B01–B17, B19, B29),
+**11 offen: B18, B21–B26, B31, B33–B35**. Alle 11 haben physische Lieferung;
+IBs Lots ihrer Aktienschließungen verweisen auf die Lieferzeilen (41) und auf
+gewöhnliche Käufe (6). Die Verknüpfung trägt also, die Ursache des Rests ist
+noch nicht benannt.
+
 ## OF-25 · Barausgleich bei Zuteilung und Ausübung fehlt im Matching
 
 **Befund aus dem Geldtest (13.09.2026); blockiert die Abnahme von AP-03.**
@@ -915,6 +923,11 @@ Das erfordert, dass der Import `closePrice` an der Ausführung führt, und eine
 feste Erkennung „ohne Lieferung" — bisher nur provisorisch über eine
 Aktienzeile zur selben Zeit am selben Basiswert. Entscheidung nötig vor den
 Tests.
+
+**Gegenprobe 13.09.2026:** Mit dem Schluss zum `closePrice` stimmen alle 501
+Schließungen centgenau mit IB; die centgenauen Optionsschließungen steigen von
+14.040 auf 14.541. Die 6 Basiswerte B20, B27, B28, B30, B32 und B36 schließen
+exakt, B19 und B29 bis auf höchstens 1 €. Die Regel ist damit belegt.
 
 **Zu entscheiden:** Welche Methode führt das Journal?
 
