@@ -7,10 +7,11 @@ Vertrag an die Umsetzung:
   Rückgabe ist ein Objekt mit ``zeilen_gesamt`` und ``zeilen_neu``.
 - Bis ``ingest/flex.py`` existiert, springt dieses Modul still ab; sobald es
   existiert, laufen alle Tests scharf.
-- Der Ereigniscode ``P`` ist im Schema nicht klassifizierbar (erfüllt keinen
-  der vier Werte aus §1.4). Der Import ordnet ihn ``unbekannt`` zu; dafür ist
-  eine Migration nötig, die den CHECK auf ``executions.ereignistyp`` um
-  ``'unbekannt'`` erweitert. Hintergrund in OFFENE_FRAGEN.md (OF-07).
+- Der Ereigniscode ``P`` kennzeichnet am Golden-Export eine gewöhnliche
+  Teilausführung (``ExchTrade``, eigene ``ibExecID``, Börse gesetzt) und keine
+  Buchung ohne Handelsbezug — die AP-02-Annahme ``ereignistyp='unbekannt'``
+  war falsch (OF-07, korrigiert in AP-02k, OF-20). ``P`` ergibt ``trade``;
+  ``ereignis_code`` bleibt als Rohwert erhalten.
 
 **Schlüsselkorrektur AP-02a.** Die Erwartungen adressieren Ausführungen seit
 AP-02a über ihre ``tradeID`` (111000001 …) statt über die ``transactionID``
@@ -19,6 +20,15 @@ AP-02a über ihre ``tradeID`` (111000001 …) statt über die ``transactionID``
 gegen ``transactionID`` (§5, OF-10). Die Fixtures blieben dabei unverändert —
 sie führen beide Felder von Anfang an. Geprüft wird dasselbe wie zuvor, nur
 unter dem richtigen Schlüssel.
+
+**Formatkorrektur AP-02k.** Der Golden-Lauf hat gezeigt: Der Import las kein
+echtes Flex-XML (OF-19) — IB liefert ``dateTime`` statt ``tradeTime``, das
+Zeitformat ``JJJJMMTT;HHMMSS`` (teils nur ``JJJJMMTT``), und jede Zeile trägt
+``levelOfDetail``. Alle Fixtures unter ``fixtures/flex/`` sind inhaltlich
+unverändert, nur auf dieses echte Format umgestellt. Gegen den unveränderten
+``ingest/flex.py`` schlagen deshalb praktisch alle Tests dieses Moduls fehl —
+das ist der Zweck des Korrekturpakets: Es legt die Zielform der Abnahme fest,
+bevor ``ingest/flex.py`` nachgebessert wird.
 """
 
 from decimal import Decimal
@@ -102,11 +112,14 @@ def test_trade_rows_without_notes_are_trades(migrated_db):
     assert _exec_zeile(migrated_db, "111000001")["ereignistyp"] == "trade"
 
 
-def test_unclassified_event_code_p_is_stored_as_unbekannt(migrated_db):
+def test_partial_execution_code_p_is_a_trade(migrated_db):
+    """OF-20: notes='P' kennzeichnet eine Teilausführung (ExchTrade, eigene
+    ibExecID, Börse gesetzt) — eine gewöhnliche Ausführung, kein
+    unklassifiziertes Ereignis. ereignis_code bleibt als Rohwert erhalten."""
     _importiere(migrated_db, "activity_2026_01.xml")
     zeile = _exec_zeile(migrated_db, "111000008")
     assert zeile is not None, "P-Zeile darf nicht still verworfen werden"
-    assert zeile["ereignistyp"] == "unbekannt"
+    assert zeile["ereignistyp"] == "trade"
     assert zeile["ereignis_code"] == "P"
 
 
@@ -199,7 +212,7 @@ STATEMENT_RUMPF = """<?xml version="1.0" encoding="UTF-8"?>
 <FlexQueryResponse queryname="Activity" type="Statement">
   <FlexStatements count="1">
     <FlexStatement accountId="U7777777" fromDate="{von}" toDate="{bis}"
-                   period="Test" whenGenerated="{erzeugt}" currency="EUR">
+                   period="Test" whenGenerated="{erzeugt}">
       <Trades>{trades}</Trades>
       <SecuritiesInfo>{stammdaten}</SecuritiesInfo>
     </FlexStatement>
@@ -207,13 +220,16 @@ STATEMENT_RUMPF = """<?xml version="1.0" encoding="UTF-8"?>
 </FlexQueryResponse>
 """
 
+# Echtes Format (AP-02k, OF-19): levelOfDetail an jeder Trades-Zeile,
+# dateTime statt tradeTime, Zeitform JJJJMMTT;HHMMSS.
 TRADE_RUMPF = (
-    '<Trade {trade_id}transactionID="{transaction_id}" ibExecID="0077.0001.01.01"'
+    '<Trade levelOfDetail="EXECUTION" {trade_id}transactionID="{transaction_id}"'
+    ' ibExecID="0077.0001.01.01"'
     ' ibOrderID="5559999" orderReference="" conid="{conid}" symbol="CORP"'
     ' underlyingSymbol="CORP" assetCategory="STK" buySell="BUY" quantity="10"'
     ' tradePrice="12.00" proceeds="-120.00" ibCommission="-1.00"'
     ' ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9200"'
-    ' netCash="-121.00" tradeTime="{zeit}" orderTime="{zeit}" exchange="MEMX"'
+    ' netCash="-121.00" dateTime="{zeit}" orderTime="{zeit}" exchange="MEMX"'
     ' notes="" openCloseIndicator="" />'
 )
 
@@ -234,7 +250,7 @@ def _schreibe_xml(tmp_path, name, *, von, bis, erzeugt, trades="", stammdaten=""
     return ziel
 
 
-def _trade(*, trade_id, transaction_id, conid="200001", zeit="20260305 15:30:00"):
+def _trade(*, trade_id, transaction_id, conid="200001", zeit="20260305;153000"):
     """Eine Trades-Zeile; ``trade_id=None`` lässt das Attribut ganz weg."""
     return TRADE_RUMPF.format(
         trade_id="" if trade_id is None else f'tradeID="{trade_id}" ',
@@ -252,10 +268,10 @@ def test_trade_row_without_tradeid_aborts_the_import(migrated_db, tmp_path):
         "ohne_tradeid.xml",
         von="20260301",
         bis="20260331",
-        erzeugt="20260401T031500",
+        erzeugt="20260401;031500",
         trades=(
             _trade(trade_id="111500001", transaction_id="9500001")
-            + _trade(trade_id=None, transaction_id="9500002", zeit="20260306 15:30:00")
+            + _trade(trade_id=None, transaction_id="9500002", zeit="20260306;153000")
         ),
     )
     with pytest.raises(ValueError) as fehler:
@@ -274,8 +290,8 @@ def test_older_master_data_does_not_overwrite_newer(migrated_db, tmp_path):
         "stammdaten_alt.xml",
         von="20260101",
         bis="20260131",
-        erzeugt="20260201T031500",
-        trades=_trade(trade_id="111600001", transaction_id="9600001", zeit="20260105 15:30:00"),
+        erzeugt="20260201;031500",
+        trades=_trade(trade_id="111600001", transaction_id="9600001", zeit="20260105;153000"),
         stammdaten=STAMMSATZ_RUMPF.format(conid="200001", multiplikator="1", waehrung="USD"),
     )
     neu = _schreibe_xml(
@@ -283,8 +299,8 @@ def test_older_master_data_does_not_overwrite_newer(migrated_db, tmp_path):
         "stammdaten_neu.xml",
         von="20260201",
         bis="20260228",
-        erzeugt="20260301T031500",
-        trades=_trade(trade_id="111600002", transaction_id="9600002", zeit="20260205 15:30:00"),
+        erzeugt="20260301;031500",
+        trades=_trade(trade_id="111600002", transaction_id="9600002", zeit="20260205;153000"),
         # Nach einem Split trägt dieselbe conid einen anderen Multiplikator.
         stammdaten=STAMMSATZ_RUMPF.format(conid="200001", multiplikator="2", waehrung="EUR"),
     )
@@ -327,7 +343,7 @@ def test_same_booking_from_two_overlapping_files_lands_once(migrated_db, tmp_pat
         "ueberlappung_a.xml",
         von="20260301",
         bis="20260315",
-        erzeugt="20260316T031500",
+        erzeugt="20260316;031500",
         trades=_trade(trade_id="111700001", transaction_id="9700001"),
     )
     zweite = _schreibe_xml(
@@ -335,12 +351,12 @@ def test_same_booking_from_two_overlapping_files_lands_once(migrated_db, tmp_pat
         "ueberlappung_b.xml",
         von="20260310",
         bis="20260331",
-        erzeugt="20260401T031500",
+        erzeugt="20260401;031500",
         # Dieselbe Buchung, im zweiten Export mit abweichender transactionID —
         # so verhält sich der Broker laut §5; die tradeID bleibt gleich.
         trades=(
             _trade(trade_id="111700001", transaction_id="9700099")
-            + _trade(trade_id="111700002", transaction_id="9700002", zeit="20260324 15:30:00")
+            + _trade(trade_id="111700002", transaction_id="9700002", zeit="20260324;153000")
         ),
     )
     import_flex_file(migrated_db, erste)

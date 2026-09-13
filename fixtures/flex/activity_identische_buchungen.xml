@@ -2,14 +2,14 @@
 <FlexQueryResponse queryname="Activity" type="Statement">
   <FlexStatements count="1">
     <FlexStatement accountId="U7777777" fromDate="20260401" toDate="20260430"
-                   period="April2026" whenGenerated="20260501T031500" currency="EUR">
+                   period="April2026" whenGenerated="20260501;031500">
       <Trades />
       <CashTransactions>
-        <CashTransaction accountId="U7777777" currency="USD" fxRateToBase="0.9100"
-                         amount="-1.50" type="Other Fees" dateTime="20260415 04:00:00"
+        <CashTransaction levelOfDetail="DETAIL" accountId="U7777777" currency="USD" fxRateToBase="0.9100"
+                         amount="-1.50" type="Other Fees" dateTime="20260415;040000"
                          description="Snapshot quote fee" />
-        <CashTransaction accountId="U7777777" currency="USD" fxRateToBase="0.9100"
-                         amount="-1.50" type="Other Fees" dateTime="20260415 04:00:00"
+        <CashTransaction levelOfDetail="DETAIL" accountId="U7777777" currency="USD" fxRateToBase="0.9100"
+                         amount="-1.50" type="Other Fees" dateTime="20260415;040000"
                          description="Snapshot quote fee" />
       </CashTransactions>
     </FlexStatement>

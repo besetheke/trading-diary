@@ -2,15 +2,15 @@
 <FlexQueryResponse queryname="Activity" type="Statement">
   <FlexStatements count="1">
     <FlexStatement accountId="U7777777" fromDate="20260101" toDate="20260131"
-                   period="January2026" whenGenerated="20260201T120000" currency="EUR">
+                   period="January2026" whenGenerated="20260201;120000">
       <Trades>
-        <Trade transactionID="9300001" tradeID="114000001" ibExecID="0014.0001.01.01"
+        <Trade levelOfDetail="EXECUTION" transactionID="9300001" tradeID="114000001" ibExecID="0014.0001.01.01"
                ibOrderID="5570001" orderReference=""
                conid="400001" symbol="WRNT1" underlyingSymbol="CORP" assetCategory="WARRANT"
                buySell="BUY" quantity="10" tradePrice="0.80" proceeds="-8.00"
                ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
-               fxRateToBase="0.9300" netCash="-9.00" tradeTime="20260122 15:30:00"
-               orderTime="20260122 15:30:00" exchange="MEMX" notes="" openCloseIndicator="" />
+               fxRateToBase="0.9300" netCash="-9.00" dateTime="20260122;153000"
+               orderTime="20260122;153000" exchange="MEMX" notes="" openCloseIndicator="" />
       </Trades>
     </FlexStatement>
   </FlexStatements>

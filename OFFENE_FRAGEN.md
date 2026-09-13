@@ -544,6 +544,17 @@ Zeitformen umstellen; danach Nachbesserung des Imports gegen diese Fixtures.
 Für künftige Abnahmebasen: Ein synthetisches Fixture wird am Attributschema
 eines echten Exports geprüft, bevor es unveränderlich wird.
 
+**Umgesetzt in AP-02k (13.09.2026).** Alle neun Fixtures unter
+`fixtures/flex/` sind inhaltlich unverändert, nur auf das echte Format
+umgestellt (`dateTime` statt `tradeTime`, `JJJJMMTT;HHMMSS`, `levelOfDetail`
+je Zeile, kein `FlexStatement.currency`/`OpenPosition.markValue`).
+`activity_2026_01.xml` enthält zusätzlich eine CashTransaction in reiner
+Datumsform, damit die dokumentierte Annahme „ohne Uhrzeit heißt 00:00:00"
+(Regel 1 des Vertrags in `auftraege/AP-02k.md`) mitgeprüft wird. Der
+Schema-Abgleich jedes Fixtures gegen die gemessene Tabelle ist durchgeführt
+(Attributnamen, Zeitformen, Ebenen) — ohne Befund. Der Import selbst ist noch
+nicht nachgebessert; `ingest/flex.py` gehört nicht zu AP-02k.
+
 ## OF-20 · `notes = P` ist eine Teilausführung, kein unklassifiziertes Ereignis
 
 **Befund aus dem Golden-Lauf (12.09.2026); widerlegt die Annahme aus OF-07 und
@@ -581,6 +592,16 @@ Ereignistyp; die gemessenen Zusatzkennzeichen `P`, `IA`, `FP` und `L` ergeben
 `trade`; jeder andere Code bricht weiter ab (OF-08) — Kennzeichen etwa für
 stornierte oder korrigierte Ausführungen dürfen nicht still als Trade
 durchgehen.
+
+**Umgesetzt in AP-02k (13.09.2026).** `tests/test_ingest_flex.py`:
+`test_unclassified_event_code_p_is_stored_as_unbekannt` heißt jetzt
+`test_partial_execution_code_p_is_a_trade` und erwartet `ereignistyp='trade'`.
+`tests/test_ingest_flex_format.py` deckt zusätzlich die Codeliste ab: die
+Zusatzkennzeichen `IA`, `L`, `IA;P`, `FP;P` ergeben `trade`; ein Ereigniscode
+innerhalb einer Liste (z. B. `IA;Ex`) bestimmt weiterhin den Ereignistyp; ein
+unbekannter Code und zwei Ereigniscodes in einer Liste brechen ab. Der Import
+selbst liest `notes` noch nicht als Liste — das macht die Nachbesserung von
+AP-02.
 
 ## OF-21 · Die Abnahme von AP-03 ist mit den vorliegenden Exporten nicht belegbar
 
@@ -726,6 +747,19 @@ Dateien eindeutig.** Die übrigen Sektionen tragen andere Ebenen:
 Ebenen-Regel muss deshalb je Sektion gelten — CashTransactions und
 CorporateActions nur `DETAIL`, OpenPositions `SUMMARY`, Transfers `TRANSFER`;
 jede andere Ebene bricht ab.
+
+**Umgesetzt in AP-02k (13.09.2026).** `activity_doppelte_buchungs_id.xml`
+trägt jetzt zwei Zeilen mit gleicher `transactionID` **und** gleichem `type`
+(„Dividends") — nur so bleibt sie nach der neuen Identitätsregel
+(`transactionID` + `type`) ein echter Duplikat-Fall; vorher hätte die
+unterschiedliche Art (Dividends/Withholding Tax) sie zu zwei gültigen
+Buchungen gemacht. `tests/test_ingest_flex_format.py` deckt zusätzlich ab:
+SUMMARY-Zeilen werden gezählt, nicht gebucht (`nicht_gebuchte_zeilen`); ein
+Interest-Paar mit gleicher `transactionID`, verschiedenem `type` bleibt zwei
+Buchungen und verdoppelt sich bei erneutem Abruf nicht; OpenPositions/SUMMARY
+und Transfers/TRANSFER lösen keinen Abbruch aus; eine CLOSED_LOT-CorporateAction
+wird gezählt, nicht gebucht. Der Import selbst liest `levelOfDetail` und die
+zusammengesetzte Identität noch nicht — das macht die Nachbesserung von AP-02.
 
 ## OF-23 · Kapitalmaßnahmen: Vertrag von AP-03 passt nicht zu IBs Buchungsform
 

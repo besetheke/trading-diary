@@ -55,7 +55,7 @@ def _importiere(db_pfad, datei):
 def _neuabruf(dateiname, tmp_path):
     """Dieselbe Datei, erneut abgerufen: nur ``whenGenerated`` ändert sich."""
     inhalt = (FIXTURES / dateiname).read_text(encoding="utf-8")
-    neu, ersetzt = re.subn(r'whenGenerated="[^"]*"', 'whenGenerated="20991231T235959"', inhalt)
+    neu, ersetzt = re.subn(r'whenGenerated="[^"]*"', 'whenGenerated="20991231;235959"', inhalt)
     assert ersetzt == 1, "Fixture muss genau einen whenGenerated-Stempel tragen"
     ziel = tmp_path / f"neuabruf_{dateiname}"
     ziel.write_text(neu, encoding="utf-8")

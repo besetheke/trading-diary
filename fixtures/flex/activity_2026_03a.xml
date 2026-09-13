@@ -2,41 +2,41 @@
 <FlexQueryResponse queryname="Activity" type="Statement">
   <FlexStatements count="1">
     <FlexStatement accountId="U7777777" fromDate="20260301" toDate="20260315"
-                   period="Last15Days" whenGenerated="20260316T031500" currency="EUR">
+                   period="Last15Days" whenGenerated="20260316;031500">
       <Trades>
-        <Trade transactionID="9400001" tradeID="111400001" ibExecID="0041.0001.01.01"
+        <Trade levelOfDetail="EXECUTION" transactionID="9400001" tradeID="111400001" ibExecID="0041.0001.01.01"
                ibOrderID="5550041" orderReference=""
                conid="200001" symbol="CORP" underlyingSymbol="CORP" assetCategory="STK"
                buySell="BUY" quantity="50" tradePrice="40.00" proceeds="-2000.00"
                ibCommission="-1.00" ibCommissionCurrency="USD" currency="USD"
-               fxRateToBase="0.9200" netCash="-2001.00" tradeTime="20260305 15:30:00"
-               orderTime="20260305 15:29:00" exchange="MEMX" notes="" openCloseIndicator="" />
+               fxRateToBase="0.9200" netCash="-2001.00" dateTime="20260305;153000"
+               orderTime="20260305;152900" exchange="MEMX" notes="" openCloseIndicator="" />
       </Trades>
       <OpenPositions>
-        <OpenPosition accountId="U7777777" reportDate="20260315" conid="200001" symbol="CORP"
+        <OpenPosition levelOfDetail="SUMMARY" accountId="U7777777" reportDate="20260315" conid="200001" symbol="CORP"
                       underlyingSymbol="CORP" assetCategory="STK" position="110"
-                      markPrice="41.00" markValue="4510.00" costBasisPrice="41.60"
+                      markPrice="41.00" costBasisPrice="41.60"
                       costBasisMoney="4576.00" fifoPnlUnrealized="-66.00" currency="USD"
                       fxRateToBase="0.9200" />
       </OpenPositions>
       <CashTransactions>
-        <CashTransaction transactionID="7100001" accountId="U7777777" currency="USD"
+        <CashTransaction levelOfDetail="DETAIL" transactionID="7100001" accountId="U7777777" currency="USD"
                          fxRateToBase="0.9200" amount="0.80" type="Broker Interest Received"
-                         dateTime="20260303 04:00:00" description="USD credit interest" />
-        <CashTransaction transactionID="7100002" accountId="U7777777" currency="USD"
+                         dateTime="20260303;040000" description="USD credit interest" />
+        <CashTransaction levelOfDetail="DETAIL" transactionID="7100002" accountId="U7777777" currency="USD"
                          fxRateToBase="0.9200" amount="-10.00" type="Other Fees"
-                         dateTime="20260312 04:00:00" description="Market data fee" />
+                         dateTime="20260312;040000" description="Market data fee" />
       </CashTransactions>
       <CorporateActions>
-        <CorporateAction transactionID="7200001" actionID="880001" accountId="U7777777"
+        <CorporateAction levelOfDetail="DETAIL" transactionID="7200001" actionID="880001" accountId="U7777777"
                          conid="200001" symbol="CORP" assetCategory="STK" type="FS"
-                         dateTime="20260310 20:25:00" quantity="55" currency="USD"
+                         dateTime="20260310;202500" quantity="55" currency="USD"
                          description="CORP(200001) SPLIT 2 FOR 1" />
       </CorporateActions>
       <Transfers>
-        <Transfer transactionID="7300001" accountId="U7777777" conid="200001" symbol="CORP"
+        <Transfer levelOfDetail="TRANSFER" transactionID="7300001" accountId="U7777777" conid="200001" symbol="CORP"
                   assetCategory="STK" type="INTERNAL" direction="IN" quantity="5"
-                  dateTime="20260308 10:00:00" currency="USD"
+                  dateTime="20260308;100000" currency="USD"
                   description="Internal transfer from U7777778" />
       </Transfers>
       <SecuritiesInfo>
