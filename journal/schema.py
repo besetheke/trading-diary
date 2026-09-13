@@ -227,6 +227,10 @@ instruments = Table(
     # AP-02k Regel 6). Leer, wenn die Quelle nichts liefert — das Matching
     # (AP-03) bricht dann bei einer betroffenen Zeile ab.
     Column("abwicklungsart", Text, nullable=True),
+    # Zugang einer Kapitalmaßnahme (OF-23): der Lieferumfang ist nach einer
+    # Optionsanpassung nicht mehr standardisiert — Strikes und Multiplikatoren
+    # dürfen die Analytik dann nicht mit gewöhnlichen Kontrakten vergleichen.
+    Column("angepasst", Boolean, nullable=False, server_default="0"),
     CheckConstraint(
         "asset_class IN ('OPT', 'FOP', 'FUT', 'STK', 'CASH')",
         name="ck_instruments_asset_class",
@@ -241,16 +245,27 @@ corporate_actions = Table(
     "corporate_actions",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("conid", BigInteger, nullable=False, index=True),
-    # Split / Reverse / Merger / Spinoff
+    # Gruppiert Abgang und Zugang derselben Maßnahme (IBs actionID, OF-23):
+    # IB bucht eine Kapitalmaßnahme nicht als Faktor auf derselben conid,
+    # sondern als Abgang auf der alten und Zugang auf einer neuen — gemessen
+    # an allen 10 Maßnahmen der Golden-Exporte, ausnahmslos.
+    Column("aktion_id", Text, nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    # Rohwert der Quelle (z. B. FS, RS, TO, TC, FI, DI) — die Typen aus der
+    # Vor-OF-23-Fassung (Split/Reverse/Merger/Spinoff) waren nicht gemessen,
+    # sondern geraten; kein CHECK, bis eine echte Taxonomie vorliegt.
     Column("typ", Text, nullable=False),
     Column("stichtag", Date, nullable=False),
-    Column("faktor", ExactDecimal, nullable=False),
+    # NULL bei reinem Zugang (z. B. DI) — keine abgebende Seite.
+    Column("alter_conid", BigInteger, nullable=True, index=True),
+    Column("alte_menge", ExactDecimal, nullable=True),
+    Column("neuer_conid", BigInteger, nullable=False, index=True),
+    Column("neue_menge", ExactDecimal, nullable=False),
+    # IBs Kostenangabe für den Zugang (costBasis), falls geliefert — nur bei
+    # reinem Zugang relevant. Fehlt sie, bleibt das Lot 'basis_ungeklaert'
+    # (legs.basis_ungeklaert) statt stillschweigend mit Kosten 0 zu öffnen.
+    Column("kosten_neu", ExactDecimal, nullable=True),
     Column("roh_json", Text, nullable=True),
-    CheckConstraint(
-        "typ IN ('Split', 'Reverse', 'Merger', 'Spinoff')",
-        name="ck_corporate_actions_typ",
-    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -383,6 +398,10 @@ legs = Table(
     Column("brutto_pnl", ExactDecimal, nullable=True),
     Column("kommission_gesamt", ExactDecimal, nullable=True),
     Column("offen_ja_nein", Boolean, nullable=False),
+    # Ein reiner Zugang aus einer Kapitalmaßnahme, für den IB keine
+    # Kostenangabe liefert (OF-23): kein stiller Nullwert, sondern markiert —
+    # eine Nullbasis erzeugte beim Verkauf einen Scheingewinn in voller Höhe.
+    Column("basis_ungeklaert", Boolean, nullable=False, server_default="0"),
 )
 
 structures = Table(

@@ -1,0 +1,72 @@
+{
+  "fall": "kapitalmassnahme_optionsanpassung",
+  "beschreibung": "Pflichtfall AP-03vm (OF-23): eine Optionsanpassung mit Mengenverhaeltnis, das vom glatten Split abweicht (5 neue je 4 alte Stueck statt 2:1) - gemessen bei den Optionsanpassungen FS/FI der Golden-Exporte. Der Faktor kommt aus alte_menge/neue_menge der Massnahme, ist also nicht auf 2 hartkodiert. conid 500033 (alt) -> 500034 (neu). Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500033,
+      "symbol": "IDX4 100C",
+      "underlying": "IDX4",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "100",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500034,
+      "symbol": "IDX4 100C ADJ",
+      "underlying": "IDX4",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "100",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [
+    {
+      "aktion_id": "AKT3",
+      "konto": "U7777777",
+      "typ": "FI",
+      "stichtag": "2026-04-15",
+      "alter_conid": 500033,
+      "alte_menge": "4",
+      "neuer_conid": 500034,
+      "neue_menge": "5"
+    }
+  ],
+  "executions": [
+    {
+      "exec_id": "O1",
+      "konto": "U7777777",
+      "conid": 500033,
+      "symbol": "IDX4 100C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "4",
+      "preis": "10.00",
+      "waehrung": "USD",
+      "kommission": "-2.00",
+      "handelszeit": "2026-04-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "O2",
+      "konto": "U7777777",
+      "conid": 500034,
+      "symbol": "IDX4 100C ADJ",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "5",
+      "preis": "9.00",
+      "waehrung": "USD",
+      "kommission": "-2.50",
+      "handelszeit": "2026-04-20 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "fall": "kapitalmassnahme_reiner_zugang",
+  "beschreibung": "Pflichtfall AP-03vm (OF-23): ein reiner Zugang ohne abgebende Seite (Typ DI in den Golden-Exporten). conid 500035 traegt IBs Kostenangabe (kosten_neu) - das synthetische Eroeffnungslot bekommt deren Stueckpreis. conid 500036 bekommt keine Kostenangabe - das Lot wird mit Kosten 0 eroeffnet und als basis_ungeklaert markiert, statt eine Nullbasis stillschweigend zu buchen. Multiplikator 1, USD.",
+  "instruments": [
+    {
+      "conid": 500035,
+      "symbol": "CORP5",
+      "underlying": "CORP5",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500036,
+      "symbol": "CORP6",
+      "underlying": "CORP6",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [
+    {
+      "aktion_id": "AKT4",
+      "konto": "U7777777",
+      "typ": "DI",
+      "stichtag": "2026-05-01",
+      "alter_conid": null,
+      "alte_menge": null,
+      "neuer_conid": 500035,
+      "neue_menge": "10",
+      "kosten_neu": "250.00"
+    },
+    {
+      "aktion_id": "AKT5",
+      "konto": "U7777777",
+      "typ": "DI",
+      "stichtag": "2026-05-01",
+      "alter_conid": null,
+      "alte_menge": null,
+      "neuer_conid": 500036,
+      "neue_menge": "5"
+    }
+  ],
+  "executions": [
+    {
+      "exec_id": "Z1",
+      "konto": "U7777777",
+      "conid": 500035,
+      "symbol": "CORP5",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "10",
+      "preis": "30.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-05-20 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "Z2",
+      "konto": "U7777777",
+      "conid": 500036,
+      "symbol": "CORP6",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "5",
+      "preis": "12.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-05-20 10:00:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}

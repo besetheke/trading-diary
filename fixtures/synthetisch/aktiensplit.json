@@ -1,9 +1,21 @@
 {
   "fall": "aktiensplit",
-  "beschreibung": "Pflichtfall AP-03: Aktiensplit 2:1 vor dem Matching. conid 500003 wird vor dem Stichtag gekauft (100 zu 40.00) und nach dem Stichtag teilweise verkauft; die Eroeffnung muss auf 200 zu 20.00 angepasst werden - Menge UND Preis. conid 500009 prueft die Stichtagsgrenze: die Eroeffnung liegt genau AUF dem Stichtag und wird deshalb nicht mehr angepasst. Multiplikator 1, USD.",
+  "beschreibung": "Pflichtfall AP-03, Semantik korrigiert in AP-03vm (OF-23): eine Kapitalmassnahme ist ein Transfer auf eine neue conid, kein Faktor auf derselben. conid 500003 wird vor dem Stichtag gekauft (100 zu 40.00) und per Massnahme AKT1 (2-fuer-1) auf conid 500030 uebertragen: 200 zu 20.00 - Menge UND Preis angepasst, danach auch als eigene conid gehandelt (S2). conid 500009 prueft die Stichtagsgrenze: S3 liegt genau AUF dem Stichtag der Massnahme AKT2 (conid 500009 -> 500032) und bleibt deshalb auf 500009 - eine Ausfuehrung am Stichtag gilt schon zu neuen Konditionen, wird also nicht mehr verschoben. Multiplikator 1, USD.",
   "instruments": [
     {
       "conid": 500003,
+      "symbol": "CORP",
+      "underlying": "CORP",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    },
+    {
+      "conid": 500030,
       "symbol": "CORP",
       "underlying": "CORP",
       "asset_class": "STK",
@@ -29,16 +41,24 @@
   ],
   "kapitalmassnahmen": [
     {
-      "conid": 500003,
-      "typ": "Split",
+      "aktion_id": "AKT1",
+      "konto": "U7777777",
+      "typ": "FS",
       "stichtag": "2026-03-10",
-      "faktor": "2"
+      "alter_conid": 500003,
+      "alte_menge": "1",
+      "neuer_conid": 500030,
+      "neue_menge": "2"
     },
     {
-      "conid": 500009,
-      "typ": "Split",
+      "aktion_id": "AKT2",
+      "konto": "U7777777",
+      "typ": "RS",
       "stichtag": "2026-03-10",
-      "faktor": "2"
+      "alter_conid": 500009,
+      "alte_menge": "1",
+      "neuer_conid": 500032,
+      "neue_menge": "2"
     }
   ],
   "executions": [
@@ -59,7 +79,7 @@
     {
       "exec_id": "S2",
       "konto": "U7777777",
-      "conid": 500003,
+      "conid": 500030,
       "symbol": "CORP",
       "sec_type": "STK",
       "side": "SELL",

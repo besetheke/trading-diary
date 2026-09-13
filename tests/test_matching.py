@@ -50,6 +50,12 @@ DEZIMALFELDER = frozenset(
         "multiplikator",
         "tickwert",
         "faktor",
+        # Kapitalmaßnahmen als Transfer (AP-03vm, OF-23): Menge auf der
+        # abgebenden und der empfangenden Seite, IBs Kostenangabe für einen
+        # reinen Zugang.
+        "alte_menge",
+        "neue_menge",
+        "kosten_neu",
         "fifo_pnl_unrealisiert",
         "realisiert_brutto",
         "unrealisiert",
@@ -333,27 +339,36 @@ def test_kommissionsaufteilung_bruttosumme():
 
 
 # ---------------------------------------------------------------------------
-# Aktiensplit vor dem Matching (Pflichtfall)
+# Aktiensplit vor dem Matching (Pflichtfall, Semantik korrigiert in AP-03vm,
+# OF-23: eine Kapitalmaßnahme ist ein Transfer auf eine neue conid, kein
+# Faktor auf derselben — gemessen an allen 10 Maßnahmen der Golden-Exporte,
+# ausnahmslos).
 #
-# conid 500003: S1 BUY 100 @ 40.00 (-1.00) am 01.02., Split 2:1 zum 10.03.,
-#               S2 SELL 150 @ 21.00 (-1.50) am 15.03.
-#               S1 angepasst: 100 * 2 = 200 Stück zu 40.00 / 2 = 20.00
-# conid 500009: S3 BUY 10 @ 50.00 GENAU am Stichtag -> keine Anpassung
+# AKT1 (500003 -> 500030, 2 neue je 1 altes Stück): S1 BUY 100 @ 40.00
+#      (-1.00) am 01.02. auf 500003, vor dem Stichtag (10.03.) — wird beim
+#      Transfer zu 200 Stück @ 20.00 auf 500030. S2 SELL 150 @ 21.00 (-1.50)
+#      am 15.03. liegt schon auf der neuen conid 500030, wie im echten
+#      Export: nach der Maßnahme wird die neue conid gehandelt.
+# AKT2 (500009 -> 500032): S3 BUY 10 @ 50.00 GENAU am Stichtag — eine
+#      Ausführung am Stichtag selbst gilt bereits zu neuen Konditionen und
+#      wird deshalb NICHT verschoben; S3/S4 bleiben auf 500009.
 # ---------------------------------------------------------------------------
 
 
 def test_split_passt_die_eroeffnung_auf_menge_und_preis_an():
     # Ohne Preisanpassung wäre das Ergebnis (21.00 - 40.00) * 150 = -2850.00,
     # ohne Mengenanpassung ließen sich nur 100 der 150 Stück schließen.
-    # Richtig: (21.00 - 20.00) * 150 Stück * 1 = 150.00
+    # Richtig: (21.00 - 20.00) * 150 Stück * 1 = 150.00 — auf der neuen conid.
     leg = leg_von(bilde("aktiensplit"), "S1", "S2")
+    assert leg.conid == 500030
     assert leg.menge == Decimal("150")
     assert leg.brutto_pnl == Decimal("150.00")
 
 
 def test_split_erhoeht_die_offene_restmenge():
-    # 200 angepasste Stück - 150 verkauft = 50 offen
+    # 200 transferierte Stück - 150 verkauft = 50 offen, auf 500030.
     leg = leg_von(bilde("aktiensplit"), "S1", None)
+    assert leg.conid == 500030
     assert leg.menge == Decimal("50")
     assert leg.offen_ja_nein is True
 
@@ -366,21 +381,25 @@ def test_split_kommission_folgt_der_angepassten_menge():
 
 
 def test_split_wirkt_nicht_auf_ausfuehrungen_ab_dem_stichtag():
-    # S3 liegt genau auf dem Stichtag und gilt bereits zu neuen Konditionen.
+    # S3 liegt genau auf dem Stichtag von AKT2 und gilt bereits zu neuen
+    # Konditionen — kein Transfer nach 500032, S3/S4 bleiben auf 500009.
     # Richtig: (55.00 - 50.00) * 10 * 1 = 50.00, nichts bleibt offen.
-    # Fälschlich angepasst wären es 20 Stück zu 25.00, also
-    # (55.00 - 25.00) * 10 = 300.00 und 10 Stück offen.
-    legs = legs_von(bilde("aktiensplit"), conid=500009)
-    assert len(legs) == 1
-    assert legs[0].brutto_pnl == Decimal("50.00")
-    assert legs[0].kommission_gesamt == Decimal("-2.00")
+    # Fälschlich verschoben wären es 20 Stück zu 25.00 auf 500032, also
+    # (55.00 - 25.00) * 10 = 300.00 und 10 Stück offen dort.
+    legs_alt = legs_von(bilde("aktiensplit"), conid=500009)
+    legs_neu = legs_von(bilde("aktiensplit"), conid=500032)
+    assert len(legs_alt) == 1
+    assert legs_neu == []
+    assert legs_alt[0].brutto_pnl == Decimal("50.00")
+    assert legs_alt[0].kommission_gesamt == Decimal("-2.00")
 
 
 def test_split_laesst_die_kommissionssumme_unveraendert():
-    # conid 500003: -1.00 + -1.50 = -2.50; conid 500009: -1.00 + -1.00 = -2.00
+    # 500030 (Ziel des Transfers): -1.00 + -1.50 = -2.50
+    # 500009 (unverschoben): -1.00 + -1.00 = -2.00
     ergebnis = bilde("aktiensplit")
     assert summe(
-        leg.kommission_gesamt for leg in legs_von(ergebnis, conid=500003)
+        leg.kommission_gesamt for leg in legs_von(ergebnis, conid=500030)
     ) == Decimal("-2.50")
     assert summe(
         leg.kommission_gesamt for leg in legs_von(ergebnis, conid=500009)
@@ -801,3 +820,61 @@ def test_barausgleich_ohne_schlusskurs_bricht_ab():
     with pytest.raises(ValueError) as fehler:
         bilde_legs(fall.executions, fall.instruments, fall.kapitalmassnahmen)
     assert "BS2" in str(fehler.value) or "500023" in str(fehler.value)
+
+
+# ---------------------------------------------------------------------------
+# Kapitalmaßnahmen als Transfer (Nachtrag AP-03vm, OF-23)
+#
+# IB bucht eine Kapitalmaßnahme nicht als Faktor auf derselben conid, sondern
+# als Abgang auf der alten und Zugang auf einer neuen — gemessen an allen 10
+# Maßnahmen der Golden-Exporte, ausnahmslos. „Aktiensplit vor dem Matching"
+# weiter oben deckt den Regelfall (Transfer, Stichtagsgrenze) ab; hier zwei
+# weitere Pflichtfälle: ein Mengenverhältnis, das vom glatten Split abweicht,
+# und der reine Zugang ohne abgebende Seite.
+#
+# conid 500033 -> 500034 (5 neue je 4 alte Stück): O1 BUY 4 @ 10.00 (-2.00)
+#                 vor dem Stichtag, O2 SELL 5 @ 9.00 (-2.50) auf der neuen
+#                 conid. Multiplikator 100.
+# conid 500035 (reiner Zugang, IBs Kosten 250.00 für 10 Stück): Z1 SELL 10
+#                 @ 30.00 (-1.00).
+# conid 500036 (reiner Zugang ohne Kostenangabe, 5 Stück): Z2 SELL 5 @ 12.00
+#                 (-1.00).
+# ---------------------------------------------------------------------------
+
+
+def test_optionsanpassung_uebertraegt_menge_nach_verhaeltnis_der_massnahme():
+    # Faktor 5/4 = 1.25, nicht 2 — aus alte_menge/neue_menge, nicht fest
+    # verdrahtet. Menge: 4 * 1.25 = 5, Preis: 10.00 / 1.25 = 8.00.
+    # Brutto: (9.00 - 8.00) * 5 * 100 = 500.00
+    leg = leg_von(bilde("kapitalmassnahme_optionsanpassung"), "O1", "O2")
+    assert leg.conid == 500034
+    assert leg.menge == Decimal("5")
+    assert leg.brutto_pnl == Decimal("500.00")
+    assert leg.kommission_gesamt == Decimal("-4.50")  # -2.00 + -2.50
+
+
+def test_optionsanpassung_glattes_verhaeltnis_waere_das_falsche_ergebnis():
+    # Gegenprobe: mit dem (falschen) glatten Faktor 2 wären es 8 Stück zu
+    # 5.00, also (9.00 - 5.00) * 8 * 100 = 3200.00 — deutlich daneben.
+    leg = leg_von(bilde("kapitalmassnahme_optionsanpassung"), "O1", "O2")
+    assert leg.menge != Decimal("8")
+    assert leg.brutto_pnl != Decimal("3200.00")
+
+
+def test_reiner_zugang_mit_kostenangabe_eroeffnet_zu_deren_stueckpreis():
+    # Synthetische Eröffnung: 250.00 / 10 Stück = 25.00 je Stück.
+    # Brutto: (30.00 - 25.00) * 10 * 1 = 50.00
+    ergebnis = bilde("kapitalmassnahme_reiner_zugang")
+    leg = leg_von(ergebnis, "KM:AKT4", "Z1")
+    assert leg.brutto_pnl == Decimal("50.00")
+    assert leg.kommission_gesamt == Decimal("-1.00")  # 0.00 (Zugang) + -1.00
+    assert leg.basis_ungeklaert is False
+
+
+def test_reiner_zugang_ohne_kostenangabe_ist_basis_ungeklaert():
+    # Ohne kosten_neu öffnet das Lot zu 0.00 — aber markiert, keine stille
+    # Nullbasis. Brutto: (12.00 - 0.00) * 5 * 1 = 60.00
+    ergebnis = bilde("kapitalmassnahme_reiner_zugang")
+    leg = leg_von(ergebnis, "KM:AKT5", "Z2")
+    assert leg.brutto_pnl == Decimal("60.00")
+    assert leg.basis_ungeklaert is True
