@@ -24,10 +24,19 @@ Grundsätze:
   der letzten Teilmenge — die letzte trägt den exakten Rest, die gebuchte
   Kommission wird nie gerundet. Die Summe über alle Legs eines ``conid``
   ist damit exakt die Summe der gebuchten Kommissionen (OF-18).
-- **Kapitalmaßnahmen vor dem Matching.** Ausführungen vor dem Stichtag
-  werden angepasst: Menge × Faktor, Preis ÷ Faktor. Eine Ausführung am
-  Stichtag selbst gilt bereits zu neuen Konditionen (OF-15). Die Kommission
-  bleibt, wie gebucht — sie hängt nicht an der Stückzahl des Splits.
+- **Kapitalmaßnahmen sind ein Transfer, kein Faktor auf derselben conid
+  (OF-23, Nachbesserung zu AP-03vm).** IB bucht jede gemessene Maßnahme als
+  Abgang auf der alten und Zugang auf einer neuen conid. Bei einem Transfer
+  (``alter_conid`` gesetzt) wechseln Ausführungen vor dem Stichtag auf
+  ``neuer_conid``: Menge × Faktor, Preis ÷ Faktor, Faktor = ``neue_menge /
+  alte_menge`` — nicht auf 2 hartkodiert. Eine Ausführung am Stichtag selbst
+  gilt bereits zu neuen Konditionen und bleibt unverschoben (OF-15). Bei
+  einem reinen Zugang (``alter_conid`` ist ``None``) eröffnet die Engine ein
+  synthetisches Lot auf ``neuer_conid`` zum Stichtag, Menge ``neue_menge``,
+  Kommission 0; mit ``kosten_neu`` zu deren Stückpreis, sonst zu 0 und mit
+  ``basis_ungeklaert = True`` markiert statt einer stillen Nullbasis. Die
+  Kommission der Ausführungen bleibt, wie gebucht — sie hängt nicht an der
+  Stückzahl der Maßnahme.
 - **Barausgleich vor Lieferung (OF-25, Vertrag Regel 7).** Eine Zuteilung
   oder Ausübung, deren Instrument die ``abwicklungsart`` ``barausgleich``
   trägt, schließt zum ``schlusskurs`` der Ereigniszeile, nicht zu deren
@@ -79,6 +88,9 @@ class Leg:
     brutto_pnl: Decimal | None
     kommission_gesamt: Decimal
     offen_ja_nein: bool
+    # Synthetisches Zugangslot einer Kapitalmaßnahme ohne Kostenangabe
+    # (OF-23): keine stille Nullbasis, siehe Vertrag Regel 6.
+    basis_ungeklaert: bool = False
 
 
 @dataclass(frozen=True)
@@ -163,8 +175,7 @@ def bilde_legs(
     trägt ``conid``, ``typ``, ``stichtag``, ``faktor``.
     """
     nicht_gematcht: list[NichtGematcht] = []
-    zeiten: dict[str, date] = {}
-    je_conid: dict[int, list[_Buchung]] = {}
+    buchungen: list[_Buchung] = []
 
     for satz in executions:
         ereignistyp = satz["ereignistyp"]
@@ -174,16 +185,28 @@ def bilde_legs(
         buchung = _buchung(satz)
         _instrument_pruefen(buchung, instruments)
         _abwicklung_pruefen(buchung, instruments)
-        zeiten[buchung.exec_id] = buchung.handelszeit
-        je_conid.setdefault(buchung.conid, []).append(buchung)
+        buchungen.append(buchung)
 
-    massnahmen = _massnahmen_je_conid(kapitalmassnahmen)
+    synthetische_zugaenge = _kapitalmassnahmen_anwenden(
+        buchungen, kapitalmassnahmen, instruments
+    )
+
+    zeiten: dict[str, date] = {b.exec_id: b.handelszeit for b in buchungen}
+    je_conid: dict[int, list[_Buchung]] = {}
+    for buchung in buchungen:
+        je_conid.setdefault(buchung.conid, []).append(buchung)
 
     legs: list[Leg] = []
     for conid in sorted(je_conid):
-        buchungen = sorted(je_conid[conid], key=lambda b: (b.handelszeit, b.exec_id))
-        _kapitalmassnahmen_anwenden(conid, buchungen, massnahmen.get(conid, ()))
-        legs.extend(_fifo(conid, buchungen, instruments[conid]["multiplikator"]))
+        sortierte = sorted(je_conid[conid], key=lambda b: (b.handelszeit, b.exec_id))
+        legs.extend(
+            _fifo(
+                conid,
+                sortierte,
+                instruments[conid]["multiplikator"],
+                synthetische_zugaenge,
+            )
+        )
 
     def sortierschluessel(leg: Leg) -> tuple:
         # Reihenfolge nach conid, Eröffnungszeit, open_exec_id, Schließzeit,
@@ -335,48 +358,82 @@ def _abwicklung_pruefen(buchung: _Buchung, instruments: Mapping[int, Mapping]) -
 
 
 # ---------------------------------------------------------------------------
-# Kapitalmaßnahmen vor dem Matching (OF-15)
+# Kapitalmaßnahmen vor dem Matching (OF-23, Vertrag Regel 6)
 # ---------------------------------------------------------------------------
 
 
-def _massnahmen_je_conid(kapitalmassnahmen: Iterable[Mapping]) -> dict[int, list]:
-    """Kapitalmaßnahmen je conid sammeln, in deterministischer Reihenfolge.
-
-    Mehrere Maßnahmen je conid wirken zusammengesetzt (Menge × f₁ × f₂,
-    Preis ÷ f₁ ÷ f₂) und sind damit in ihrer Wirkung reihenfolgengleich; die
-    feste Sortierung hält den Lauf dennoch in jeder Hinsicht deterministisch.
-    """
-    je_conid: dict[int, list] = {}
-    for satz in kapitalmassnahmen:
-        je_conid.setdefault(satz["conid"], []).append(satz)
-    for liste in je_conid.values():
-        liste.sort(key=lambda satz: (satz["stichtag"], satz["typ"], str(satz["faktor"])))
-    return je_conid
-
-
 def _kapitalmassnahmen_anwenden(
-    conid: int, buchungen: list[_Buchung], massnahmen: Iterable[Mapping]
-) -> None:
-    """Ausführungen vor dem Stichtag anpassen: Menge × Faktor, Preis ÷ Faktor.
+    buchungen: list[_Buchung],
+    kapitalmassnahmen: Iterable[Mapping],
+    instruments: Mapping[int, Mapping],
+) -> frozenset[str]:
+    """Kapitalmaßnahmen anwenden, bevor nach conid gruppiert wird.
 
-    Der Faktor ist die Zahl neuer Stücke je altem Stück (Split 2:1 → 2,
-    Reverse 1:10 → 0.1). Eine Ausführung am Stichtag selbst gilt bereits zu
-    neuen Konditionen — ihre Kurse sind schon bereinigt (OF-15).
+    Transfer (``alter_conid`` gesetzt): jede Ausführung auf ``alter_conid``
+    vor dem Stichtag wechselt auf ``neuer_conid`` — Menge × Faktor, Preis ÷
+    Faktor, Faktor = ``neue_menge / alte_menge``. Reiner Zugang
+    (``alter_conid`` ist ``None``): ein synthetisches Lot eröffnet auf
+    ``neuer_conid`` zum Stichtag; ohne ``kosten_neu`` zu Preis 0 und mit
+    ``exec_id`` in der zurückgegebenen Menge markiert — der Aufrufer setzt
+    daraus ``basis_ungeklaert`` an den entstehenden Legs.
+
+    Maßnahmen werden global nach (Stichtag, ``aktion_id``) verarbeitet, nicht
+    je conid — nur so verketten aufeinanderfolgende Transfers (alt → neu →
+    neuer) richtig.
     """
+    massnahmen = sorted(
+        kapitalmassnahmen, key=lambda satz: (_datum(satz["stichtag"]), satz["aktion_id"])
+    )
+    synthetische_zugaenge: set[str] = set()
     for satz in massnahmen:
-        faktor = satz["faktor"]
-        if not isinstance(faktor, Decimal):
-            raise TypeError(
-                f"conid {conid}: faktor einer Kapitalmaßnahme muss Decimal sein, "
-                f"erhalten: {type(faktor).__name__} ({faktor!r})"
-            )
-        if faktor <= 0:
-            raise ValueError(f"conid {conid}: unbrauchbarer Splitfaktor {faktor}")
+        aktion_id = satz["aktion_id"]
         stichtag = _datum(satz["stichtag"])
-        for buchung in buchungen:
-            if _datum(buchung.handelszeit) < stichtag:
-                buchung.menge *= faktor
-                buchung.preis /= faktor
+        neuer_conid = satz["neuer_conid"]
+        neue_menge = satz["neue_menge"]
+        if not isinstance(neue_menge, Decimal) or neue_menge <= 0:
+            raise ValueError(
+                f"Kapitalmaßnahme {aktion_id}: neue_menge fehlt oder unbrauchbar "
+                f"({neue_menge!r})"
+            )
+        alter_conid = satz.get("alter_conid")
+        if alter_conid is not None:
+            alte_menge = satz.get("alte_menge")
+            if not isinstance(alte_menge, Decimal) or alte_menge <= 0:
+                raise ValueError(
+                    f"Kapitalmaßnahme {aktion_id}: alte_menge fehlt oder unbrauchbar "
+                    f"({alte_menge!r})"
+                )
+            faktor = neue_menge / alte_menge
+            for buchung in buchungen:
+                if buchung.conid == alter_conid and _datum(buchung.handelszeit) < stichtag:
+                    buchung.conid = neuer_conid
+                    buchung.menge *= faktor
+                    buchung.preis /= faktor
+                    _instrument_pruefen(buchung, instruments)
+        else:
+            kosten_neu = satz.get("kosten_neu")
+            if kosten_neu is not None and not isinstance(kosten_neu, Decimal):
+                raise TypeError(
+                    f"Kapitalmaßnahme {aktion_id}: kosten_neu muss Decimal sein, "
+                    f"erhalten: {type(kosten_neu).__name__} ({kosten_neu!r})"
+                )
+            exec_id = f"KM:{aktion_id}"
+            synthetisch = _Buchung(
+                exec_id=exec_id,
+                conid=neuer_conid,
+                handelszeit=datetime.combine(stichtag, datetime.min.time()),
+                richtung=RICHTUNGEN["BUY"],
+                menge=neue_menge,
+                preis=kosten_neu / neue_menge if kosten_neu is not None else Decimal("0"),
+                kommission=Decimal("0"),
+                ereignistyp="trade",
+                schlusskurs=None,
+            )
+            _instrument_pruefen(synthetisch, instruments)
+            buchungen.append(synthetisch)
+            if kosten_neu is None:
+                synthetische_zugaenge.add(exec_id)
+    return frozenset(synthetische_zugaenge)
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +441,12 @@ def _kapitalmassnahmen_anwenden(
 # ---------------------------------------------------------------------------
 
 
-def _fifo(conid: int, buchungen: list[_Buchung], multiplikator: Decimal) -> list[Leg]:
+def _fifo(
+    conid: int,
+    buchungen: list[_Buchung],
+    multiplikator: Decimal,
+    synthetische_zugaenge: frozenset[str] = frozenset(),
+) -> list[Leg]:
     """FIFO je conid: eine Gegenbewegung schließt das älteste Los zuerst.
 
     Was über den Bestand hinausgeht, kehrt die Position um und eröffnet neu —
@@ -437,6 +499,7 @@ def _fifo(conid: int, buchungen: list[_Buchung], multiplikator: Decimal) -> list
                 + anteile[schluss.schluss.exec_id][schluss.index_schluss]
             ),
             offen_ja_nein=False,
+            basis_ungeklaert=schluss.offen.exec_id in synthetische_zugaenge,
         )
         for schluss in schluesse
     ]
@@ -452,6 +515,7 @@ def _fifo(conid: int, buchungen: list[_Buchung], multiplikator: Decimal) -> list
                 brutto_pnl=None,
                 kommission_gesamt=anteile[buchung.exec_id][-1],
                 offen_ja_nein=True,
+                basis_ungeklaert=buchung.exec_id in synthetische_zugaenge,
             )
         )
     return legs
