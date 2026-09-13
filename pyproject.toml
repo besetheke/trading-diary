@@ -52,3 +52,6 @@ addopts = "-q"
 # und eine eigene Importordnung; der Inhalt ist maschinell erzeugt und wird
 # nachträglich nicht von Hand editiert (CLAUDE.md, Regel 3).
 "migrations/versions/*" = ["E501", "W291", "I001"]
+# Abgleichsskripte gegen die Golden-Daten: Auswertungscode mit langen
+# Ausgabezeilen, kein Produktcode (werkzeuge/abgleich/README.md).
+"werkzeuge/abgleich/*" = ["E501"]

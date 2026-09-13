@@ -58,7 +58,11 @@ Code plausibel aussieht.
 
 - Python 3.12, `ruff` für Linting, `pytest` für Tests.
 - Verzeichnisse: `ingest/`, `engine/`, `analytics/`, `api/`, `ui/`, `tests/`,
-  `fixtures/`, `migrations/`.
+  `fixtures/`, `migrations/`, `werkzeuge/`.
+- `werkzeuge/abgleich/` enthält die Abgleichsskripte gegen die Golden-Daten
+  (Bestandsabgleich, Geldtest). Sie sind Nachweis der Abnahme, lesen nur,
+  schreiben nichts und geben ausschließlich Zählwerte, Aufzählungswerte und
+  Pseudonyme aus (Regel 2). Nur Pakete des starken Modells führen sie aus.
 - Alle fachlichen Bezeichner deutsch, wie im Plan. Technische Bezeichner englisch.
 - Ein Commit pro Arbeitspaket, nicht pro Datei.
 

@@ -948,6 +948,13 @@ provisorische Erkennung über eine Aktienzeile zur selben Zeit wird damit
   Korrekturpaket des starken Modells — für den Import zu AP-02k, für das
   Matching zu AP-03.
 
+**Entschieden 13.09.2026 (Nutzer): wie vorgeschlagen.** Benennung nach
+Projektkonvention: `instruments.abwicklungsart` mit `lieferung` oder
+`barausgleich`, `executions.schlusskurs`. Fehlt die Abwicklungsart, bricht
+nicht der Import ab, sondern das Matching bei der betroffenen Zuteilung oder
+Ausübung. Eingetragen in AP-02k (Regel 6, Tests 15–17) und in AP-03, Regel 7
+(Vertrag). Die Tests für das Matching folgen als eigenes Korrekturpaket.
+
 **Zu entscheiden:** Welche Methode führt das Journal?
 
 - (a) **Wie IB:** Prämie in die Aktienbasis. Der Abgleich gegen IB wird exakt,

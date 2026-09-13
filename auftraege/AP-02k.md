@@ -48,6 +48,10 @@ Weiter gemessen:
 - Jede DETAIL-Zeile der CashTransactions trägt eine `transactionID`. Dieselbe
   ID kommt als Paar `Broker Interest Paid` / `Broker Interest Received` vor;
   die Kombination aus `transactionID` und `type` ist eindeutig.
+- `SecurityInfo.settlementPolicyMethod` trägt bei Optionen `Delivery` oder
+  `Cash`; `deliveryType` ist durchgehend leer. `Trade.closePrice` ist an
+  Zuteilungen und Ausübungen gefüllt und trägt bei `Cash` den Wert, zu dem
+  abgerechnet wird (OF-25).
 
 ## Fachliche Regeln (vom Nutzer bestätigt)
 
@@ -79,6 +83,15 @@ Weiter gemessen:
 5. **Importergebnis.** `ImportErgebnis` erhält das Feld
    `nicht_gebuchte_zeilen` (Anzahl der nach Regel 3 gezählten, aber nicht
    gebuchten Zeilen).
+6. **Abwicklungsart und Schlusskurs (OF-25, entschieden).** `instruments`
+   führt `abwicklungsart` aus `SecurityInfo.settlementPolicyMethod`:
+   `Delivery` wird `lieferung`, `Cash` wird `barausgleich`; ein anderer
+   gesetzter Wert bricht mit genanntem Wert ab. Fehlt das Feld, bleibt
+   `abwicklungsart` leer — der Import bricht deshalb nicht ab; das Matching
+   tut es erst bei einer Zuteilung oder Ausübung ohne Abwicklungsart (AP-03,
+   Regel 7). `executions` führt `schlusskurs` aus `closePrice` als `Decimal`,
+   leer, wenn das Feld fehlt. Beide Spalten verlangen eine Migration; die legt
+   die Nachbesserung von AP-02 an, nicht dieses Paket.
 
 ## Ausdrücklich freigegebene Änderungen an Tests und Fixtures
 
@@ -131,6 +144,10 @@ Nur diese, keine weiteren.
       — eine Datei mit Ausführungen, `Lot`-Elementen und
       `FIFOPerformanceSummaryInBase`; gebucht werden nur die Ausführungen
   14. `test_closed_lot_corporate_action_is_counted_not_booked`
+  15. `test_settlement_method_is_stored_on_option_instruments` — `Delivery`
+      ergibt `lieferung`, `Cash` ergibt `barausgleich`, fehlend bleibt leer
+  16. `test_unknown_settlement_method_aborts_with_named_value`
+  17. `test_close_price_is_stored_on_executions`
 
   Jeder Test nennt im Docstring die Regel aus diesem Auftrag, die er belegt.
 
