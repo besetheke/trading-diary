@@ -808,6 +808,22 @@ an der Option. Offen in der Einzelzuordnung: 13 Basiswerte mit noch offener
 Aktie aus Zuteilung, bei denen die Prämie in IBs Anschaffungskosten steckt, und
 25 weitere.
 
+**Nachtrag:** Die 13 Basiswerte mit offener Aktie sind einzeln belegt — ihre
+Differenz entspricht bis auf höchstens 1 € der Differenz zwischen den
+Anschaffungskosten des Matchings und IBs `costBasisMoney` der noch offenen
+Aktien, also genau der dort geparkten Prämie. Die übrigen 25 werden mit einer
+Zuordnung über `underlyingConid` statt über das Symbol nachgeprüft.
+
+**Stand nach Zuordnung über `underlyingConid`** (Basiswerte über
+Kapitalmaßnahmen hinweg verkettet): ohne Zuteilung 127 exakt, 1 ≤ 1 €; mit
+Zuteilung oder Ausübung 108 exakt, 17 ≤ 1 €, 13 durch Prämie in offener
+Aktienbasis belegt, **19 offen**. Die Symbol-Zuordnung hatte 6 Fälle
+fälschlich getrennt. Von den 19 hat keiner ein IB-Lot aus der Zeit vor Beginn
+der Historie, einer eine Kapitalmaßnahme; bei 8 weichen nur die Optionen ab,
+bei 11 Optionen und Aktien. Rest gemessen am IB-Ergebnisvolumen des
+Basiswerts: 5 × unter 1 %, 8 × 1–10 %, 6 × über 10 %. Diese 19 sind noch nicht
+einer konkreten Ursache zugeordnet.
+
 **Zu entscheiden:** Welche Methode führt das Journal?
 
 - (a) **Wie IB:** Prämie in die Aktienbasis. Der Abgleich gegen IB wird exakt,
