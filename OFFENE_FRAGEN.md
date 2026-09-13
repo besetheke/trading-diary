@@ -801,6 +801,20 @@ Ausführung mit deren eigenem Kurs; mehrere Schließungen zu verschiedenen
 Kursen sind darin enthalten. Zu prüfen sind deshalb vor allem `costAdj` und
 `transferredPnl` der IB-Zusammenfassung.
 
+**Einzeln benannt (13.09.2026):** Über alle fünf Zeiträume sind es 14 Ausnahmen
+(der Zeitraum 2022/23 war in der ersten Zählung nicht enthalten).
+- **12 sind CASH-Positionen ohne eine einzige realisierende Ausführung.** IB
+  weist dort ein realisiertes Ergebnis aus dem Devisenumtausch selbst aus; es
+  entsteht nicht aus einem Trade und liegt außerhalb des Matchings (CASH ist
+  ausgeschlossen). Eine Verfeinerung der Regel ist dafür nicht nötig; ob das
+  Journal Devisenergebnisse führen soll, ist eine eigene Frage.
+- **2 sind Aktien** mit je einer realisierenden Ausführung und einem Kurs,
+  Differenz unter 1 %, `costAdj` gesetzt. `costAdj` erklärt die Differenz
+  weder in lokaler Währung noch umgerechnet. **Noch ohne Ursache.**
+
+Die Vermutung „mehrere Schließungen zu verschiedenen Kursen" trifft auf keine
+der 14 zu.
+
 ## OF-24 · Prämie bei Zuteilung und Ausübung: IB verrechnet sie in die Aktienbasis
 
 **Befund aus dem Geldtest (13.09.2026); Entscheidung nötig.** Verglichen wurde
@@ -858,6 +872,33 @@ offen, (a) nur einen.
 **Vor der Abnahme offen:** Die Überleitung muss exakt schließen, nicht
 innerhalb einer Toleranz. Einzeln zuzuordnen sind deshalb die 19 offenen
 Basiswerte **und** die 17 mit Abweichung bis 1 €.
+
+**Stand der Einzelzuordnung (13.09.2026, pseudonymisiert B01–B36):**
+- 639 Zuteilungen und Ausübungen *mit* Aktienlieferung tragen bei IB ein
+  realisiertes Ergebnis von 0 — die Prämie wandert vollständig in die
+  Aktienbasis. Das Muster ist damit an jeder einzelnen Zeile belegt.
+- **6 offene Basiswerte** (B20, B27, B28, B30, B32, B36): Der Rest entspricht
+  genau der Summe ihrer Zuteilungen und Ausübungen *ohne* Aktienlieferung —
+  Ursache ist der fehlende Barausgleich (OF-25).
+- **13 offene** (B18, B19, B21–B26, B29, B31, B33–B35) und **17 knappe**
+  (B01–B17): Der Rest entspricht weder der Kommission der zugeteilten Optionen
+  noch dem Barausgleich. Noch ohne Ursache; als Nächstes je Lieferung statt je
+  Basiswert zu prüfen.
+
+## OF-25 · Barausgleich bei Zuteilung und Ausübung fehlt im Matching
+
+**Befund aus dem Geldtest (13.09.2026); blockiert die Abnahme von AP-03.**
+501 Zuteilungen und Ausübungen von Optionen erfolgen ohne Aktienlieferung —
+barausgeglichene Optionen, etwa auf Indizes. Ihre Zeilen tragen `tradePrice =
+0` und `proceeds = 0`, IB meldet aber ein realisiertes Ergebnis ungleich 0. Das
+Matching schließt sie nach Vertrag Regel 7 zum Preis der Ereigniszeile, also
+zu 0, und realisiert damit nur die Prämie; der Barausgleich fehlt. Bei 6
+Basiswerten erklärt genau das den gesamten Rest.
+
+**Offen:** In welchem Feld oder welcher Buchung der Ausgleichsbetrag steht
+(`closePrice`, `mtmPnl`, eine Kassenbuchung am selben Tag oder nur implizit im
+`fifoPnlRealized`). Erst dann lässt sich Regel 7 für barausgeglichene Optionen
+fassen und in Tests gießen — ohne diese Kenntnis wäre jede Regel geraten.
 
 **Zu entscheiden:** Welche Methode führt das Journal?
 
