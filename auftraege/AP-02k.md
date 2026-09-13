@@ -1,7 +1,7 @@
 ---
 titel: Korrektur der Abnahmebasis AP-02 - echtes Flex-Format (OF-19, OF-20, OF-22)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-02a
 aendert_tests: ja
 ---
