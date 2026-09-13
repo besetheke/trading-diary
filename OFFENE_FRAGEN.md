@@ -929,6 +929,25 @@ Schließungen centgenau mit IB; die centgenauen Optionsschließungen steigen von
 14.040 auf 14.541. Die 6 Basiswerte B20, B27, B28, B30, B32 und B36 schließen
 exakt, B19 und B29 bis auf höchstens 1 €. Die Regel ist damit belegt.
 
+**Erkennung am Instrument (13.09.2026):** `SecurityInfo.settlementPolicyMethod`
+trennt die beiden Fälle ohne Ausnahme — alle 639 Zuteilungen und Ausübungen
+mit Aktienlieferung tragen `Delivery`, alle 501 ohne Lieferung tragen `Cash`.
+`deliveryType` ist in Trade und SecurityInfo durchgehend leer. Die
+provisorische Erkennung über eine Aktienzeile zur selben Zeit wird damit
+überflüssig.
+
+**Vorschlag, Entscheidung nötig:**
+- Vertrag Regel 7: Eine Zuteilung oder Ausübung einer Option mit
+  Abwicklungsart `Cash` schließt zum `closePrice` der Ereigniszeile; bei
+  `Delivery` bleibt es beim Preis der Ereigniszeile. Fehlt die Abwicklungsart,
+  bricht der Lauf ab — kein Raten.
+- Import: `instruments` führt die Abwicklungsart, `executions` den
+  `closePrice`. Das ist eine Schemaänderung, also eine Migration in der
+  Nachbesserung von AP-02.
+- Abnahmebasis: Fixtures und Tests dafür gehören in ein Vorbereitungs- oder
+  Korrekturpaket des starken Modells — für den Import zu AP-02k, für das
+  Matching zu AP-03.
+
 **Zu entscheiden:** Welche Methode führt das Journal?
 
 - (a) **Wie IB:** Prämie in die Aktienbasis. Der Abgleich gegen IB wird exakt,
