@@ -272,6 +272,37 @@ niemals blockieren.
 **Qualitätsstufen:** A = Flex-XML mit Order-IDs und conids · B = strukturierter
 Auszug ohne Order-IDs · C = aus PDF extrahiert, nur Betrag und Kommission belastbar.
 
+**Behandlung von Kapitalmaßnahmen**
+
+IB bucht Kapitalmaßnahmen nicht als Faktor auf derselben `conid`, sondern als
+Abgang auf der alten und Zugang auf einer neuen. Für den Bestand genügt das; für
+die Geldrechnung nicht — ein Abgang, der wie ein Verkauf zu null gebucht wird,
+erzeugt einen Scheinverlust in Höhe der Anschaffungskosten und später einen
+Scheingewinn in gleicher Höhe.
+
+- Offene Lots **wandern** auf die neue `conid`. Anschaffungskosten,
+  Eröffnungsausführung und Eröffnungszeitpunkt bleiben erhalten. Realisiert wird
+  nichts.
+- Alte und neue `conid` gehören zur selben Kette. Die Maßnahme erscheint als
+  Ereignis im Zeitstrahl der Detailansicht, damit kein Instrumentenwechsel
+  unerklärt bleibt.
+- **Angepasste Optionskontrakte** tragen ein Kennzeichen am Instrument. Nach einem
+  Split ist der Lieferumfang nicht standardisiert; ohne Markierung vergleicht die
+  Analytik Strikes und Multiplikatoren, die nicht vergleichbar sind.
+- **Reine Zugänge:** IBs Kostenangabe wird übernommen, wo eine vorliegt. Meldet IB
+  null, wird das Lot mit `basis_ungeklaert` gekennzeichnet und der Fall in
+  `OFFENE_FRAGEN.md` eingetragen — eine stillschweigende Nullbasis erzeugt beim
+  späteren Verkauf einen Scheingewinn in voller Höhe und ist über AP-10 steuerlich
+  relevant.
+
+**Währungsumrechnung**
+
+Maßgeblich ist `fxRateToBase` an der jeweiligen Ausführung — IBs eigener
+Buchungskurs. Er steht an jeder Zeile, braucht keine externe Kursquelle und wird
+mit Bezugszeitpunkt gespeichert (P4). Beim Abgleich gegen IBs Summen weisen
+Abweichungen dadurch auf die Rechnung hin, nicht auf die Kursmethodik.
+Basiswährung ist EUR; die EUR-Zeilen tragen durchgehend den Kurs 1.
+
 **Abgeleitet (jederzeit neu berechenbar)**
 - `legs` — leg_id, conid, open_exec_id, close_exec_id, menge, matching_methode,
   brutto_pnl, kommission_gesamt, offen_ja_nein
@@ -437,11 +468,23 @@ Spalten: `Entry Time`, `Strategy`, `Name`, `Strikes`, `Quantity`, `Open`, `Close
 
 **Sektion Trades**
 - Detailebene **Execution** — die einzige, die gebraucht wird.
-- Detailebene **Closed Lots**: optional. Der Schalter ist aktiviert, der
-  Februar-Export enthält dennoch keine Lot-Zeilen. Einmal mit größerem Zeitraum
-  gegentesten; bleibt es leer, wird darauf verzichtet. Der Abgleich an den
-  Periodengrenzen läuft ohnehin besser über Open Positions mit `costBasisPrice`
-  und `fifoPnlUnrealized`.
+- **Modelle aus der Abfrage entfernen — Voraussetzung für alles Weitere.**
+  IB deaktiviert sämtliche Realized-P/L-Abschnitte und -Felder, sobald Modelle
+  einbezogen sind. Alle bisherigen Exporte tragen `model="Independent"`; deshalb
+  blieb Closed Lots trotz gesetztem Schalter leer und `fifoPnlRealized` stand
+  durchgehend auf null — auch schon 2022. Das Konto ohne Modellauswahl abfragen.
+- Detailebene **Closed Lots**: nach Entfernen der Modelle verfügbar. Dient als
+  Zweitmeinung, nicht als Abnahmegrundlage — der Bestandsabgleich in AP-03 ist
+  aussagekräftiger.
+- Abschnitt **Realized and Unrealized Performance Summary in Base** aktivieren.
+  Liefert das realisierte Ergebnis je Basiswert und Anlageklasse in Basiswährung,
+  mit bereits verrechneten Kommissionen. Grundlage der monetären Abnahmehälfte in
+  AP-03. Wie IB den Berichtszeitraum dieses Abschnitts abgrenzt, zeigt erst der
+  erste Export und ist dann festzuhalten.
+- Sektionen **Cash Transactions** und **Corporate Actions** auf die Detailebene
+  beschränken. Der Importer filtert zusätzlich selbst auf
+  `levelOfDetail == "DETAIL"`, damit eine neu angelegte Abfrage keine stille
+  Doppelzählung verursacht.
 - Ebenen **Order**, **Symbol Summary** und **Asset Class Summary** abschalten.
   Sie gruppieren nichts Brauchbares und verdreifachen die Dateigröße.
 - Pflichtfelder: `tradeID`, `transactionID`, `ibExecID`, `ibOrderID`,
@@ -502,10 +545,35 @@ alle Anlageklassen.
 Kommission anteilig zugeordnet; Multiplikator und Tickwert je Anlageklasse
 korrekt angewandt; Kapitalmaßnahmen aus `corporate_actions` angewandt, bevor
 gematcht wird.
-**Abnahme:** Summe aller Leg-P&L plus offene Positionen entspricht der
-Broker-Summe auf den Cent, getrennt geprüft für Optionen, Futures und Aktien.
-Zusätzlicher Abgleich gegen die Closed-Lots-Ebene der Flex-Query: Abweichungen in
-der Zuordnung sind einzeln zu erklären.
+**Abnahme — zwei Hälften, beide erforderlich:**
+
+*Strukturell, Bestandsabgleich.* Der rekonstruierte Bestand stimmt an mehreren
+Stichtagen über die gesamte Historie mit den offenen Positionen von IB überein.
+Jede verbleibende Abweichung ist einzeln einer konkreten Ursache zugeordnet —
+benanntes Papier, benanntes Datum, benannte Kapitalmaßnahme. Eine
+Ursachenkategorie ohne Zuordnung der Einzelfälle gilt nicht als Erklärung.
+
+**Der Stichtag richtet sich nach dem Buchungstag (`reportDate`), nicht nach dem
+Handelstag.** Damit lösen sich Verfälle am Stichtag und Ausführungen, die im alten
+Jahr gehandelt und im neuen gebucht wurden, ohne Sonderregel auf. Eine frühere
+Fassung dieses Plans sah stattdessen die Konvention vor, am Stichtag verfallende
+Optionen pauschal als offen zu zählen; das traf die Wirkung, aber nicht die
+Ursache und erzeugte an Stichtagen, an denen Verfall und Buchung zusammenfallen,
+16 beziehungsweise 34 neue Abweichungen. Die Regel ist ersatzlos gestrichen.
+
+*Monetär, Jahressummen.* Das selbst berechnete realisierte Ergebnis stimmt je
+Kalenderjahr und je Anlageklasse mit den Jahressummen der Kontoauszüge überein.
+Diese Hälfte ist unverzichtbar: der Bestandsabgleich prüft, **welche** Positionen
+offen sind, nicht **wie viel Geld** entstanden ist. Falscher Multiplikator, schief
+verteilte Kommission bei Teilschließungen und ein FX-Kurs vom falschen Tag lassen
+die Positionszahlen unberührt und entwerten trotzdem jede spätere Auswertung.
+
+*Closed Lots entfallen.* Über sechs Exporte hinweg liefert das Konto keine
+Lot-Ebene, `fifoPnlRealized` steht durchgehend auf null. Beide Abnahmehälften
+kommen ohne aus.
+
+*Reihenfolge:* Jahresexporte ziehen, Kapitalmaßnahmen anwenden, Bestandsabgleich
+wiederholen, Jahressummen prüfen. Keine Abnahme vor diesem Durchlauf.
 Ein Aktiensplit im Testdatensatz wird korrekt verarbeitet. Mindestens 35 Tests.
 
 ### AP-04 · Structure- und Chain-Erkennung ⚠ Kernstück

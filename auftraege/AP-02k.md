@@ -33,7 +33,9 @@ Gemessen an sechs Exporten 2022–2026.
 |---|---|---|
 | `Trade` | `EXECUTION` | `dateTime` als `JJJJMMTT;HHMMSS`; `orderTime` ebenso oder leer; **kein `tradeTime`** |
 | `CashTransaction` | `DETAIL`; ältere Exporte zusätzlich `SUMMARY` (Tagesaggregate der DETAIL-Zeilen) | `dateTime` als `JJJJMMTT;HHMMSS` **oder nur** `JJJJMMTT` |
-| `CorporateAction` | `DETAIL`; älter zusätzlich `SUMMARY` | `dateTime` in beiden Formen |
+| `CorporateAction` | `DETAIL`; älter zusätzlich `SUMMARY`; vereinzelt `CLOSED_LOT` | `dateTime` in beiden Formen |
+| `Lot` (im Abschnitt `Trades`, nur in Exporten ohne Modell) | `CLOSED_LOT` | `dateTime`, `openDateTime` als `JJJJMMTT;HHMMSS` |
+| `FIFOPerformanceSummaryUnderlying` (im Abschnitt `FIFOPerformanceSummaryInBase`) | — | eine Zeile je `conid` plus eine Gesamtsumme; kein Zeitfeld gefüllt |
 | `OpenPosition` | `SUMMARY` | `reportDate` als `JJJJMMTT` |
 | `Transfer` | `TRANSFER` | `dateTime` als `JJJJMMTT;HHMMSS` |
 | `FlexStatement` | — | `fromDate`, `toDate` als `JJJJMMTT`; `whenGenerated` als `JJJJMMTT;HHMMSS`; dazu `period` |
@@ -59,8 +61,12 @@ Weiter gemessen:
    Rohwert von `notes`. Jeder andere Code bricht mit genanntem Code ab (OF-08);
    zwei Ereigniscodes in einer Liste brechen ebenfalls ab.
 3. **Ebenen je Sektion.** Trades: nur `EXECUTION`. CashTransactions und
-   CorporateActions: `DETAIL` wird gebucht, `SUMMARY` wird nicht gebucht, aber
-   gezählt und im Importergebnis ausgewiesen. OpenPositions: nur `SUMMARY`.
+   CorporateActions: `DETAIL` wird gebucht; `SUMMARY` und bei CorporateActions
+   `CLOSED_LOT` werden nicht gebucht, aber gezählt und im Importergebnis
+   ausgewiesen. `Lot`-Elemente im Abschnitt `Trades` und der Abschnitt
+   `FIFOPerformanceSummaryInBase` werden vorerst nicht gelesen: Sie sind weder
+   Ausführungen noch Buchungen und dürfen den Import nicht abbrechen.
+   OpenPositions: nur `SUMMARY`.
    Transfers: nur `TRANSFER`. Jede andere Ebene und ein fehlendes
    `levelOfDetail` brechen mit genannter Sektion und Ebene ab. Das gilt
    ausdrücklich auch für Trade-Zeilen einer Closed-Lot-Ebene: Sie sollen
@@ -71,7 +77,8 @@ Weiter gemessen:
    Kombination in einer Datei bricht ab. Zeilen ohne ID behalten den
    bisherigen Inhaltsschlüssel (OF-09).
 5. **Importergebnis.** `ImportErgebnis` erhält das Feld
-   `summenzeilen_uebersprungen` (Anzahl nicht gebuchter SUMMARY-Zeilen).
+   `nicht_gebuchte_zeilen` (Anzahl der nach Regel 3 gezählten, aber nicht
+   gebuchten Zeilen).
 
 ## Ausdrücklich freigegebene Änderungen an Tests und Fixtures
 
@@ -114,12 +121,16 @@ Nur diese, keine weiteren.
   7. `test_unknown_code_inside_a_list_aborts_with_named_code`
   8. `test_two_event_codes_abort`
   9. `test_summary_cash_rows_are_counted_not_booked` — DETAIL und SUMMARY in
-     einer Datei; gebucht nur DETAIL; `summenzeilen_uebersprungen` stimmt
+     einer Datei; gebucht nur DETAIL; `nicht_gebuchte_zeilen` stimmt
   10. `test_unknown_or_missing_level_aborts` — unter anderem eine Trade-Zeile
       mit Closed-Lot-Ebene
   11. `test_same_transaction_id_with_different_type_are_two_bookings` — Paar
       Zins gezahlt/erhalten; erneuter Import legt nichts doppelt an
   12. `test_open_positions_summary_and_transfer_level_are_accepted`
+  13. `test_lot_elements_and_performance_summary_do_not_abort_and_are_not_executions`
+      — eine Datei mit Ausführungen, `Lot`-Elementen und
+      `FIFOPerformanceSummaryInBase`; gebucht werden nur die Ausführungen
+  14. `test_closed_lot_corporate_action_is_counted_not_booked`
 
   Jeder Test nennt im Docstring die Regel aus diesem Auftrag, die er belegt.
 

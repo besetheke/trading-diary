@@ -676,6 +676,19 @@ führt ihn bisher nur in `roh_json`. Ob er eine eigene Spalte braucht, ist mit
 dem Paket zu entscheiden, das Bestandsauswertungen baut. (b) Der Geldtest
 braucht die Jahressummen des realisierten Ergebnisses; sie liegen nicht vor.
 
+**Stand 13.09.2026, spät:** Die Stichtagsregel nach Buchungstag ist
+angenommen und im Plan nachgezogen; die pauschale Verfallsregel ist ersatzlos
+gestrichen. Die Ursache für fehlende Closed Lots und den überall leeren
+`fifoPnlRealized` ist geklärt (Plan, Planer): IB schaltet alle Felder und
+Abschnitte zum realisierten Ergebnis ab, sobald ein Modell einbezogen ist, und
+alle bisherigen Exporte trugen `model="Independent"`. Die ohne Modellauswahl
+gezogenen Exporte liefern Closed Lots, `fifoPnlRealized` und den Abschnitt
+`FIFOPerformanceSummaryInBase`. Die Abnahme bleibt dabei: Bestandsabgleich als
+strukturelle Hälfte, Geldtest gegen die Ergebnissummen als monetäre Hälfte,
+Closed Lots höchstens als Zweitmeinung. Offen ist (b) damit nicht mehr aus
+Mangel an Daten; die Ergebnissummen liegen je Exportzeitraum (April bis März)
+vor, nicht je Kalenderjahr.
+
 ## OF-22 · CashTransactions: doppelte `transactionID`s und doppelte Buchung über SUMMARY-Zeilen
 
 **Befund aus dem Golden-Lauf (12.09.2026); blockiert den Import des Exports
@@ -739,3 +752,34 @@ nichts. Für reine Zugänge (DI) ist zu entscheiden, ob sie ein Lot mit Kosten 0
 oder mit IBs Kostenangabe eröffnen. Umsetzung: Vorbereitungspaket mit
 Fixtures je Maßnahmenart (starkes Modell), dann Nachbesserung von AP-03 und
 Befüllen von `corporate_actions` im Import.
+
+**Entschieden 13.09.2026 (Planer, im Plan nachgezogen):** Der Vorschlag ist
+angenommen — offene Lots wandern auf die neue `conid`, Anschaffungskosten,
+Eröffnungsausführung und Eröffnungszeit bleiben erhalten, realisiert wird
+nichts. Ergänzt um:
+
+1. **Die Kette überlebt den Übergang.** Alte und neue `conid` gehören zu
+   derselben Position; die Maßnahme erscheint als Ereignis im Zeitstrahl der
+   Detailansicht. Keine Position darf ihr Instrument unerklärt wechseln.
+2. **Angepasste Optionskontrakte tragen ein Kennzeichen am Instrument.** Nach
+   einem Split ist der Lieferumfang nicht mehr standardisiert; die Analytik
+   darf deren Strikes und Multiplikatoren nicht mit Standardkontrakten
+   vergleichen.
+3. **Reine Zugänge:** IBs Kostenangabe, wo eine vorliegt. Meldet IB null, wird
+   nicht null gebucht, sondern das Lot mit `basis_ungeklaert` gekennzeichnet
+   und der Einzelfall hier eingetragen — eine stille Nullbasis erzeugt beim
+   späteren Verkauf einen Scheingewinn in voller Höhe und ist über AP-10
+   steuerlich relevant.
+
+**Währung (entschieden, Plan):** Maßgeblich ist `fxRateToBase` an der
+jeweiligen Ausführung — IBs eigener Buchungskurs, mit Bezugszeitpunkt
+gespeichert (P4). Basiswährung ist EUR; die EUR-Zeilen tragen den Kurs 1.
+
+**Nachtrag 13.09.2026:** Die ohne Modell gezogenen Exporte enthalten
+Kapitalmaßnahmen auch auf der Ebene `CLOSED_LOT`, genau zwei (TC und ED). Beide
+tragen `fifoPnlRealized = 0` — sie realisieren nichts, die Regel bleibt
+ausnahmslos belegt. Eine erste, vorschnelle Vermutung, solche Zeilen stünden
+für realisierende Maßnahmen, hat sich damit nicht bestätigt. Offen bleibt nur
+der Fall einer Maßnahme mit Barausgleich; in den Daten kommt keine vor. Die
+CLOSED_LOT-Zeile der TC-Maßnahme trägt eine eigene `transactionID`, die der
+ED-Maßnahme dieselbe wie ihre DETAIL-Zeile.
