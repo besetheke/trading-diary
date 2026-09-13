@@ -1,7 +1,7 @@
 ---
 titel: Kapitalmaßnahmen als Transfer statt Faktor (OF-23)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-03vb
 aendert_tests: ja
 ---
