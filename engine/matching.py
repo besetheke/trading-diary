@@ -28,6 +28,14 @@ Grundsätze:
   werden angepasst: Menge × Faktor, Preis ÷ Faktor. Eine Ausführung am
   Stichtag selbst gilt bereits zu neuen Konditionen (OF-15). Die Kommission
   bleibt, wie gebucht — sie hängt nicht an der Stückzahl des Splits.
+- **Barausgleich vor Lieferung (OF-25, Vertrag Regel 7).** Eine Zuteilung
+  oder Ausübung, deren Instrument die ``abwicklungsart`` ``barausgleich``
+  trägt, schließt zum ``schlusskurs`` der Ereigniszeile, nicht zu deren
+  ``preis`` (der bei Barausgleich 0 wäre und nur die Prämie realisierte).
+  Bei ``lieferung`` bleibt es beim Ereigniszeilenpreis — ein gesetzter
+  ``schlusskurs`` wird ignoriert, die Prämie steht dort in der Aktienbasis,
+  nicht an der Option (OF-24). Fehlt die Abwicklungsart bei einer Zuteilung
+  oder Ausübung, endet der Lauf mit ``ValueError``; kein Standardwert.
 
 Das Persistieren nach ``legs`` ist nicht Teil dieses Moduls. Der verbindliche
 Vertrag steht in ``auftraege/AP-03.md`` unter „Vertrag an die Umsetzung".
@@ -110,6 +118,10 @@ class _Buchung:
     menge: Decimal
     preis: Decimal
     kommission: Decimal
+    ereignistyp: str
+    # Abrechnungskurs einer Zuteilung/Ausübung bei Barausgleich (OF-25);
+    # None bei gewöhnlichen Ausführungen und bei Lieferung.
+    schlusskurs: Decimal | None
     teilmengen: list[Decimal] = field(default_factory=list)
 
 
@@ -161,6 +173,7 @@ def bilde_legs(
             continue
         buchung = _buchung(satz)
         _instrument_pruefen(buchung, instruments)
+        _abwicklung_pruefen(buchung, instruments)
         zeiten[buchung.exec_id] = buchung.handelszeit
         je_conid.setdefault(buchung.conid, []).append(buchung)
 
@@ -241,6 +254,7 @@ def _buchung(satz: Mapping) -> _Buchung:
     if not isinstance(handelszeit, date):
         raise TypeError(f"{exec_id}: handelszeit ist kein Datum: {handelszeit!r}")
     kommission = satz.get("kommission")
+    schlusskurs = satz.get("schlusskurs")
     return _Buchung(
         exec_id=exec_id,
         conid=satz["conid"],
@@ -252,6 +266,12 @@ def _buchung(satz: Mapping) -> _Buchung:
             _dezimal(kommission, feld="kommission", exec_id=exec_id)
             if kommission is not None
             else Decimal("0")
+        ),
+        ereignistyp=satz["ereignistyp"],
+        schlusskurs=(
+            _dezimal(schlusskurs, feld="schlusskurs", exec_id=exec_id)
+            if schlusskurs is not None
+            else None
         ),
     )
 
@@ -281,6 +301,37 @@ def _instrument_pruefen(buchung: _Buchung, instruments: Mapping[int, Mapping]) -
             "multiplikator — Preisfaktor unbekannt, tickwert geht nicht in den "
             "P&L ein (OF-14)"
         )
+
+
+def _abwicklung_pruefen(buchung: _Buchung, instruments: Mapping[int, Mapping]) -> None:
+    """Barausgleich vor Lieferung bei Zuteilung/Ausübung (OF-25, Regel 7).
+
+    Betrifft nur ``assignment`` und ``exercise``. Bei ``abwicklungsart``
+    ``barausgleich`` ersetzt der ``schlusskurs`` den Ereigniszeilenpreis
+    (der sonst 0 wäre und nur die Prämie realisierte); bei ``lieferung``
+    bleibt der Ereigniszeilenpreis maßgeblich, ein gesetzter ``schlusskurs``
+    wird ignoriert (die Prämie steht dort in der Aktienbasis, OF-24). Fehlt
+    die Abwicklungsart, ist die Unterscheidung nicht möglich — kein
+    Standardwert.
+    """
+    if buchung.ereignistyp not in ("assignment", "exercise"):
+        return
+    satz = instruments.get(buchung.conid) or {}
+    abwicklungsart = satz.get("abwicklungsart")
+    if abwicklungsart is None:
+        raise ValueError(
+            f"{buchung.exec_id}: conid {buchung.conid} trägt keine abwicklungsart — "
+            "bei Zuteilung/Ausübung nötig, um zwischen Barausgleich und Lieferung "
+            "zu unterscheiden (OF-25); kein Standardwert"
+        )
+    if abwicklungsart == "barausgleich":
+        if buchung.schlusskurs is None:
+            raise ValueError(
+                f"{buchung.exec_id}: abwicklungsart 'barausgleich', aber kein "
+                "schlusskurs an der Ausführung — der Barausgleich ist damit nicht "
+                "bestimmbar, kein Ausweichen auf den Ereigniszeilenpreis"
+            )
+        buchung.preis = buchung.schlusskurs
 
 
 # ---------------------------------------------------------------------------
