@@ -805,6 +805,19 @@ nichts. Ergänzt um:
    späteren Verkauf einen Scheingewinn in voller Höhe und ist über AP-10
    steuerlich relevant.
 
+**Umgesetzt 13.09.2026 (AP-03vm, AP-03):** Vertrag Regel 6 in `engine/matching.py`
+neu gefasst — Kapitalmaßnahmen sind ein Transfer auf eine neue `conid`
+(`alter_conid`/`neuer_conid`, Faktor aus `alte_menge`/`neue_menge`), reine
+Zugänge eröffnen ein synthetisches Lot mit `basis_ungeklaert = True`, wenn
+IB keine Kostenangabe liefert. `legs.basis_ungeklaert`, `instruments.angepasst`
+und die neue `corporate_actions`-Form liegen als Migration `d7c4b6a1f9e3` vor.
+**Weiterhin offen, außerhalb dieser Nachbesserung:** Punkt 1 (die Kette
+überlebt den Übergang) gehört zur Struktur-/Kettenerkennung in AP-04; Punkt 2
+(`instruments.angepasst` setzen) und das Befüllen von `corporate_actions` aus
+`flex_corporate_actions` sind eigene, noch nicht begonnene Pakete — bis dahin
+nimmt `bilde_legs` `kapitalmassnahmen` nur als Eingabe entgegen, leitet sie
+aber nicht selbst aus dem Import ab.
+
 **Währung (entschieden, Plan):** Maßgeblich ist `fxRateToBase` an der
 jeweiligen Ausführung — IBs eigener Buchungskurs, mit Bezugszeitpunkt
 gespeichert (P4). Basiswährung ist EUR; die EUR-Zeilen tragen den Kurs 1.
