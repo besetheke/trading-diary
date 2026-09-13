@@ -1,7 +1,7 @@
 ---
 titel: Barausgleich bei Zuteilung und Ausübung (OF-25)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-03vn, AP-02
 aendert_tests: ja
 ---
