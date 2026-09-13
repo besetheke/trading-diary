@@ -1,0 +1,50 @@
+{
+  "fall": "barausgleich_fehlender_schlusskurs",
+  "beschreibung": "Fehlerpfad AP-03vb (OF-25): abwicklungsart='barausgleich', aber die Ausuebungszeile traegt keinen schlusskurs. Der Import fuellt ihn eigentlich immer (AP-02, Regel 6) - fehlt er dennoch, ist der Barausgleich nicht bestimmbar und der Lauf bricht ab, statt zum Ereigniszeilenpreis (0.00) auszuweichen. Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500023,
+      "symbol": "IDX3 230C",
+      "underlying": "IDX3",
+      "asset_class": "OPT",
+      "expiry": "2026-07-17",
+      "strike": "230",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD",
+      "abwicklungsart": "barausgleich"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "BS1",
+      "konto": "U7777777",
+      "conid": 500023,
+      "symbol": "IDX3 230C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "4.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "BS2",
+      "konto": "U7777777",
+      "conid": 500023,
+      "symbol": "IDX3 230C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-07-17 21:00:00",
+      "ereignistyp": "assignment"
+    }
+  ]
+}

@@ -1011,6 +1011,13 @@ der Fall einer Maßnahme mit Barausgleich; in den Daten kommt keine vor. Die
 CLOSED_LOT-Zeile der TC-Maßnahme trägt eine eigene `transactionID`, die der
 ED-Maßnahme dieselbe wie ihre DETAIL-Zeile.
 
+**Abnahmebasis ergänzt (AP-03vb, 13.09.2026):** `tests/test_matching.py` prüft
+jetzt beide Fälle — Barausgleich schließt zum `schlusskurs`, ein gesetzter
+`schlusskurs` bei Lieferung wird ignoriert, fehlende Abwicklungsart und
+fehlender `schlusskurs` bei Barausgleich brechen ab. Vier der fünf neuen Tests
+schlagen gegen den jetzigen `engine/matching.py` erwartungsgemäß fehl; die
+Nachbesserung ist Sache von AP-03.
+
 ## OF-26 · Identität einer OpenPosition mit `transactionID`, aber ohne `type`
 
 AP-02k, Regel 4 definiert die Identität einer Sektionszeile mit ID über Konto,

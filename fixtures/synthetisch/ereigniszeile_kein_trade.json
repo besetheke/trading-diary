@@ -36,7 +36,8 @@
       "right": "C",
       "multiplikator": "100",
       "tickwert": null,
-      "waehrung": "USD"
+      "waehrung": "USD",
+      "abwicklungsart": "lieferung"
     }
   ],
   "kapitalmassnahmen": [],

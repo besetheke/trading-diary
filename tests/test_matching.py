@@ -13,6 +13,16 @@ Zeitpunkt, als diese Datei entstand, gab es keine.
 
 Die Fixtures unter ``fixtures/synthetisch/`` sind frei erfunden.
 ``fixtures/golden/`` wird hier nicht gelesen.
+
+**Nachtrag AP-03vb (OF-25).** Der Golden-Lauf zeigte: Bei Barausgleich bucht
+IB die Zuteilung/Ausübung mit Ereigniszeilenpreis 0.00, der tatsächliche
+Abrechnungskurs steht in ``schlusskurs`` (AP-02, Regel 6). Der Vertrag
+(Regel 7) verlangt seitdem: bei ``abwicklungsart='barausgleich'`` schließt
+die Ereigniszeile zum ``schlusskurs``, bei ``'lieferung'`` bleibt es beim
+Ereigniszeilenpreis; fehlt die Abwicklungsart, bricht der Lauf ab. Dafür ist
+``ereigniszeile_kein_trade.json`` um ``abwicklungsart='lieferung'`` an conid
+500011 ergänzt — sonst bräche die bestehende Ausübung jetzt am neuen Check
+ab, ohne dass sich an ihrem Ergebnis etwas ändert.
 """
 
 import json
@@ -44,6 +54,9 @@ DEZIMALFELDER = frozenset(
         "realisiert_brutto",
         "unrealisiert",
         "gesamt",
+        # Abrechnungskurs einer Zuteilung/Ausübung bei Barausgleich (AP-03vb,
+        # OF-25) — nur an dieser Sorte Ereigniszeile gefüllt.
+        "schlusskurs",
     }
 )
 DATUMSFELDER = frozenset({"expiry", "stichtag"})
@@ -728,3 +741,63 @@ def test_gebrochene_kommission_summe_je_conid_ist_exakt():
     for conid, wert in erwartet.items():
         gerechnet = summe(leg.kommission_gesamt for leg in legs_von(ergebnis, conid=conid))
         assert gerechnet == wert, conid
+
+
+# ---------------------------------------------------------------------------
+# Barausgleich bei Zuteilung und Ausübung (Nachtrag AP-03vb, OF-25)
+#
+# IB bucht eine Zuteilung oder Ausübung, die in bar abgerechnet wird
+# (abwicklungsart='barausgleich'), mit dem Ereigniszeilenpreis 0.00 — der
+# tatsächliche Abrechnungskurs steht in schlusskurs (AP-02, Regel 6). Bei
+# physischer Lieferung (abwicklungsart='lieferung') bleibt es beim
+# Ereigniszeilenpreis; die Prämie steht dort in der Aktienbasis, nicht an
+# der Option (OF-24) — ein gesetzter schlusskurs muss ignoriert werden.
+#
+# conid 500020 (barausgleich): BA1 BUY 1 @ 5.00 (-1.00), BA2 assignment
+#               preis 0.00, schlusskurs 8.50
+# conid 500021 (lieferung, Kontrollgruppe): BA3 SELL 1 @ 6.00 (-1.00), BA4
+#               assignment preis 0.00, schlusskurs 9.75 (muss ignoriert werden)
+# Multiplikator 100 in beiden Fällen.
+# ---------------------------------------------------------------------------
+
+
+def test_barausgleich_schliesst_zum_schlusskurs():
+    # (8.50 - 5.00) * 1 * 100 * Richtung Eröffnung (+1, long) = 350.00
+    leg = leg_von(bilde("barausgleich"), "BA1", "BA2")
+    assert leg.brutto_pnl == Decimal("350.00")
+
+
+def test_barausgleich_ereigniszeilenpreis_waere_das_falsche_ergebnis():
+    # Gegenprobe: mit dem Ereigniszeilenpreis 0.00 statt schlusskurs wären es
+    # (0.00 - 5.00) * 1 * 100 = -500.00.
+    leg = leg_von(bilde("barausgleich"), "BA1", "BA2")
+    assert leg.brutto_pnl != Decimal("-500.00")
+
+
+def test_lieferung_ignoriert_gesetzten_schlusskurs():
+    # abwicklungsart='lieferung': maßgeblich bleibt der Ereigniszeilenpreis
+    # 0.00, obwohl schlusskurs 9.75 gesetzt ist.
+    # (0.00 - 6.00) * 1 * 100 * Richtung Eröffnung (-1, short) = 600.00
+    leg = leg_von(bilde("barausgleich"), "BA3", "BA4")
+    assert leg.brutto_pnl == Decimal("600.00")
+    # Gegenprobe: mit schlusskurs 9.75 statt 0.00 wären es
+    # (9.75 - 6.00) * 1 * 100 * -1 = -375.00 — anderes Vorzeichen, anderer Betrag.
+    assert leg.brutto_pnl != Decimal("-375.00")
+
+
+def test_fehlende_abwicklungsart_bei_ausuebung_bricht_ab():
+    """OF-25: Ohne abwicklungsart ist Barausgleich gegen Lieferung nicht
+    entscheidbar — kein Standardwert, der Lauf bricht ab."""
+    fall = lade("barausgleich_fehlende_abwicklungsart")
+    with pytest.raises(ValueError) as fehler:
+        bilde_legs(fall.executions, fall.instruments, fall.kapitalmassnahmen)
+    assert "500022" in str(fehler.value)
+
+
+def test_barausgleich_ohne_schlusskurs_bricht_ab():
+    """OF-25: abwicklungsart='barausgleich', aber kein schlusskurs an der
+    Ausübungszeile — kein Ausweichen auf den Ereigniszeilenpreis 0.00."""
+    fall = lade("barausgleich_fehlender_schlusskurs")
+    with pytest.raises(ValueError) as fehler:
+        bilde_legs(fall.executions, fall.instruments, fall.kapitalmassnahmen)
+    assert "BS2" in str(fehler.value) or "500023" in str(fehler.value)

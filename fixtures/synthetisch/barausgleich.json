@@ -1,0 +1,93 @@
+{
+  "fall": "barausgleich",
+  "beschreibung": "Pflichtfall AP-03vb (OF-25): Zuteilung/Ausuebung einer Option schliesst bei abwicklungsart='barausgleich' zum schlusskurs, nicht zum Preis der Ereigniszeile. conid 500020 (Index-Option, barausgleich): Ereigniszeile traegt preis 0.00 wie bei physischer Zuteilung ueblich, massgeblich ist aber schlusskurs 8.50. conid 500021 (Kontrollgruppe, abwicklungsart='lieferung'): schlusskurs ist ebenfalls gesetzt (9.75), muss aber ignoriert werden - die Praemie steht bei Lieferung in der Aktienbasis, nicht an der Option (OF-24). Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500020,
+      "symbol": "IDX3 200C",
+      "underlying": "IDX3",
+      "asset_class": "OPT",
+      "expiry": "2026-07-17",
+      "strike": "200",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD",
+      "abwicklungsart": "barausgleich"
+    },
+    {
+      "conid": 500021,
+      "symbol": "IDX3 210C",
+      "underlying": "IDX3",
+      "asset_class": "OPT",
+      "expiry": "2026-07-17",
+      "strike": "210",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD",
+      "abwicklungsart": "lieferung"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "BA1",
+      "konto": "U7777777",
+      "conid": 500020,
+      "symbol": "IDX3 200C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "5.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "BA2",
+      "konto": "U7777777",
+      "conid": 500020,
+      "symbol": "IDX3 200C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-07-17 21:00:00",
+      "ereignistyp": "assignment",
+      "schlusskurs": "8.50"
+    },
+    {
+      "exec_id": "BA3",
+      "konto": "U7777777",
+      "conid": 500021,
+      "symbol": "IDX3 210C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "6.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "BA4",
+      "konto": "U7777777",
+      "conid": 500021,
+      "symbol": "IDX3 210C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-07-17 21:00:00",
+      "ereignistyp": "assignment",
+      "schlusskurs": "9.75"
+    }
+  ]
+}

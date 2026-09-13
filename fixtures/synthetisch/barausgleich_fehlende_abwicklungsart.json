@@ -1,0 +1,49 @@
+{
+  "fall": "barausgleich_fehlende_abwicklungsart",
+  "beschreibung": "Fehlerpfad AP-03vb (OF-25): eine Ausuebung trifft auf ein Instrument ohne abwicklungsart. Ohne dieses Feld ist nicht entscheidbar, ob Barausgleich oder Lieferung gilt - kein Standardwert, der Lauf bricht ab. Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500022,
+      "symbol": "IDX3 220C",
+      "underlying": "IDX3",
+      "asset_class": "OPT",
+      "expiry": "2026-07-17",
+      "strike": "220",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "BF1",
+      "konto": "U7777777",
+      "conid": 500022,
+      "symbol": "IDX3 220C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "3.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-07-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "BF2",
+      "konto": "U7777777",
+      "conid": 500022,
+      "symbol": "IDX3 220C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-07-17 21:00:00",
+      "ereignistyp": "exercise"
+    }
+  ]
+}
