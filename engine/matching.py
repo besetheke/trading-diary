@@ -37,14 +37,18 @@ Grundsätze:
   ``basis_ungeklaert = True`` markiert statt einer stillen Nullbasis. Die
   Kommission der Ausführungen bleibt, wie gebucht — sie hängt nicht an der
   Stückzahl der Maßnahme.
-- **Barausgleich vor Lieferung (OF-25, Vertrag Regel 7).** Eine Zuteilung
-  oder Ausübung, deren Instrument die ``abwicklungsart`` ``barausgleich``
-  trägt, schließt zum ``schlusskurs`` der Ereigniszeile, nicht zu deren
-  ``preis`` (der bei Barausgleich 0 wäre und nur die Prämie realisierte).
-  Bei ``lieferung`` bleibt es beim Ereigniszeilenpreis — ein gesetzter
-  ``schlusskurs`` wird ignoriert, die Prämie steht dort in der Aktienbasis,
-  nicht an der Option (OF-24). Fehlt die Abwicklungsart bei einer Zuteilung
-  oder Ausübung, endet der Lauf mit ``ValueError``; kein Standardwert.
+- **Barausgleich vor Lieferung, nur an der Option (OF-25/OF-28, Vertrag
+  Regel 7).** Eine Zuteilung oder Ausübung **einer Option**, deren
+  Instrument die ``abwicklungsart`` ``barausgleich`` trägt, schließt zum
+  ``schlusskurs`` der Ereigniszeile, nicht zu deren ``preis`` (der bei
+  Barausgleich 0 wäre und nur die Prämie realisierte). Bei ``lieferung``
+  bleibt es beim Ereigniszeilenpreis — ein gesetzter ``schlusskurs`` wird
+  ignoriert, die Prämie steht dort in der Aktienbasis, nicht an der Option
+  (OF-24). Fehlt die Abwicklungsart bei einer Zuteilung oder Ausübung einer
+  Option, endet der Lauf mit ``ValueError``; kein Standardwert. Die
+  begleitende Aktienlieferungszeile derselben Maßnahme trägt denselben
+  ``ereignistyp``, aber nie eine ``abwicklungsart`` — sie nimmt an dieser
+  Prüfung nicht teil und matcht zu ihrem eigenen Preis (OF-28).
 
 Das Persistieren nach ``legs`` ist nicht Teil dieses Moduls. Der verbindliche
 Vertrag steht in ``auftraege/AP-03.md`` unter „Vertrag an die Umsetzung".
@@ -59,6 +63,11 @@ from decimal import ROUND_HALF_UP, Decimal
 # Ereignisarten, die Positionen verändern und am Matching teilnehmen (§1.4).
 # 'unbekannt' (Ereigniscode P, OF-07) gehört nicht dazu (OF-16).
 MATCHENDE_EREIGNISTYPEN = frozenset({"trade", "expiry", "exercise", "assignment"})
+
+# Anlageklassen, für die Barausgleich/Lieferung einen Sinn ergibt (OF-28):
+# eine physische Zuteilung/Ausübung bucht auch eine Aktienlieferungszeile mit
+# demselben ereignistyp, die nie eine abwicklungsart trägt.
+OPTIONS_ANLAGEKLASSEN = frozenset({"OPT", "FOP"})
 
 # Richtung kommt aus side; das Vorzeichen von menge wird nicht ausgewertet,
 # die Quelle führt es uneinheitlich (OF-13).
@@ -327,19 +336,28 @@ def _instrument_pruefen(buchung: _Buchung, instruments: Mapping[int, Mapping]) -
 
 
 def _abwicklung_pruefen(buchung: _Buchung, instruments: Mapping[int, Mapping]) -> None:
-    """Barausgleich vor Lieferung bei Zuteilung/Ausübung (OF-25, Regel 7).
+    """Barausgleich vor Lieferung bei Zuteilung/Ausübung einer Option (OF-25,
+    Regel 7; auf Optionsinstrumente beschränkt seit OF-28).
 
-    Betrifft nur ``assignment`` und ``exercise``. Bei ``abwicklungsart``
-    ``barausgleich`` ersetzt der ``schlusskurs`` den Ereigniszeilenpreis
-    (der sonst 0 wäre und nur die Prämie realisierte); bei ``lieferung``
-    bleibt der Ereigniszeilenpreis maßgeblich, ein gesetzter ``schlusskurs``
-    wird ignoriert (die Prämie steht dort in der Aktienbasis, OF-24). Fehlt
-    die Abwicklungsart, ist die Unterscheidung nicht möglich — kein
-    Standardwert.
+    Betrifft nur ``assignment`` und ``exercise`` **an einer Option** (§
+    OPTIONS_ANLAGEKLASSEN). Eine physische Zuteilung/Ausübung bucht daneben
+    eine Aktienlieferungszeile mit demselben ``ereignistyp`` — sie trägt nie
+    eine ``abwicklungsart`` (das Feld ergibt nur für Optionen einen Sinn) und
+    nimmt an dieser Prüfung deshalb nicht teil; sie matcht zu ihrem eigenen
+    Ereigniszeilenpreis wie eine gewöhnliche Ausführung (OF-28).
+
+    Bei ``abwicklungsart`` ``barausgleich`` ersetzt der ``schlusskurs`` den
+    Ereigniszeilenpreis (der sonst 0 wäre und nur die Prämie realisierte);
+    bei ``lieferung`` bleibt der Ereigniszeilenpreis maßgeblich, ein gesetzter
+    ``schlusskurs`` wird ignoriert (die Prämie steht dort in der
+    Aktienbasis, OF-24). Fehlt die Abwicklungsart an einer Option, ist die
+    Unterscheidung nicht möglich — kein Standardwert.
     """
     if buchung.ereignistyp not in ("assignment", "exercise"):
         return
     satz = instruments.get(buchung.conid) or {}
+    if satz.get("asset_class") not in OPTIONS_ANLAGEKLASSEN:
+        return
     abwicklungsart = satz.get("abwicklungsart")
     if abwicklungsart is None:
         raise ValueError(
