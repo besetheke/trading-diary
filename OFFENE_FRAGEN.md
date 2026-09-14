@@ -1227,3 +1227,32 @@ Keiner der vier Punkte ändert etwas am Befund oben: Unter den tatsächlich
 vergleichbaren `conid`s ist die Kapitalmaßnahmen-Nachbesserung selbst ohne
 Gegenbeleg. Alle vier bleiben offen, keiner wurde geraten oder verdeckt
 gepatcht.
+
+## OF-29 · Geldtest blockiert: `fxRateToBase` wird beim Import nicht geführt
+
+**Befund 14.09.2026, beim Versuch, den Geldtest (letzter offener Punkt vor
+der Abnahme von AP-03) anzugehen.** Der Geldtest vergleicht realisiertes
+Ergebnis je Jahr/Anlageklasse gegen die Jahressummen der Kontoauszüge. Die
+Kontoauszüge weisen in Basiswährung (EUR) aus; die gehandelten Instrumente
+stehen praktisch durchgehend in Fremdwährung (USD, gemessen an allen
+Golden-Instrumenten). Der bereits entschiedene Umrechnungsweg (OF-23,
+„Entschieden 13.09.2026, getrennt nach Zweck“) braucht für den
+IB-vergleichbaren Wert `fxRateToBase` **der schließenden Ausführung**.
+
+**Dieses Feld führt `ingest/flex.py` derzeit nicht.** `fxRateToBase` steht
+am rohen `Trade`-Element (bestätigt an den Golden-Exporten), aber
+`_execution_zeile` übernimmt es nicht in die zurückgegebene Zeile, und
+`executions` hat keine passende Spalte. Ohne dieses Feld lässt sich der
+IB-vergleichbare Geldtest aus den persistierten Daten nicht rechnen — auch
+nicht behelfsmäßig wie bei OF-27/OF-28, weil das Feld nirgends im Journal
+ankommt, roh oder normalisiert.
+
+**Vorschlag:** Eigenes, kleines Korrekturpaket für AP-02 (`aendert_tests:
+ja`, `modell: stark`): `executions` um eine Spalte für `fxRateToBase`
+ergänzen (Migration), `_execution_zeile` liest sie mit. Erst danach lässt
+sich der Geldtest überhaupt versuchen — dieses Paket implementiert den
+Geldtest selbst nicht, nur die dafür fehlende Datengrundlage.
+
+**Nicht Teil dieses Fundes:** Ob `fifoPnlRealized`/`mtmPnl` (ebenfalls roh
+vorhanden) zusätzlich gebraucht werden, ist beim eigentlichen Bau des
+Geldtests zu klären, nicht hier — nicht geraten.
