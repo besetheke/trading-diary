@@ -23,6 +23,15 @@ Ereigniszeilenpreis; fehlt die Abwicklungsart, bricht der Lauf ab. Dafür ist
 ``ereigniszeile_kein_trade.json`` um ``abwicklungsart='lieferung'`` an conid
 500011 ergänzt — sonst bräche die bestehende Ausübung jetzt am neuen Check
 ab, ohne dass sich an ihrem Ergebnis etwas ändert.
+
+**Nachtrag AP-03vo (OF-28).** Der Re-Lauf gegen Golden-Daten (OF-27) zeigte:
+Eine physische Zuteilung/Ausübung erzeugt zwei Ausführungszeilen mit
+demselben ``ereignistyp='assignment'`` — die Optionszeile und die
+begleitende Aktienlieferung. Die Aktienzeile trägt nie eine
+``abwicklungsart`` (das Feld ergibt nur für Optionen einen Sinn) und darf
+deshalb nicht an der Barausgleich/Lieferung-Prüfung aus AP-03vb teilnehmen
+— sonst bricht ``bilde_legs()`` bei jeder physischen Zuteilung ab. Neue
+Fixture ``barausgleich_lieferung_aktienleg.json``.
 """
 
 import json
@@ -820,6 +829,25 @@ def test_barausgleich_ohne_schlusskurs_bricht_ab():
     with pytest.raises(ValueError) as fehler:
         bilde_legs(fall.executions, fall.instruments, fall.kapitalmassnahmen)
     assert "BS2" in str(fehler.value) or "500023" in str(fehler.value)
+
+
+def test_aktienlieferung_einer_zuteilung_braucht_keine_abwicklungsart():
+    """OF-28: Die Aktienlieferung einer physischen Zuteilung/Ausübung trägt
+    denselben ereignistyp='assignment' wie das schließende Optionsbein, aber
+    nie eine abwicklungsart (settlementPolicyMethod ist ein Optionsfeld).
+    Vertrag Regel 7 prüft die Abwicklungsart deshalb nur bei Optionen — die
+    Aktienzeile matcht wie eine gewöhnliche Ausführung, ohne abzubrechen."""
+    ergebnis = bilde("barausgleich_lieferung_aktienleg")
+    # (55.00 - 50.00) * 100 Stück * 1 * Richtung Eröffnung (+1, long) = 500.00
+    leg = leg_von(ergebnis, "BL3", "BL4")
+    assert leg.brutto_pnl == Decimal("500.00")
+
+
+def test_optionsbein_der_lieferung_bleibt_von_der_aktienzeile_unberuehrt():
+    # Optionsbein wie gehabt: Ereigniszeilenpreis 0.00 bei Lieferung.
+    # (0.00 - 6.00) * 1 * 100 * Richtung Eröffnung (-1, short) = 600.00
+    leg = leg_von(bilde("barausgleich_lieferung_aktienleg"), "BL1", "BL2")
+    assert leg.brutto_pnl == Decimal("600.00")
 
 
 # ---------------------------------------------------------------------------

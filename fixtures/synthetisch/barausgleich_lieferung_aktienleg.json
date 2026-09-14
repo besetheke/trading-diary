@@ -1,0 +1,90 @@
+{
+  "fall": "barausgleich_lieferung_aktienleg",
+  "beschreibung": "Pflichtfall AP-03vo (OF-28): eine physische Zuteilung/Ausuebung erzeugt zwei Ausfuehrungszeilen mit demselben ereignistyp='assignment' - die Optionszeile (schliesst, conid 500040, abwicklungsart='lieferung') und die Aktienlieferung (eroeffnet, conid 500041, STK). Die Aktienzeile traegt nie eine abwicklungsart (settlementPolicyMethod ist ein Optionsfeld, IBs Exporte lassen es bei Aktien durchgehend leer, gemessen an allen 639 Lieferzeilen der Golden-Daten) und darf deshalb nicht an der Barausgleich/Lieferung-Pruefung (Vertrag Regel 7) teilnehmen. BL1/BL2: Optionsbein wie gehabt. BL3/BL4: Aktienbein, unabhaengig vom Optionsbein gematcht - 100 Stueck zu 50.00 zugeteilt (-2.00), spaeter zu 55.00 verkauft (-1.00). Multiplikator Option 100, Aktie 1, USD.",
+  "instruments": [
+    {
+      "conid": 500040,
+      "symbol": "IDX5 50C",
+      "underlying": "IDX5",
+      "asset_class": "OPT",
+      "expiry": "2026-08-21",
+      "strike": "50",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD",
+      "abwicklungsart": "lieferung"
+    },
+    {
+      "conid": 500041,
+      "symbol": "IDX5",
+      "underlying": "IDX5",
+      "asset_class": "STK",
+      "expiry": null,
+      "strike": null,
+      "right": null,
+      "multiplikator": "1",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "BL1",
+      "konto": "U7777777",
+      "conid": 500040,
+      "symbol": "IDX5 50C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "6.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-08-01 10:00:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "BL2",
+      "konto": "U7777777",
+      "conid": 500040,
+      "symbol": "IDX5 50C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "0.00",
+      "waehrung": "USD",
+      "kommission": "0.00",
+      "handelszeit": "2026-08-21 21:00:00",
+      "ereignistyp": "assignment"
+    },
+    {
+      "exec_id": "BL3",
+      "konto": "U7777777",
+      "conid": 500041,
+      "symbol": "IDX5",
+      "sec_type": "STK",
+      "side": "BUY",
+      "menge": "100",
+      "preis": "50.00",
+      "waehrung": "USD",
+      "kommission": "-2.00",
+      "handelszeit": "2026-08-21 21:00:00",
+      "ereignistyp": "assignment"
+    },
+    {
+      "exec_id": "BL4",
+      "konto": "U7777777",
+      "conid": 500041,
+      "symbol": "IDX5",
+      "sec_type": "STK",
+      "side": "SELL",
+      "menge": "100",
+      "preis": "55.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-09-05 15:30:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}
