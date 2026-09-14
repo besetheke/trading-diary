@@ -199,30 +199,30 @@ def main() -> None:
           f"(uebersprungen, Zeilenform uneindeutig: {uebersprungen}; "
           f"ohne Instrumentzeile verworfen: {ohne_instrument})")
 
-    # Vorabpruefung ausserhalb von OF-23: Zuteilung/Ausuebung braucht
-    # abwicklungsart (OF-25); manche Instrumentzeilen tragen sie nicht
-    # (Luecke in der Stammdaten-Verschmelzung, s. OF-27). Betroffene
-    # Ausfuehrungen werden fuer diesen Abgleich ausgeklammert, nicht
-    # stillschweigend gepatcht.
+    # Seit OF-28 prueft bilde_legs() abwicklungsart nur noch an Optionen
+    # (OPT/FOP) - die begleitende Aktienlieferungszeile einer physischen
+    # Zuteilung/Ausuebung braucht keine mehr. Verbleibende Faelle ohne
+    # abwicklungsart AN EINER OPTION waeren eine echte Datenluecke; in den
+    # Golden-Daten kommt keine vor (0 gemessen), s. OF-27/OF-28.
+    OPTIONS_ANLAGEKLASSEN = {"OPT", "FOP"}
     ohne_abwicklungsart = 0
     conids_ohne_abwicklungsart: set[int] = set()
-    bereinigt = []
     for satz in exec_rows:
         if satz["ereignistyp"] in ("assignment", "exercise"):
-            instr = instruments.get(satz["conid"])
-            if not instr or not instr.get("abwicklungsart"):
+            instr = instruments.get(satz["conid"]) or {}
+            if instr.get("asset_class") in OPTIONS_ANLAGEKLASSEN and not instr.get(
+                "abwicklungsart"
+            ):
                 ohne_abwicklungsart += 1
                 conids_ohne_abwicklungsart.add(satz["conid"])
-                continue
-        bereinigt.append(satz)
     if ohne_abwicklungsart:
         print(
-            f"Ausfuehrungen ohne abwicklungsart ausgeklammert "
-            f"(OF-25-Datenluecke, ausserhalb OF-23): {ohne_abwicklungsart}"
+            f"Optionsausfuehrungen ohne abwicklungsart (echte Datenluecke, "
+            f"OF-25): {ohne_abwicklungsart}"
         )
 
     try:
-        ergebnis = bilde_legs(bereinigt, instruments, massnahmen)
+        ergebnis = bilde_legs(exec_rows, instruments, massnahmen)
     except (ValueError, TypeError) as exc:
         redigiert = re.sub(r"\d{4,}", "<zahl>", str(exc))
         print(f"bilde_legs() abgebrochen mit {type(exc).__name__}: {redigiert}")

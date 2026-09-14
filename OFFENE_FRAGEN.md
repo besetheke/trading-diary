@@ -1095,6 +1095,17 @@ Korrekturpaket nötig (aendert_tests: ja), da die Abnahmebasis um einen
 Fixture-Fall „Zuteilung mit Aktienlieferung, beide Zeilen" ergänzt werden
 muss, den es bisher nicht gibt.
 
+**Umgesetzt 14.09.2026 (AP-03vo, AP-03):** `_abwicklung_pruefen` prüft die
+Abwicklungsart jetzt nur noch, wenn `asset_class` der Ausführung `OPT` oder
+`FOP` ist; jede andere Anlageklasse (insbesondere die Aktienlieferungszeile)
+matcht ohne diese Prüfung zu ihrem eigenen Ereigniszeilenpreis. Re-Lauf des
+Bestandsabgleichs (`werkzeuge/abgleich/golden_bestandsabgleich_of23.py`)
+danach: von 192 vergleichbaren `conid`s stimmen jetzt 180 überein (94 %,
+zuvor 61 % mit den 639 fälschlich ausgeklammerten Aktienlieferungszeilen).
+Keine der verbliebenen 1140 Optionszeilen fehlt eine `abwicklungsart` — die
+Datenlücke, vor der Regel 7 ursprünglich schützen sollte, kommt in den
+gemessenen Golden-Daten gar nicht vor.
+
 ## OF-27 · Re-Lauf nach OF-23: Bestandsabgleich mit echtem Import und echtem Matching
 
 **Befund 13.09.2026, Re-Lauf nach der Nachbesserung von AP-03 (OF-23).**
@@ -1162,3 +1173,11 @@ größerer Aufwand (u. a. FX-Umrechnung nach der in OF-23 entschiedenen
 IB-Konvention, `FIFOPerformanceSummaryInBase` als Referenz über
 überlappende Perioden hinweg dedupliziert). Bleibt offen; AP-03 ist damit
 weiterhin nicht formal abgenommen.
+
+**Nachtrag 14.09.2026, nach OF-28:** Die 639 ausgeklammerten Ausführungen
+oben waren die Aktienlieferungszeilen physischer Zuteilungen, nicht eine
+Datenlücke — s. OF-28. Mit der dortigen Korrektur (`_abwicklung_pruefen`
+nur noch an Optionen) und demselben Skript ohne diese Ausklammerung stimmen
+jetzt 180 von 192 vergleichbaren `conid`s überein (94 %). Die verbleibenden
+12 sind weiterhin nicht einzeln zugeordnet — mutmaßlich unter anderem die
+4 `conid`s der übersprungenen `ED`-Maßnahme (s. o.).
