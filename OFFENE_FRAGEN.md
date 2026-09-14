@@ -1256,3 +1256,11 @@ Geldtest selbst nicht, nur die dafür fehlende Datengrundlage.
 **Nicht Teil dieses Fundes:** Ob `fifoPnlRealized`/`mtmPnl` (ebenfalls roh
 vorhanden) zusätzlich gebraucht werden, ist beim eigentlichen Bau des
 Geldtests zu klären, nicht hier — nicht geraten.
+
+**Umgesetzt 14.09.2026 (AP-02l, AP-02):** `executions.buchungskurs` aus
+`Trade.fxRateToBase` (Migration `e1f4a2c8b6d3`), `_execution_zeile` liest es
+mit. Damit ist nur die Datengrundlage da — der Geldtest selbst (AP-03) ist
+weiterhin nicht gebaut. Bleibt offen: FX-Umrechnung nach der IB-Konvention
+anwenden, `FIFOPerformanceSummaryInBase` als Referenz über überlappende
+Perioden hinweg dedupliziert einlesen, und ob `fifoPnlRealized`/`mtmPnl`
+zusätzlich gebraucht werden.
