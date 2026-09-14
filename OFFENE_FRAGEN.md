@@ -946,6 +946,45 @@ IBs Lots ihrer Aktienschließungen verweisen auf die Lieferzeilen (41) und auf
 gewöhnliche Käufe (6). Die Verknüpfung trägt also, die Ursache des Rests ist
 noch nicht benannt.
 
+**Re-Lauf 14.09.2026, mit dem echten, jetzt korrigierten Import und
+Matching** (`werkzeuge/abgleich/golden_geldtest_fifopnl.py`, neu ins Repo
+übernommen). Anders als oben **je schließender Ausführung**, nicht je
+Basiswert aufsummiert — ein strengerer, feinerer Maßstab, die Zahlen sind
+mit denen oben deshalb nicht direkt vergleichbar (Abweichungen können sich
+über die Ausführungen eines Basiswerts hinweg aufheben, wenn je Basiswert
+aufsummiert wird). Von 15.672 vergleichbaren, schließenden Ausführungen
+(Kapitalmaßnahmen-`conid`s ausgeklammert, s. OF-27) treffen 9.270 genau
+(±0,02 Lokalwährung), 59,2 %. Aufgeschlüsselt:
+
+| Anlageklasse/Ereignistyp/Underlying zuteilungsberührt | Trefferquote |
+|---|---|
+| OPT/`assignment`/ja | 23,8 % |
+| OPT/`exercise`/ja | 76,4 % |
+| OPT/`expiry`/nein | 64,9 % |
+| OPT/`expiry`/ja | 52,8 % |
+| OPT/`trade`/nein | 78,4 % |
+| OPT/`trade`/ja | 68,3 % |
+| STK/`assignment`/ja | 2,9 % |
+| STK/`trade`/ja | 1,7 % |
+
+Bestätigt das Muster oben (STK und `assignment` treffen am seltensten — die
+Prämie steckt bei IB in der Aktienbasis, das Matching realisiert sie an der
+Option, **Auflage aus der Entscheidung oben ist nach wie vor nicht
+umgesetzt**). Aber: Selbst OPT-`trade` an Basiswerten **ohne** jede
+Zuteilung/Ausübung trifft nur zu 78,4 %, nicht nahe 100 % — ein Rest, den
+das Prämien-Muster nicht erklärt. **Noch ohne Ursache, nicht weiter
+untersucht** (Aufwand für diese Runde nicht gerechtfertigt). Mögliche
+Kandidaten, keiner geprüft: Rundungsdifferenzen bei `buchungskurs`
+(±0,02 Lokalwährung ist eine grobe Toleranz, keine hergeleitete), IBs eigene
+FIFO-Reihenfolge bei gleichzeitigen Ausführungen, oder `fifoPnlRealized`
+selbst folgt einer anderen Kostenbasis-Konvention als das Matching in
+Randfällen.
+
+**Vor der nächsten Runde am Geldtest zu klären:** ob die schon
+**entschiedene** Auflage („Prämie je Zuteilung als eigener Wert speichern“)
+umgesetzt wird, bevor der obige Rest weiter zerlegt wird — ein Großteil der
+Abweichungen (STK, `assignment`) geht vermutlich darin auf.
+
 ## OF-25 · Barausgleich bei Zuteilung und Ausübung fehlt im Matching
 
 **Befund aus dem Geldtest (13.09.2026); blockiert die Abnahme von AP-03.**
