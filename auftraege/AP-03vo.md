@@ -1,7 +1,7 @@
 ---
 titel: Barausgleich/Lieferung-Prüfung auf Optionen beschränken (OF-28)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: AP-03vb
 aendert_tests: ja
 ---
