@@ -1181,3 +1181,49 @@ nur noch an Optionen) und demselben Skript ohne diese Ausklammerung stimmen
 jetzt 180 von 192 vergleichbaren `conid`s überein (94 %). Die verbleibenden
 12 sind weiterhin nicht einzeln zugeordnet — mutmaßlich unter anderem die
 4 `conid`s der übersprungenen `ED`-Maßnahme (s. o.).
+
+**Nachtrag 14.09.2026, die 12 verbleibenden `conid`s einzeln untersucht.**
+Alle 12 sind nur bei uns offen, nie nur bei IB, und keins davon betrifft
+`basis_ungeklaert`. **Kein Befund gegen `engine/matching.py`** — alle drei
+Ursachen liegen in der händischen `kapitalmassnahmen`-Ableitung dieses
+Re-Laufs, die laut AP-03vm ohnehin nur ein Behelf für die noch nicht
+gebaute echte Ableitung ist:
+
+1. **7 sind `CASH`-conids** (Währungspaare). `bilde_legs()` matcht ihre
+   Trades wie jede andere Ausführung und eröffnet entsprechend Legs — IBs
+   `OpenPositions` führt Währungspositionen aber offenbar anders (oder gar
+   nicht) als gehandelte Instrumente. Ob `CASH`-Ausführungen vor
+   `bilde_legs()` überhaupt herausgefiltert werden sollen, ist eine eigene,
+   noch offene Entscheidung (verwandt mit dem Nachtrag zu OF-23 oben: „12
+   CASH-Positionen … liegt außerhalb des Matchings“ — dort ging es um den
+   Geldtest, nicht um den Bestand; ob dieselbe Ausnahme gilt, ist nicht
+   automatisch übertragbar).
+2. **1 `conid` (STK) trägt eine offensichtlich falsche, periodische Menge**
+   (`…111,111…`). Ursache gefunden: die oben genannte, nicht bestätigte
+   Annahme „Abgang/Zugang positional nach `conid` gepaart“ bei der einen
+   uneindeutigen `FI`-Maßnahme (2 Abgang, 2 Zugang) hat hier eine
+   Options-Abgangzeile (`alte_menge=9`) mit einer sachfremden Aktien-
+   Zugangzeile (`neue_menge=1000`) verpaart — Faktor 1000/9. Die Annahme ist
+   damit für diesen Fall **widerlegt**, nicht nur unbestätigt.
+3. **1 weiterer `conid` (STK) trägt ein Phantom-Lot von 200 Stück ohne
+   jede eigene Ausführung** — vollständig aus einer `DI`-Maßnahme mit
+   `kosten_neu = 0` synthetisch eröffnet. Bei IB ist die Position am
+   jüngsten Stichtag nicht (mehr) vorhanden. Naheliegende Erklärung
+   (nicht geprüft): eine spätere Bewegung dieses Bestands steckt in der
+   übersprungenen `ED`-Maßnahme oben, die genau deshalb keine plausible
+   Paarung ergab.
+4. **3 `conid`s (OPT) haben eine `expiry`-Zeile, deren Menge nicht zur
+   eröffnenden Ausführung passt** (z. B. Eröffnung 1 Kontrakt, `expiry`
+   2 bzw. 10 Stück) — bei allen dreien in unterschiedlichem Verhältnis,
+   kein fester Faktor. Naheliegendste Erklärung: ein Optionskontrakt, dessen
+   Lieferumfang durch eine Kapitalmaßnahme angepasst wurde, **ohne** dass
+   IB dafür die `conid` wechselt (anders als die in AP-03vm behandelten
+   Transfer-Fälle) — genau der Fall, für den OF-23 das noch nicht gesetzte
+   `instruments.angepasst` vorgesehen hatte. **Nicht bestätigt, nicht
+   weiter untersucht** — würde die Ableitung aus `flex_corporate_actions`
+   um einen dritten Fall neben Transfer und reinem Zugang erweitern.
+
+Keiner der vier Punkte ändert etwas am Befund oben: Unter den tatsächlich
+vergleichbaren `conid`s ist die Kapitalmaßnahmen-Nachbesserung selbst ohne
+Gegenbeleg. Alle vier bleiben offen, keiner wurde geraten oder verdeckt
+gepatcht.
