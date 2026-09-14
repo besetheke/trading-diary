@@ -400,6 +400,11 @@ def _execution_zeile(konto: str, trade: ET.Element, nummer: int) -> dict:
         # Regel 6: closePrice ist der Abrechnungskurs von Zuteilung und
         # Ausübung (OF-25); bei gewöhnlichen Ausführungen bleibt er leer.
         "schlusskurs": _dezimalwert(attribute, "closePrice", kontext),
+        # fxRateToBase: der Kurs, zu dem IB die Ausführung in die
+        # Basiswährung bucht — Grundlage des IB-vergleichbaren Geldtests
+        # (OF-23, OF-29). Kein Standardwert, falls die Quelle es
+        # ausnahmsweise nicht liefert.
+        "buchungskurs": _dezimalwert(attribute, "fxRateToBase", kontext),
         "roh_json": _roh_json(attribute),
         "qualitaetsstufe": "A",
     }
