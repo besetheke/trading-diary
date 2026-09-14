@@ -1046,6 +1046,55 @@ OpenPositions tragen, ist die Regel dafür neu zu entscheiden — bis dahin
 fallen offene Positionen über den Inhaltsschlüssel (Stichtag + `roh_json`),
 wie es die Abnahmetests verlangen.
 
+## OF-28 · Vertrag Regel 7 (Barausgleich/Lieferung) greift zu weit — bricht bei jeder physischen Zuteilung/Ausübung ab
+
+**Befund 14.09.2026, beim Nacharbeiten von OF-27.** Der Bestandsabgleich
+schloss 639 Ausführungen aus, weil ihr Instrument keine `abwicklungsart`
+trägt und `_abwicklung_pruefen` (Vertrag Regel 7, OF-25) deshalb mit
+`ValueError` abbricht. Genauer hingesehen: Das sind **nicht** irgendwelche
+Optionen mit Datenlücke, sondern exakt die 639 **Aktienlieferungszeilen**,
+die zu den 639 physisch gelieferten Zuteilungen/Ausübungen gehören (OF-25
+hatte diese Zahl bereits als „alle 639 … mit Aktienlieferung" gemessen).
+
+Beleg (über alle 9 Golden-Dateien, dedupliziert über `exec_id`):
+
+| Anlageklasse | assignment/exercise-Zeilen | davon mit `abwicklungsart` |
+|---|---|---|
+| OPT | 1140 | 1140 (639 `lieferung`, 501 `barausgleich`) |
+| STK | 639 | 0 |
+
+**Ursache:** IB markiert bei einer physischen Zuteilung/Ausübung **zwei**
+Ausführungszeilen mit demselben Ereigniscode in `notes` (Ep/Ex/A) — die
+Optionszeile (die schließt) und die dazugehörige Aktienlieferung (die eine
+Aktienposition eröffnet oder schließt). `abwicklungsart` kommt einzig aus
+`SecurityInfo.settlementPolicyMethod` (OF-25) — ein Feld, das nur für
+Optionen einen Sinn ergibt und bei Aktien im Export durchgehend leer ist,
+auch wenn die conid selbst in `SecuritiesInfo` auftaucht (bei allen 165
+betroffenen STK-conids ohne Barausgleichsbezug der Fall, plus 7 CASH-conids
+ganz ohne `SecuritiesInfo`-Zeile).
+
+`_abwicklung_pruefen` in `engine/matching.py` prüft aber jede Zeile mit
+`ereignistyp in (assignment, exercise)` unabhängig von der Anlageklasse.
+**Praktische Folge: `bilde_legs()` bricht bei jedem echten Konto mit
+mindestens einer physisch gelieferten Zuteilung/Ausübung ab** — nicht nur
+bei Datenlücken, sondern systematisch, weil die Aktienlieferungszeile per
+Konstruktion nie eine `abwicklungsart` tragen kann. Die bisherige
+Abnahmebasis (AP-03vb, `barausgleich*.json`) deckt diesen Fall nicht ab, weil
+ihre Fixtures offenbar nur die Optionszeile der Zuteilung enthalten, nicht
+die begleitende Aktienlieferung.
+
+**Vorschlag, Entscheidung nötig:** Vertrag Regel 7 auf Optionsinstrumente
+beschränken — `_abwicklung_pruefen` prüft `abwicklungsart` nur, wenn
+`asset_class` der Ausführung `OPT` oder `FOP` ist. Die begleitende
+Aktienlieferungszeile (Anlageklasse `STK`) nimmt an dieser Prüfung gar nicht
+teil und wird wie eine gewöhnliche `trade`-Ausführung zu ihrem eigenen Preis
+gematcht — ihr `ereignistyp` bleibt `assignment`/`exercise` (weiterhin
+matchend, § MATCHENDE_EREIGNISTYPEN), nur die Barausgleich/Lieferung-Prüfung
+entfällt für sie. Das ist noch nicht entschieden und noch nicht umgesetzt —
+Korrekturpaket nötig (aendert_tests: ja), da die Abnahmebasis um einen
+Fixture-Fall „Zuteilung mit Aktienlieferung, beide Zeilen" ergänzt werden
+muss, den es bisher nicht gibt.
+
 ## OF-27 · Re-Lauf nach OF-23: Bestandsabgleich mit echtem Import und echtem Matching
 
 **Befund 13.09.2026, Re-Lauf nach der Nachbesserung von AP-03 (OF-23).**
