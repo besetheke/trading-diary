@@ -23,6 +23,7 @@ AP-02.
 |---|---|
 | `golden_barausgleich.py` | Geldtest je schließender Ausführung und je Basiswert, mit und ohne Barausgleich (OF-24, OF-25) |
 | `golden_lieferart.py` | Ob `settlementPolicyMethod` barausgeglichene von physischen Zuteilungen trennt (OF-25) |
+| `golden_bestandsabgleich_of23.py` | Bestandsabgleich mit dem echten `ingest.flex`-Parser und der echten `engine.matching.bilde_legs()`; `kapitalmassnahmen` wird für den Lauf aus `CorporateAction`-Rohzeilen nach `actionID` abgeleitet (OF-23, OF-27) |
 
 Aufruf aus dem Projektverzeichnis:
 `.venv\Scripts\python.exe werkzeuge\abgleich\<skript>.py`
