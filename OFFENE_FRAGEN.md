@@ -1045,3 +1045,71 @@ der Identität leer; die Identität einer solchen Zeile ist dann (Konto,
 OpenPositions tragen, ist die Regel dafür neu zu entscheiden — bis dahin
 fallen offene Positionen über den Inhaltsschlüssel (Stichtag + `roh_json`),
 wie es die Abnahmetests verlangen.
+
+## OF-27 · Re-Lauf nach OF-23: Bestandsabgleich mit echtem Import und echtem Matching
+
+**Befund 13.09.2026, Re-Lauf nach der Nachbesserung von AP-03 (OF-23).**
+Erstmals lief der Bestandsabgleich mit dem tatsächlichen, jetzt korrigierten
+`ingest.flex.import_flex_file` und der tatsächlichen, jetzt korrigierten
+`engine.matching.bilde_legs()` — nicht mit provisorisch angepassten
+Abgleichsskripten wie zuvor (OF-21, vor der Nachbesserung von AP-02k). Die
+`kapitalmassnahmen`-Eingabe wurde für diesen Lauf händisch aus
+`flex_corporate_actions` (Gruppierung nach `actionID`) abgeleitet — die
+eigentliche Ableitung ist laut AP-03vm ein eigenes, noch nicht begonnenes
+Paket.
+
+**Methodikfehler gefunden und im Re-Lauf-Skript korrigiert (kein
+Produktionscode betroffen):** Zwei der Golden-Dateien decken denselben
+Zeitraum ab (`…20260101_20260911_…a50fc…` und `…ee891…`, offenbar ein
+erneuter Export desselben Statements). `flex_open_positions` dedupliziert
+über `(konto, quell_schluessel)` je Datei, nicht über den Inhalt der Zeile —
+beide Exporte lieferten dieselbe OpenPosition-Zeile doppelt, was den
+IB-Bestand am jüngsten Stichtag durchgängig um den Faktor 2 überzeichnete
+(105 von 105 gemeinsamen `conid`s exakt im Verhältnis 0,5). Für den Re-Lauf
+wurde das Skript um eine inhaltsbasierte Deduplizierung ergänzt; ob
+`_quell_id` für OpenPositions robuster gegen erneut exportierte, inhaltlich
+identische Statements gemacht werden sollte, ist eine eigene Frage,
+verwandt mit OF-26.
+
+**Zwei Kapitalmaßnahmen ließen sich nicht ohne Raten in Transfer/Zugang
+übersetzen** (Regel 10 — keine Annahme ohne Beleg):
+- Eine `FI`-Maßnahme trägt 2 Abgang- und 2 Zugang-Zeilen unter derselben
+  `actionID` (vermutlich zwei Optionsserien desselben Underlyings in einer
+  Maßnahme). Für den Re-Lauf wurden Abgang und Zugang positional nach
+  aufsteigender `conid` gepaart — eine **dokumentierte Annahme, nicht
+  bestätigt**.
+- Eine `ED`-Maßnahme trägt 4 Abgang- und 2 Zugang-Zeilen unter derselben
+  `actionID` — keine plausible 1:1- oder 1:2-Paarung erkennbar. Für den
+  Re-Lauf wurde sie ausgeklammert (keine `kapitalmassnahmen`-Zeile daraus
+  abgeleitet). **Noch ohne Erklärung.**
+
+**Ergebnis nach Korrektur des Dedup-Fehlers:** Von 273 `conid`s mit offener
+Position bei uns oder bei IB am jüngsten Stichtag stimmen 167 exakt überein
+(61 %). Von den 106 abweichenden `conid`s lassen sich 92 (87 %) auf eine
+bereits bekannte, von OF-23 unabhängige Lücke zurückführen: 639 Ausführungen
+(`assignment`/`exercise`) tragen an ihrem Instrument keine `abwicklungsart`
+und wurden für diesen Lauf ausgeklammert, weil `bilde_legs()` dafür
+erwartungsgemäß mit `ValueError` abbricht (Vertrag Regel 7, OF-25) — jede
+dadurch nicht geschlossene Position bleibt bei uns fälschlich offen. Das ist
+eine Datenlücke in der Stammdaten-Verschmelzung (`_stammsatz_verschmelzen`),
+keine Folge dieser Nachbesserung, und noch ohne eigene Untersuchung.
+
+**14 `conid`s bleiben ohne Zuordnung** — mutmaßlich (nicht bestätigt) unter
+anderem die 4 `conid`s der ausgeklammerten `ED`-Maßnahme oben, dazu evtl.
+weitere Ereignisarten, die nicht in `MATCHENDE_EREIGNISTYPEN` gematcht
+werden. Nicht einzeln nachverfolgt — Aufwand für diesen Lauf nicht
+gerechtfertigt.
+
+**Kein Befund, der gegen die Kapitalmaßnahmen-Nachbesserung selbst spricht:**
+Unter den `conid`s, die tatsächlich vergleichbar sind (nicht durch die beiden
+oben genannten, unabhängigen Lücken betroffen), stimmt der Bestand in 167 von
+172 Fällen (97 %); die 5 verbleibenden sind nicht auf `basis_ungeklaert`
+zurückzuführen (kein Leg im ganzen Lauf trägt dieses Flag — die Golden-Daten
+enthalten offenbar keinen Fall von `DI` ohne `costBasis`).
+
+**Geldtest (realisiertes Ergebnis je Jahr/Anlageklasse gegen die
+Jahressummen) wurde in diesem Re-Lauf NICHT durchgeführt** — eigener,
+größerer Aufwand (u. a. FX-Umrechnung nach der in OF-23 entschiedenen
+IB-Konvention, `FIFOPerformanceSummaryInBase` als Referenz über
+überlappende Perioden hinweg dedupliziert). Bleibt offen; AP-03 ist damit
+weiterhin nicht formal abgenommen.
