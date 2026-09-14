@@ -1,7 +1,7 @@
 ---
 titel: Buchungskurs (fxRateToBase) auf executions (OF-29)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: AP-02k
 aendert_tests: ja
 ---
