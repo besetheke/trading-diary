@@ -149,6 +149,11 @@ executions = Table(
     # wird — der Barausgleich steht hier, nicht im tradePrice (OF-25, AP-02k
     # Regel 6). Leer bei gewöhnlichen Ausführungen.
     Column("schlusskurs", ExactDecimal, nullable=True),
+    # Trade.fxRateToBase: der Kurs, zu dem IB die Ausführung in die
+    # Basiswährung bucht — Grundlage des IB-vergleichbaren Geldtests
+    # (OF-23, OF-29). Nullable: kein Standardwert, falls die Quelle es
+    # ausnahmsweise nicht liefert.
+    Column("buchungskurs", ExactDecimal, nullable=True),
     Column("roh_json", Text, nullable=False),
     Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
     Column("qualitaetsstufe", Text, nullable=False),

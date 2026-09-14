@@ -91,6 +91,7 @@ def _trade(
     order_time="",
     close_price=None,
     oci="",
+    fx_rate_to_base="1.0000",
 ) -> str:
     """Eine Trades-Zeile im echten Format (Regel 1: ``dateTime``, kein
     ``tradeTime``). ``zeitfeld`` ist die rohe Zeitattribut-Deklaration
@@ -101,6 +102,7 @@ def _trade(
     putcall_attr = f' putCall="{put_call}"' if put_call else ""
     strike_attr = f' strike="{strike}"' if strike is not None else ""
     close_price_attr = f' closePrice="{close_price}"' if close_price is not None else ""
+    fx_rate_attr = f' fxRateToBase="{fx_rate_to_base}"' if fx_rate_to_base is not None else ""
     trade_id_attr = f'tradeID="{trade_id}" ' if trade_id is not None else ""
     level_attr = f'levelOfDetail="{level}" ' if level is not None else ""
     return (
@@ -109,7 +111,8 @@ def _trade(
         f' conid="{conid}" symbol="{symbol}" underlyingSymbol="{symbol}"'
         f' assetCategory="{asset_category}"{putcall_attr}{strike_attr} buySell="{side}"'
         f' quantity="{menge}" tradePrice="{preis}" proceeds="0.00" ibCommission="-1.00"'
-        f' ibCommissionCurrency="USD" currency="USD" fxRateToBase="1.0000" netCash="0.00"'
+        f' ibCommissionCurrency="USD" currency="USD"{fx_rate_attr}'
+        f' netCash="0.00"'
         f" {zeitfeld} orderTime=\"{order_time}\" exchange=\"MEMX\" notes=\"{notes}\""
         f' openCloseIndicator="{oci}"{close_price_attr} />'
     )
@@ -572,5 +575,31 @@ def test_close_price_is_stored_on_executions(migrated_db, tmp_path):
     assert Decimal(str(mit_kurs)) == Decimal("42.50")
     ohne_kurs = _spaltenwert(
         migrated_db, "SELECT schlusskurs FROM executions WHERE exec_id = :e", e="900006002"
+    )
+    assert ohne_kurs in (None, "")
+
+
+def test_fx_rate_to_base_is_stored_on_executions(migrated_db, tmp_path):
+    """OF-29: ``fxRateToBase`` einer Ausführung landet in
+    ``executions.buchungskurs``, als ``Decimal`` — Grundlage des
+    IB-vergleichbaren Geldtests (OF-23). Fehlt das Feld, bleibt die Spalte
+    leer, kein Standardwert (Regel 10)."""
+    datei = _schreiben(
+        tmp_path,
+        "of29_buchungskurs.xml",
+        _statement(
+            trades=(
+                _trade(trade_id="900029001", fx_rate_to_base="0.9231")
+                + _trade(trade_id="900029002", fx_rate_to_base=None)
+            )
+        ),
+    )
+    import_flex_file(migrated_db, datei)
+    mit_kurs = _spaltenwert(
+        migrated_db, "SELECT buchungskurs FROM executions WHERE exec_id = :e", e="900029001"
+    )
+    assert Decimal(str(mit_kurs)) == Decimal("0.9231")
+    ohne_kurs = _spaltenwert(
+        migrated_db, "SELECT buchungskurs FROM executions WHERE exec_id = :e", e="900029002"
     )
     assert ohne_kurs in (None, "")
