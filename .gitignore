@@ -4,6 +4,7 @@ __pycache__/
 *.sqlite
 *.db
 fixtures/golden/
+files.zip
 
 *.egg-info/
 .venv/

@@ -1303,3 +1303,76 @@ weiterhin nicht gebaut. Bleibt offen: FX-Umrechnung nach der IB-Konvention
 anwenden, `FIFOPerformanceSummaryInBase` als Referenz über überlappende
 Perioden hinweg dedupliziert einlesen, und ob `fifoPnlRealized`/`mtmPnl`
 zusätzlich gebraucht werden.
+
+## OF-30 · Wird AP-09 (TDP-Import) überhaupt noch gebraucht?
+
+**Vorfrage vor allen Formatentscheidungen (15.09.2026, Nutzer).** Der
+TDP-Import war als Ersatz gedacht, falls Flex nicht weit genug zurückreicht.
+Deckt Flex die gesamte Kontohistorie ab, trägt TDP nichts bei — dann entfällt
+AP-09 als Importpaket, und die Entscheidungen unten werden nicht gebraucht.
+
+**Reichweitenprüfung, gemessen 15.09.2026** (alle Golden-Exporte des Kontos,
+nur Zählwerte und Monate):
+
+- Alle Exporte gehören zu einem einzigen Konto, `2022.xml` eingeschlossen.
+- Frühester Trade: **04/2022**. Früheste Kassenbuchung ebenfalls **04/2022**,
+  darunter drei Ein- oder Auszahlungen — das Konto beginnt in diesem Monat.
+- **0 von 19.329 Closed Lots** tragen ein Eröffnungsdatum vor 04/2022. IB
+  führt das echte Eröffnungsdatum am Lot unabhängig vom Exportzeitraum; kein
+  vor 04/2022 eröffneter Bestand wurde je geschlossen.
+- **Keine conid** beginnt mit einer Schließung (`openCloseIndicator = C`).
+- Transfers: nur 2 interne Kassenübertragungen (2025). Kein Wertpapierbestand
+  wurde von außen eingebucht.
+- Die Bestände an allen fünf Stichtagen 2022–2026 schließen mit dem Matching
+  ohne Abweichung (OF-21) — auch das spräche gegen einen unbekannten Vortrag.
+
+**Befund: Flex deckt die gesamte Kontohistorie ab.** Die Lücke aus OF-21
+(04/2023–12/2025) ist mit den Jahresexporten seit 13.09.2026 geschlossen.
+Offen ist nur die Gegenprobe auf TDP-Seite (frühestes Handelsdatum im
+TDP-Export); da das Konto erst 04/2022 beginnt, kann TDP für dieses Konto
+keine früheren Buchungen enthalten.
+
+**Vorschlag, Entscheidung Planer und Nutzer:** AP-09 als Importpaket
+streichen. Quelle 1 (Jahres-Flex) ist bereits der bestehende AP-02-Import;
+TDP bleibt höchstens unabhängige Zweitmeinung ohne gehärteten Parser. Die
+Planänderung vom 15.09.2026 und der Anhang `AP-09-anhang-tdp-format.md`
+wären dann entsprechend als Referenz zu kennzeichnen.
+
+### Nur falls AP-09 doch gebraucht wird — entschieden 15.09.2026 (Nutzer)
+
+1. **Fehlende `Contract Id`** (Aktienzeilen aus Zuteilung): aus der bereits
+   aus Flex bekannten Instrumententabelle über Symbol und Anlageklasse
+   füllen, wenn eindeutig; sonst mit leerem `conid` und Kennzeichen
+   `conid_ungeklaert` importieren. Weder ablehnen noch still leer lassen.
+2. **Fehlende Abwicklungsart:** Vertrag Regel 7 (AP-03) gilt nur für
+   Qualitätsstufe A. Für Altdaten die Abwicklungsart aus den
+   Flex-Instrumenten übernehmen, wo bekannt; sonst Kennzeichen
+   `abwicklung_unbekannt` — die Zeile bleibt in `executions`, nimmt aber
+   nicht an der Kettenbildung teil. Kein Abbruch.
+3. **Ereigniszeilen** (gemessen, der Anhang lag falsch): `P` trägt echte
+   Börsen (CBOE, CBOE2, SAPPHIRE) und ist ein Handel, wie OF-20.
+   `Ep`/`Ex`/`A` tragen durchgehend `--`. **Regel: Ereigniszeile heißt
+   `Exchange == '--'`**, nicht „`Notes` gefüllt“. Unbekannte Codes wie
+   `IA`, `FP`, `L` müssen damit nicht bekannt sein.
+4. **Konto:** konfigurierte Zuordnungstabelle TDP-Kennung → Kontonummer,
+   explizit gepflegt. Nicht ableiten — die Kennung ist eine
+   Anzeigeabkürzung ohne rechnerischen Bezug zur Kontonummer.
+5. **„Gleiche ID, anderer Inhalt“:** verglichen werden `conid`, Richtung,
+   Menge, Preis, Kommission, Währung und Ereignistyp — als `Decimal`, auf die
+   geringere Genauigkeit beider Quellen gerundet. **Zeitstempel bleiben außen
+   vor** (gemessen: 175 von 175 Zeilen weichen ab, TDP deutsche Ortszeit,
+   Flex Kontozeitzone; der Versatz wechselt wegen verschiedener
+   Umstellungstermine zwischen 6 und 5 Stunden). Bei Konflikt gewinnt Flex;
+   die TDP-Zeile wird protokolliert, nicht geschrieben.
+
+**Kleinere Punkte:** `Strike` ist bei Aktien `0,00000`, nicht leer.
+`Transfer = True` wird mit klarem Fehler abgelehnt. Wie `FOP` in TDP
+erscheint, bleibt offen, bis eine solche Zeile vorliegt — nicht erfunden.
+Bestätigte Zuordnungen: `Conversion Rate` → `buchungskurs`, `Currency` →
+Kommissionswährung, `Amount`/`Amount In Base` → nur `roh_json`.
+
+**Folgen für die Dokumente, falls AP-09 bleibt:** Der Anhang ist in Punkt 3
+(Ereigniserkennung) und beim `Strike` zu korrigieren; `AP-09.md` ist auf den
+Anhang und den Modellsplit umzustellen (Parser gegen synthetische Fixtures:
+günstiges Modell; Abnahme gegen Echtdaten: starkes Modell). Der Parser hängt
+nicht von AP-03 ab, nur die Abnahme über Jahressummen.
