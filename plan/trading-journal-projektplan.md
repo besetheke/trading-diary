@@ -232,8 +232,15 @@ niemals blockieren.
 ## 5. Datenmodell (Skizze)
 
 **Rohdaten (nie verändert)**
-- `import_runs` — id, quelle (flex/legacy_pdf/legacy_csv), datei_hash, importiert_am,
-  zeitraum_von, zeitraum_bis, **qualitaetsstufe** (A/B/C), zeilen_gesamt, zeilen_neu
+- `import_runs` — id, quelle, datei_hash, importiert_am, zeitraum_von,
+  zeitraum_bis, **qualitaetsstufe** (A/B/C), **realized_pnl_verfuegbar**,
+  zeilen_gesamt, zeilen_neu
+
+  **`realized_pnl_verfuegbar` ist false, sobald der Export Modell-Attribute
+  trägt.** IB nullt in diesem Fall jedes Realized-P&L-Feld. Jeder Vergleich
+  verweigert die Nutzung dieser Werte. Der Befund als Notiz in einer Textdatei
+  hat nicht gewirkt — als Datenfeld kann derselbe Fehler nicht wiederkehren,
+  unabhängig davon, wer das Vergleichsskript schreibt.
 - `executions` — **exec_id (PK) = `tradeID` aus dem Flex-Export**, **transaction_id**
   (Feld `transactionID`, sekundär, für Abstimmung mit dem Broker), konto, conid,
   symbol, sec_type, expiry,
@@ -617,6 +624,18 @@ Fremdwährungs-conids bei der Umrechnung — bei letzteren ist zuerst zu prüfen
 es Positionen mit mehreren Schließungen zu unterschiedlichen Kursen sind; wenn ja,
 wird die Umrechnungsregel verfeinert statt die Fälle geduldet.
 
+*Die Prämienregel gehört zu AP-04.* Sie setzt `assignment_links` voraus, die dort
+entstehen. AP-03 kann ohne sie abgenommen werden — unter einer Bedingung: **die
+dadurch verbleibende Differenz wird bei der Abnahme als Zahl festgeschrieben**, je
+Instrument und je Jahr. Die Abnahme von AP-04 enthält dann das Kriterium, dass
+genau diese Zahl auf null geht. Eine bezifferte Schuld ist etwas anderes als ein
+offener Punkt.
+
+*Gleichstand bei identischem Zeitstempel.* Der FIFO-Gleichstand wird nach
+`tradeID` aufsteigend aufgelöst. `tradeID` ist innerhalb eines Handelstages
+monoton, und IBs Zuordnung folgt derselben Ordnung. Damit wird der Abgleich
+zeilengenau statt nur summengenau, und Regressionen fallen je Ausführung auf.
+
 *Reihenfolge:* Jahresexporte ziehen, Kapitalmaßnahmen anwenden, Bestandsabgleich
 wiederholen, Jahressummen prüfen. Keine Abnahme vor diesem Durchlauf.
 Ein Aktiensplit im Testdatensatz wird korrekt verarbeitet. Mindestens 35 Tests.
@@ -723,25 +742,21 @@ Positionsliste zeigt Einzeltrades ohne Roll gleichrangig neben gerollten Ketten.
 Die Detailansicht zeigt alle Structures einer Kampagne in zeitlicher Ordnung mit
 Einzel-P&L und kumuliertem Ergebnis.
 
-### AP-09 · Legacy-Import ab April 2022
-**Ziel:** Historie erschließen. Quellenpriorität nach Ergebnis von AP-00:
+### AP-09 · Legacy-Import — GESTRICHEN
 
-1. **Jahresweise Flex- oder Activity-Statements** aus dem Broker-Portal →
-   Qualitätsstufe A oder B. Kein neuer Parser nötig, AP-02 wird wiederverwendet.
-2. **Trading-Diary-Pro-Vollexport** → Qualitätsstufe B. Die vollständige
-   Formatspezifikation steht in `auftraege/AP-09-anhang-tdp-format.md`:
-   27 Spalten plus eine namenlose Leerspalte, CRLF, UTF-8 ohne BOM, deutsches
-   Zahlenformat. **Nur die Variante mit eingeblendeten Spalten ist brauchbar** —
-   allein sie trägt `Transaction ID`, den Join-Schlüssel zum Flex-Bestand.
-   Kettenbildung über die Zeitfenster-Heuristik, nicht über Order-IDs.
-3. **PDF-Kontoauszüge** → Qualitätsstufe C, nur wenn 1 und 2 ausfallen. Keine
-   automatische Chain-Bildung aus C-Daten. Layoutvarianten je Jahr einzeln testen.
+**Grund:** Der Flex-Export deckt die gesamte Kontohistorie ab. Gemessen:
+Kontoeröffnung April 2022, erste Einzahlung und erster Trade im selben Monat,
+null von 19.329 Closed Lots mit früherem Eröffnungsdatum, keine eingehenden
+Positionsübertragungen. Ein zweiter Datenpfad mit niedrigerer Qualitätsstufe
+hätte nur Wartungsaufwand erzeugt.
 
-**Abnahme:** Jahressummen aus dem Import stimmen mit den Jahresendsalden der
-Auszüge überein. Die Qualitätsstufe jeder Zeile ist in der Auswertung sichtbar und
-filterbar. Bei Nutzung von Quelle 2: Überlappungszeitraum mit Flex-Daten wird
-importiert und beide Quellen werden auf Abweichungen verglichen, bevor die
-Altdaten übernommen werden.
+Damit entfallen auch der PDF-Import und die Qualitätsstufen B und C in der
+Praxis — alle Daten stammen aus Flex und tragen Stufe A. Die Stufen bleiben im
+Schema erhalten, weil sie nichts kosten und eine künftige Zweitquelle sie
+brauchen würde.
+
+Die Formatspezifikation `auftraege/AP-09-anhang-tdp-format.md` bleibt als
+Dokumentation erhalten, ohne zugehöriges Paket.
 
 ### AP-10 · Steuerliche Auswertung
 **Ziel:** Trennung nach Aktien und Termingeschäften, Vorbereitung Anlage KAP.
@@ -766,6 +781,12 @@ Zerlegung der Differenz in Kommission, Slippage, Roll-Entscheidungen und Timing.
 der Abweichung vor, deren Einzelposten sich zur Gesamtdifferenz aufaddieren.
 
 ### AP-13 · OptionApp-Abgleich
+
+**Zweigeteilt.** Der Parser hängt an nichts und kann jederzeit gebaut werden
+(günstiges Modell, synthetische Fixtures, Format vollständig spezifiziert in
+§6.1). Verknüpfung und Ergebnisabgleich brauchen die Ketten aus AP-04 und bleiben
+beim starken Modell.
+
 **Ziel:** Den OA-Trade-Export einlesen und mit den Ketten verknüpfen, um Strategie,
 Endzustand und ein zweites Ergebnis als Referenz zu erhalten.
 **Umfang:** Parser für den Export (deutsches Zahlenformat, `Profit` mit
@@ -811,7 +832,7 @@ Gehört in die `CLAUDE.md` des Repos.
 | M2 | AP-03, AP-04 | Ketten korrekt erkannt, Golden-Test grün |
 | M3 | AP-05, AP-06 | Die drei Kernfragen aus §1 per CLI beantwortbar |
 | M4 | AP-07, AP-08 | Bedienbares Tool |
-| M5 | AP-09 bis AP-13 | Historie, Steuer, Absichtserfassung, OptionApp-Abgleich |
+| M5 | AP-10 bis AP-13 | Steuer, Absichtserfassung, OptionApp-Abgleich (AP-09 gestrichen) |
 
 **M0 ist weitgehend erledigt.** Die Auswertung des Referenzexports hat den
 Gruppierungsschlüssel geliefert (§6.1) und die Soll-Konfiguration festgelegt
@@ -886,7 +907,7 @@ Modellwahl aufzuhängen. Verifikation ersetzt Vertrauen.
 | AP-02, AP-03 | günstig | eng umrissen, hart testbar |
 | AP-04, AP-05 | stark | Urteilsfragen, Mehrdeutigkeit, echte Kontodaten als Golden-Test |
 | AP-06 | stark | Kennzahlendefinitionen müssen stimmen |
-| AP-07 bis AP-10 | günstig | Fleißarbeit gegen feste Verträge |
+| AP-07, AP-08, AP-10, AP-13 Parser | günstig | Fleißarbeit gegen feste Verträge |
 | AP-11 bis AP-13 | stark | Schnittstellen zu bestehenden Systemen |
 
 Die Trennung fällt mit der Datenschutzgrenze zusammen: die Pakete beim
