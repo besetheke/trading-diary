@@ -90,6 +90,10 @@ import_runs = Table(
     Column("zeitraum_bis", Date, nullable=True),
     # A = Flex-XML mit Order-IDs, B = strukturierter Auszug, C = PDF-extrahiert
     Column("qualitaetsstufe", Text, nullable=False),
+    # False, sobald der Export Modell-Attribute trägt: IB nullt dann jedes
+    # Realized-P&L-Feld (OF-21, OF-24). Jeder Vergleich muss die Werte eines
+    # solchen Laufs verweigern — als Datenfeld, nicht als Notiz (Plan §5).
+    Column("realized_pnl_verfuegbar", Boolean, nullable=False, server_default="1"),
     Column("zeilen_gesamt", Integer, nullable=False),
     Column("zeilen_neu", Integer, nullable=False),
     CheckConstraint(

@@ -92,6 +92,7 @@ def _trade(
     close_price=None,
     oci="",
     fx_rate_to_base="1.0000",
+    model=None,
 ) -> str:
     """Eine Trades-Zeile im echten Format (Regel 1: ``dateTime``, kein
     ``tradeTime``). ``zeitfeld`` ist die rohe Zeitattribut-Deklaration
@@ -103,6 +104,7 @@ def _trade(
     strike_attr = f' strike="{strike}"' if strike is not None else ""
     close_price_attr = f' closePrice="{close_price}"' if close_price is not None else ""
     fx_rate_attr = f' fxRateToBase="{fx_rate_to_base}"' if fx_rate_to_base is not None else ""
+    model_attr = f' model="{model}"' if model else ""
     trade_id_attr = f'tradeID="{trade_id}" ' if trade_id is not None else ""
     level_attr = f'levelOfDetail="{level}" ' if level is not None else ""
     return (
@@ -111,7 +113,7 @@ def _trade(
         f' conid="{conid}" symbol="{symbol}" underlyingSymbol="{symbol}"'
         f' assetCategory="{asset_category}"{putcall_attr}{strike_attr} buySell="{side}"'
         f' quantity="{menge}" tradePrice="{preis}" proceeds="0.00" ibCommission="-1.00"'
-        f' ibCommissionCurrency="USD" currency="USD"{fx_rate_attr}'
+        f' ibCommissionCurrency="USD" currency="USD"{fx_rate_attr}{model_attr}'
         f' netCash="0.00"'
         f" {zeitfeld} orderTime=\"{order_time}\" exchange=\"MEMX\" notes=\"{notes}\""
         f' openCloseIndicator="{oci}"{close_price_attr} />'
@@ -577,6 +579,37 @@ def test_close_price_is_stored_on_executions(migrated_db, tmp_path):
         migrated_db, "SELECT schlusskurs FROM executions WHERE exec_id = :e", e="900006002"
     )
     assert ohne_kurs in (None, "")
+
+
+def test_model_export_marks_realized_pnl_as_unavailable(migrated_db, tmp_path):
+    """OF-21/OF-24: Trägt der Export Modell-Attribute, schaltet IB jedes Feld
+    zum realisierten Ergebnis ab — ``fifoPnlRealized`` steht dann überall auf
+    0. Der Importlauf hält das als Datenfeld fest
+    (``import_runs.realized_pnl_verfuegbar``), damit kein Vergleich diese
+    Nullen als Referenz nimmt. Ein Export ohne Modellzeilen bleibt wahr."""
+    ohne_modell = _schreiben(
+        tmp_path,
+        "of21_ohne_modell.xml",
+        _statement(trades=_trade(trade_id="900021001")),
+    )
+    mit_modell = _schreiben(
+        tmp_path,
+        "of21_mit_modell.xml",
+        _statement(trades=_trade(trade_id="900021002", model="Independent")),
+    )
+    import_flex_file(migrated_db, ohne_modell)
+    import_flex_file(migrated_db, mit_modell)
+
+    erster = _spaltenwert(
+        migrated_db,
+        "SELECT realized_pnl_verfuegbar FROM import_runs ORDER BY id LIMIT 1",
+    )
+    zweiter = _spaltenwert(
+        migrated_db,
+        "SELECT realized_pnl_verfuegbar FROM import_runs ORDER BY id DESC LIMIT 1",
+    )
+    assert bool(erster) is True
+    assert bool(zweiter) is False
 
 
 def test_fx_rate_to_base_is_stored_on_executions(migrated_db, tmp_path):
