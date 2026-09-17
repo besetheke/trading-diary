@@ -1,7 +1,7 @@
 ---
 titel: FIFO-Gleichstand einfrieren (OF-24)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: AP-03vo
 aendert_tests: ja
 ---
