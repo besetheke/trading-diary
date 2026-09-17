@@ -979,6 +979,12 @@ Modell-Export und der echte Wert im modellfreien. Das Skript liest die
 Referenz jetzt ausschließlich aus modellfreien Zeilen (29.939 Modellzeilen
 übergangen, keine Ausführung bleibt dadurch ohne Referenz).
 
+**Damit derselbe Fehler nicht wiederkehren kann**, steht die Eigenschaft
+seit AP-02m nicht mehr nur hier, sondern als Datenfeld am Importlauf:
+`import_runs.realized_pnl_verfuegbar` ist falsch, sobald der Export
+Modell-Attribute trägt (Plan §5, Vertrag AP-02 Regel 8). Ein Befund in einer
+Textdatei wirkt nicht — genau das ist hier passiert.
+
 **Damit bleibt genau ein großes Muster übrig — das schon entschiedene.**
 Verfall und gewöhnlicher Optionshandel schließen praktisch vollständig
 (99,4 % bis 100 %). Die Abweichungen sitzen bei Zuteilung, Ausübung und den

@@ -138,6 +138,9 @@ class _DateiInhalt:
     instruments: dict[int, dict] = field(default_factory=dict)
     # Gezählte, aber nicht gebuchte Zeilen (SUMMARY/CLOSED_LOT, Regel 3).
     nicht_gebuchte_zeilen: int = 0
+    # Trägt mindestens eine Zeile ein Modell-Attribut? Dann hat IB jedes Feld
+    # zum realisierten Ergebnis abgeschaltet (OF-21, AP-02k Regel 8).
+    traegt_modell: bool = False
     zeitraum_von: date | None = None
     zeitraum_bis: date | None = None
 
@@ -611,6 +614,13 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
     if not statements:
         raise ValueError(f"{datei}: kein FlexStatement gefunden")
 
+    # Regel 8: Sobald eine einzige Zeile ein Modell trägt, hat IB für die
+    # ganze Abfrage jedes Realized-P&L-Feld genullt (OF-21). Maßgeblich ist
+    # der Export, nicht die Zeile — ein Lauf ist entweder brauchbar oder nicht.
+    inhalt.traegt_modell = any(
+        (element.get("model") or "").strip() for element in wurzel.iter()
+    )
+
     gesehene_exec_ids: set[str] = set()
     for statement in statements:
         konto = (statement.get("accountId") or "").strip()
@@ -738,6 +748,9 @@ def _import_run_anlegen(verbindung, datei_hash: str, inhalt: _DateiInhalt) -> in
             zeitraum_von=inhalt.zeitraum_von,
             zeitraum_bis=inhalt.zeitraum_bis,
             qualitaetsstufe="A",
+            # Modell-Exporte tragen keine brauchbaren Realized-P&L-Werte
+            # (OF-21, Regel 8); jeder Vergleich muss sie verweigern.
+            realized_pnl_verfuegbar=not inhalt.traegt_modell,
             zeilen_gesamt=len(inhalt.executions),
             zeilen_neu=0,
         )
