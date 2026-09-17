@@ -1008,6 +1008,19 @@ Matching die `exec_id` über die FIFO-Reihenfolge, während IB anders zuordnen
 kann. Ausgeschlossen sind Teilschließungen (0 Fälle) und Ereigniszeilen als
 Eröffnung (0).
 
+**Gegenprobe zur Gleichstandsregel (17.09.2026): sie ist bereits erfüllt und
+ändert nichts.** Der Plan hält fest, der FIFO-Gleichstand sei nach `tradeID`
+aufsteigend aufzulösen, weil IBs Zuordnung derselben Ordnung folge. Gemessen:
+`exec_id` **ist** die `tradeID` (AP-02a), und das Matching sortiert bei
+gleicher Handelszeit genau danach. Die `tradeID`s sind 9- oder 10-stellig, in
+**allen 34** Fällen sind die beteiligten jedoch gleich lang — lexikografische
+und numerische Ordnung fallen damit zusammen. Ein Lauf mit erzwungen
+numerischer Sortierung (nullgepolsterte `exec_id`) liefert dieselbe
+Trefferquote, 14.612 von 15.672, **Differenz null Ausführungen**. Die Annahme
+„IB folgt derselben Ordnung" ist damit für diese Daten **nicht bestätigt**;
+die abweichende Zuordnung hat eine andere, noch unbekannte Ursache. Der
+Plansatz sollte entsprechend abgeschwächt werden.
+
 **Bewertung:** Kein Geld geht verloren oder entsteht; betroffen ist allein,
 welchem Los eine Schließung zugerechnet wird. Für den Geldtest je Jahr und
 Anlageklasse ist das folgenlos, für eine Leg-genaue Darstellung nicht. Eine
