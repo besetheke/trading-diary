@@ -899,6 +899,32 @@ def test_reiner_zugang_mit_kostenangabe_eroeffnet_zu_deren_stueckpreis():
     assert leg.basis_ungeklaert is False
 
 
+def test_fifo_gleichstand_wird_nach_exec_id_aufgeloest():
+    """AP-03vp (OF-24): Bei gleicher Handelszeit entscheidet die exec_id
+    (= tradeID) aufsteigend, welches Los zuerst geschlossen wird. G1 (5.00)
+    liegt vor G2 (7.00), also schließt G3 gegen G1:
+    (9.00 - 5.00) * 1 * 100 = 400.00, Kommission -1.00 + -1.00 = -2.00.
+    G2 bleibt offen. Eingefroren, nicht hergeleitet — IBs eigene Regel für
+    den Gleichstand ist unbekannt."""
+    ergebnis = bilde("fifo_gleichstand")
+    leg = leg_von(ergebnis, "G1", "G3")
+    assert leg.brutto_pnl == Decimal("400.00")
+    assert leg.kommission_gesamt == Decimal("-2.00")
+    offen = leg_von(ergebnis, "G2", None)
+    assert offen.offen_ja_nein is True
+    assert offen.menge == Decimal("1")
+
+
+def test_fifo_gleichstand_andere_reihenfolge_waere_ein_anderes_ergebnis():
+    """Gegenprobe: Würde G2 zuerst geschlossen, wären es
+    (9.00 - 7.00) * 1 * 100 = 200.00 — dieselbe Summe je conid, aber ein
+    anderes Ergebnis je Leg."""
+    ergebnis = bilde("fifo_gleichstand")
+    assert leg_von(ergebnis, "G1", "G3").brutto_pnl != Decimal("200.00")
+    assert [leg for leg in ergebnis.legs if leg.open_exec_id == "G2"
+            and leg.close_exec_id == "G3"] == []
+
+
 def test_reiner_zugang_ohne_kostenangabe_ist_basis_ungeklaert():
     # Ohne kosten_neu öffnet das Lot zu 0.00 — aber markiert, keine stille
     # Nullbasis. Brutto: (12.00 - 0.00) * 5 * 1 = 60.00

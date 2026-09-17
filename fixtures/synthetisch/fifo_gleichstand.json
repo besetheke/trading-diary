@@ -1,0 +1,63 @@
+{
+  "fall": "fifo_gleichstand",
+  "beschreibung": "Einfrierfall AP-03vp (OF-24): zwei Eroeffnungen mit identischer Handelszeit auf derselben conid, danach eine Schliessung. Welches Los zuerst geschlossen wird, entscheidet bei Gleichstand die exec_id (= tradeID, AP-02a) in aufsteigender Ordnung. IBs eigene Regel dafuer ist unbekannt und wird nicht geraten; dieser Fall haelt das heutige Verhalten fest, damit es nicht unbemerkt wandert. G1 BUY 1 @ 5.00 und G2 BUY 1 @ 7.00 liegen sekundengleich, G3 SELL 1 @ 9.00 schliesst einen der beiden. Multiplikator 100, USD.",
+  "instruments": [
+    {
+      "conid": 500050,
+      "symbol": "IDX6 300C",
+      "underlying": "IDX6",
+      "asset_class": "OPT",
+      "expiry": "2026-06-19",
+      "strike": "300",
+      "right": "C",
+      "multiplikator": "100",
+      "tickwert": null,
+      "waehrung": "USD"
+    }
+  ],
+  "kapitalmassnahmen": [],
+  "executions": [
+    {
+      "exec_id": "G1",
+      "konto": "U7777777",
+      "conid": 500050,
+      "symbol": "IDX6 300C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "5.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-01 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "G2",
+      "konto": "U7777777",
+      "conid": 500050,
+      "symbol": "IDX6 300C",
+      "sec_type": "OPT",
+      "side": "BUY",
+      "menge": "1",
+      "preis": "7.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-01 15:30:00",
+      "ereignistyp": "trade"
+    },
+    {
+      "exec_id": "G3",
+      "konto": "U7777777",
+      "conid": 500050,
+      "symbol": "IDX6 300C",
+      "sec_type": "OPT",
+      "side": "SELL",
+      "menge": "1",
+      "preis": "9.00",
+      "waehrung": "USD",
+      "kommission": "-1.00",
+      "handelszeit": "2026-06-02 15:30:00",
+      "ereignistyp": "trade"
+    }
+  ]
+}
