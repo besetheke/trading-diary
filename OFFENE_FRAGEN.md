@@ -953,37 +953,68 @@ Basiswert aufsummiert — ein strengerer, feinerer Maßstab, die Zahlen sind
 mit denen oben deshalb nicht direkt vergleichbar (Abweichungen können sich
 über die Ausführungen eines Basiswerts hinweg aufheben, wenn je Basiswert
 aufsummiert wird). Von 15.672 vergleichbaren, schließenden Ausführungen
-(Kapitalmaßnahmen-`conid`s ausgeklammert, s. OF-27) treffen 9.270 genau
-(±0,02 Lokalwährung), 59,2 %. Aufgeschlüsselt:
+(Kapitalmaßnahmen-`conid`s ausgeklammert, s. OF-27) treffen **14.612 genau
+(±0,02 Lokalwährung), 93,2 %**. Aufgeschlüsselt:
 
 | Anlageklasse/Ereignistyp/Underlying zuteilungsberührt | Trefferquote |
 |---|---|
-| OPT/`assignment`/ja | 23,8 % |
-| OPT/`exercise`/ja | 76,4 % |
-| OPT/`expiry`/nein | 64,9 % |
-| OPT/`expiry`/ja | 52,8 % |
-| OPT/`trade`/nein | 78,4 % |
-| OPT/`trade`/ja | 68,3 % |
-| STK/`assignment`/ja | 2,9 % |
-| STK/`trade`/ja | 1,7 % |
+| OPT/`expiry`/nein | 228/228 — 100 % |
+| OPT/`expiry`/ja | 5.557/5.558 — 100 % |
+| OPT/`trade`/ja | 7.679/7.708 — 99,6 % |
+| OPT/`trade`/nein | 617/621 — 99,4 % |
+| OPT/`exercise`/ja | 233/259 — 90,0 % |
+| OPT/`assignment`/ja | 268/881 — 30,4 % |
+| STK/`trade`/ja | 4/175 — 2,3 % |
+| STK/`assignment`/ja | 0/204 — 0 % |
 
-Bestätigt das Muster oben (STK und `assignment` treffen am seltensten — die
-Prämie steckt bei IB in der Aktienbasis, das Matching realisiert sie an der
-Option, **Auflage aus der Entscheidung oben ist nach wie vor nicht
-umgesetzt**). Aber: Selbst OPT-`trade` an Basiswerten **ohne** jede
-Zuteilung/Ausübung trifft nur zu 78,4 %, nicht nahe 100 % — ein Rest, den
-das Prämien-Muster nicht erklärt. **Noch ohne Ursache, nicht weiter
-untersucht** (Aufwand für diese Runde nicht gerechtfertigt). Mögliche
-Kandidaten, keiner geprüft: Rundungsdifferenzen bei `buchungskurs`
-(±0,02 Lokalwährung ist eine grobe Toleranz, keine hergeleitete), IBs eigene
-FIFO-Reihenfolge bei gleichzeitigen Ausführungen, oder `fifoPnlRealized`
-selbst folgt einer anderen Kostenbasis-Konvention als das Matching in
-Randfällen.
+**Korrektur einer ersten, zu pessimistischen Messung (17.09.2026).** Die
+erste Fassung dieses Re-Laufs meldete 59,2 % und einen großen, ungeklärten
+Rest auch bei unberührten Optionsgeschäften. Beides war ein Fehler des
+Abgleichsskripts, nicht der Engine: Die Referenz `fifoPnlRealized` wurde je
+`tradeID` aus der zuerst gelesenen Datei genommen. In den Exporten mit
+`model="Independent"` schaltet IB aber alle Felder zum realisierten Ergebnis
+ab (OF-21) — dort steht überall 0. Gemessen: 14.009 `tradeID`s kommen in
+beiden Exportvarianten vor, und **in jedem einzelnen Fall** steht die 0 im
+Modell-Export und der echte Wert im modellfreien. Das Skript liest die
+Referenz jetzt ausschließlich aus modellfreien Zeilen (29.939 Modellzeilen
+übergangen, keine Ausführung bleibt dadurch ohne Referenz).
+
+**Damit bleibt genau ein großes Muster übrig — das schon entschiedene.**
+Verfall und gewöhnlicher Optionshandel schließen praktisch vollständig
+(99,4 % bis 100 %). Die Abweichungen sitzen bei Zuteilung, Ausübung und den
+daraus entstandenen Aktien: `STK`/`assignment` 0 von 204, `STK`/`trade` 4 von
+175, `OPT`/`assignment` 268 von 881, dazu 26 `exercise`-Zeilen, bei denen IB
+ein realisiertes Ergebnis von **0** meldet, obwohl die Option erlischt. Das
+ist dieselbe Prämie, die IB in die Aktienbasis verrechnet und das Matching an
+der Option realisiert — **die Auflage aus der Entscheidung oben ist nach wie
+vor nicht umgesetzt.**
+
+**Rest außerhalb des Prämienmusters: 34 Ausführungen** (33 `trade`,
+1 `expiry`) auf 18 `conid`s, alle mit einem IB-Wert ungleich 0.
+
+**Das ist eine Verteilungs-, keine Betragsdifferenz — gemessen 17.09.2026.**
+Bei **16 der 18 betroffenen `conid`s heben sich die Abweichungen exakt zu 0
+auf** (±0,02): Über das Instrument gerechnet stimmt das realisierte Ergebnis
+mit IB überein, nur die Zuordnung auf die einzelnen Schließungen ist eine
+andere. Dazu passt: 27 der 34 Fälle haben auf derselben `conid`
+**zeitgleiche Ausführungen**, und bei gleichem Zeitstempel entscheidet im
+Matching die `exec_id` über die FIFO-Reihenfolge, während IB anders zuordnen
+kann. Ausgeschlossen sind Teilschließungen (0 Fälle) und Ereigniszeilen als
+Eröffnung (0).
+
+**Bewertung:** Kein Geld geht verloren oder entsteht; betroffen ist allein,
+welchem Los eine Schließung zugerechnet wird. Für den Geldtest je Jahr und
+Anlageklasse ist das folgenlos, für eine Leg-genaue Darstellung nicht. Eine
+Vereinheitlichung der Reihenfolge bei Gleichstand wäre nur sinnvoll, wenn IBs
+Regel dafür bekannt ist — sie ist es nicht, und geraten wird sie nicht
+(Regel 10). Die zwei `conid`s ohne Ausgleich bleiben offen.
 
 **Vor der nächsten Runde am Geldtest zu klären:** ob die schon
 **entschiedene** Auflage („Prämie je Zuteilung als eigener Wert speichern“)
-umgesetzt wird, bevor der obige Rest weiter zerlegt wird — ein Großteil der
-Abweichungen (STK, `assignment`) geht vermutlich darin auf.
+umgesetzt wird, bevor der kleine Rest weiter zerlegt wird — der große Teil
+der Abweichungen geht nachweislich darin auf. Die Auflage braucht die
+Verknüpfung Option ↔ Aktienlieferung (`assignment_links`) und gehört damit
+zu AP-04, nicht zu AP-03.
 
 ## OF-25 · Barausgleich bei Zuteilung und Ausübung fehlt im Matching
 

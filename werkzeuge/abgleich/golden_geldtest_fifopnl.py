@@ -37,14 +37,25 @@ DATEIEN = sorted(GOLDEN.glob("U8443617_*.xml"))
 TOLERANZ = Decimal("0.02")
 
 
-def ib_fifo_pnl_je_trade() -> dict[str, Decimal]:
-    """``fifoPnlRealized`` je ``tradeID``, aus allen Golden-Dateien.
+def ib_fifo_pnl_je_trade() -> tuple[dict[str, Decimal], int]:
+    """``fifoPnlRealized`` je ``tradeID`` — **nur aus modellfreien Exporten**.
 
-    Roh am ``Trade``-Element (nicht periodenaggregiert) — überlappende
-    Exporte derselben ``tradeID`` liefern denselben Wert, "setdefault"
-    dedupliziert sie ohne Konflikt.
+    IB schaltet alle Felder zum realisierten Ergebnis ab, sobald ein Modell
+    einbezogen ist (OF-21): In den Exporten mit ``model="Independent"`` steht
+    an jeder Zeile ``fifoPnlRealized="0"``. Gemessen 17.09.2026: 14.009
+    ``tradeID``s kommen in beiden Varianten vor, und **in jedem einzelnen
+    Fall** steht die 0 im Modell-Export und der echte Wert im modellfreien.
+    Eine Deduplizierung nach „erste Datei gewinnt" nimmt daher massenhaft
+    Nullen als Referenz und erzeugt Scheinabweichungen (Trefferquote 63,9 %
+    statt 93,2 %).
+
+    Zeilen mit gesetztem ``model`` werden deshalb übergangen. Eine
+    Ausführung, die es nur dort gibt, hat keine Referenz und wird nicht
+    verglichen — das ist ehrlicher, als sie gegen eine abgeschaltete 0 zu
+    stellen. Rückgabe: Werte und die Zahl der übergangenen Modellzeilen.
     """
     werte: dict[str, Decimal] = {}
+    uebergangen = 0
     for datei in DATEIEN:
         root = ET.parse(datei).getroot()
         for el in root.iter("Trade"):
@@ -52,9 +63,12 @@ def ib_fifo_pnl_je_trade() -> dict[str, Decimal]:
             wert = el.attrib.get("fifoPnlRealized")
             if not tid or wert in (None, ""):
                 continue
+            if (el.attrib.get("model") or "").strip():
+                uebergangen += 1
+                continue
             with contextlib.suppress(InvalidOperation):
                 werte.setdefault(tid, Decimal(wert))
-    return werte
+    return werte, uebergangen
 
 
 def main() -> None:
@@ -75,7 +89,7 @@ def main() -> None:
             continue
         eigen_je_exec[leg.close_exec_id] += leg.brutto_pnl + leg.kommission_gesamt
 
-    ib_pnl = ib_fifo_pnl_je_trade()
+    ib_pnl, modellzeilen_uebergangen = ib_fifo_pnl_je_trade()
 
     exec_conid = {r["exec_id"]: r["conid"] for r in exec_rows}
     exec_asset_class = {
@@ -91,12 +105,14 @@ def main() -> None:
 
     treffer = 0
     fehltreffer = 0
+    ohne_referenz = 0
     kombi_treffer: dict[str, int] = defaultdict(int)
     kombi_fehltreffer: dict[str, int] = defaultdict(int)
 
     for exec_id, eigen_lokal in eigen_je_exec.items():
         ib_wert = ib_pnl.get(exec_id)
         if ib_wert is None:
+            ohne_referenz += 1
             continue
         klasse = exec_asset_class.get(exec_id, "?")
         typ = exec_ereignistyp.get(exec_id, "?")
@@ -111,6 +127,9 @@ def main() -> None:
             kombi_fehltreffer[schluessel] += 1
 
     vergleichbar = treffer + fehltreffer
+    print(f"übergangene Modellzeilen (fifoPnlRealized abgeschaltet, OF-21): "
+          f"{modellzeilen_uebergangen}")
+    print(f"schließende Ausführungen ohne Referenzwert: {ohne_referenz}")
     print(f"vergleichbare Ausführungen: {vergleichbar}")
     print(f"  Treffer (±0.02 Lokalwährung, Brutto+Kommission): {treffer} "
           f"({treffer / vergleichbar * 100:.1f} %)" if vergleichbar else "  keine")
