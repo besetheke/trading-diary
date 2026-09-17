@@ -1,7 +1,7 @@
 ---
 titel: realized_pnl_verfuegbar am Importlauf (OF-21, OF-24)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: AP-02l
 aendert_tests: ja
 ---
