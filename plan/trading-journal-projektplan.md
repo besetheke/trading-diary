@@ -728,11 +728,12 @@ Einzel-P&L und kumuliertem Ergebnis.
 
 1. **Jahresweise Flex- oder Activity-Statements** aus dem Broker-Portal →
    Qualitätsstufe A oder B. Kein neuer Parser nötig, AP-02 wird wiederverwendet.
-2. **Trading-Diary-Pro-Vollexport** → Qualitätsstufe B. Struktur ist bekannt
-   (24 Spalten, deutsches Zahlenformat mit Komma als Dezimaltrenner und Punkt als
-   Tausendertrenner, Datumsformat `TT.MM.JJJJ hh:mm:ss`, Ereigniscodes in der
-   Spalte `Notes`, `Contract Id` = conid, `Account` als Kurzkennung). Kettenbildung
-   über die Zeitfenster-Heuristik, nicht über Order-IDs.
+2. **Trading-Diary-Pro-Vollexport** → Qualitätsstufe B. Die vollständige
+   Formatspezifikation steht in `auftraege/AP-09-anhang-tdp-format.md`:
+   27 Spalten plus eine namenlose Leerspalte, CRLF, UTF-8 ohne BOM, deutsches
+   Zahlenformat. **Nur die Variante mit eingeblendeten Spalten ist brauchbar** —
+   allein sie trägt `Transaction ID`, den Join-Schlüssel zum Flex-Bestand.
+   Kettenbildung über die Zeitfenster-Heuristik, nicht über Order-IDs.
 3. **PDF-Kontoauszüge** → Qualitätsstufe C, nur wenn 1 und 2 ausfallen. Keine
    automatische Chain-Bildung aus C-Daten. Layoutvarianten je Jahr einzeln testen.
 
