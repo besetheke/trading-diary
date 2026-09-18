@@ -1,7 +1,7 @@
 ---
 titel: Leerzeile im Importblock von test_ingest_optionapp.py (OF-32)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: AP-13p
 aendert_tests: ja
 ---

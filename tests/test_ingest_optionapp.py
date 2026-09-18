@@ -27,7 +27,6 @@ from sqlalchemy import select
 pytest.importorskip("ingest.optionapp")
 
 from ingest.optionapp import import_optionapp_file  # noqa: E402
-
 from journal.db import create_db_engine  # noqa: E402
 from journal.schema import (  # noqa: E402
     import_runs,
