@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis für den OptionApp-Parser (AP-13, Teil 1)
 modell: stark
-status: entwurf
+status: fertig
 abhaengig_von: -
 aendert_tests: ja
 ---
