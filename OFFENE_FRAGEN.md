@@ -1455,3 +1455,42 @@ Die Datei ist Abnahmebasis und für das Umsetzungspaket unveränderlich (Regel
 `locker`): die Leerzeile in Zeile 30 löschen — reine Formatierung, es ändert
 sich keine Erwartung.
 
+**Erledigt 18.09.2026 (AP-13pk).** Leerzeile entfernt, `ruff check .`
+sauber, alle 149 Tests unverändert grün.
+
+## OF-33 · AP-03: Vollständigkeitsprüfung gegen `FIFOPerformanceSummaryInBase`
+
+**Befund 18.09.2026**, zweite monetäre Abnahmehälfte aus Plan §4
+(„Vollständigkeit, je Jahr"). Details und Ergebnis stehen in `AP-03.md`
+unter „Vollständigkeitsprüfung"; hier nur die Punkte, die über AP-03 hinaus
+relevant sind.
+
+**Fensterkaveat.** `FIFOPerformanceSummaryInBase` ist nur in Exporten ohne
+`model`-Attribut gefüllt (OF-21). Von neun Golden-Exporten sind das fünf —
+und deren Fenster sind **April–März, kein einziges ein Kalenderjahr**
+(die eine Ausnahme: das jüngste, Januar–September 2026, ein Torso). Die
+kalenderjahrgleichen Exporte (Januar–Dezember) tragen durchweg
+`model="Independent"` und liefern eine leere Summary. Der Plan verlangt
+„je Kalenderjahr" — das ist mit den vorliegenden Exporten nicht herstellbar,
+nur je verfügbarem (Nicht-Kalenderjahr-)Fenster. Für eine echte
+Kalenderjahr-Prüfung braucht es einen gezielten Neuexport ohne Modell mit
+Januar–Dezember-Grenzen. Nicht blockierend für die Abnahme von AP-03 (die
+Fensterprüfung genügt dafür), aber ein offener Verbesserungspunkt.
+
+**CASH weicht in jedem Fenster um rund 100 % ab** — erwartungsgemäß und
+bereits erklärt (OF-23-Nachtrag, OF-27): Devisenergebnis entsteht bei IB aus
+dem Umtausch selbst, nicht aus einer realisierenden Ausführung mit
+`fifoPnlRealized`. Diese Anlageklasse liegt außerhalb dessen, was ein
+Vergleich über `fifoPnlRealized` prüfen kann — weder hier noch in einem
+künftigen Kalenderjahr-Neuexport wird das anders sein, ohne einen eigenen
+Ansatz für Devisenergebnisse.
+
+**Methodische Notiz, falls diese Prüfung wiederverwendet wird:** Ein
+direkter Vergleich des eigenen P&L-Ergebnisses gegen die Performance Summary
+wäre von der bereits bezifferten Prämiendifferenz aus OF-24 dominiert
+gewesen, nicht von echten Lücken (erste Fassung des Skripts, verworfen).
+`golden_geldtest_vollstaendigkeit.py` vergleicht deshalb IBs eigenen
+`fifoPnlRealized`-Wert, summiert über die von uns importierte
+Ausführungsmenge, gegen IBs eigene Summary-Zahl — das isoliert fehlende
+Ausführungen von der bekannten Bewertungsdifferenz.
+

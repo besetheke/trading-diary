@@ -24,7 +24,10 @@ AP-02.
 | `golden_barausgleich.py` | Geldtest je schließender Ausführung und je Basiswert, mit und ohne Barausgleich (OF-24, OF-25) |
 | `golden_lieferart.py` | Ob `settlementPolicyMethod` barausgeglichene von physischen Zuteilungen trennt (OF-25) |
 | `golden_bestandsabgleich_of23.py` | Bestandsabgleich mit dem echten `ingest.flex`-Parser und der echten `engine.matching.bilde_legs()`; `kapitalmassnahmen` wird für den Lauf aus `CorporateAction`-Rohzeilen nach `actionID` abgeleitet (OF-23, OF-27) |
-| `golden_geldtest_fifopnl.py` | Geldtest je schließender Ausführung gegen IBs `fifoPnlRealized` (roh, nicht periodenaggregiert — vermeidet die Überlappung der Exporte); Re-Lauf der OF-24-Messung mit dem echten, jetzt korrigierten Matching |
+| `golden_geldtest_fifopnl.py` | Genauigkeitsprüfung: Geldtest je schließender Ausführung gegen IBs `fifoPnlRealized` (roh, nicht periodenaggregiert — vermeidet die Überlappung der Exporte); Re-Lauf der OF-24-Messung mit dem echten, jetzt korrigierten Matching |
+| `golden_geldtest_restdifferenz_je_instrument.py` | Erzeugt `auftraege/AP-03-restdifferenz-je-instrument.csv` — die für AP-04 bezifferte Prämien-Restdifferenz je Instrument (Pseudonym), nicht nur aggregiert |
+| `golden_geldtest_vollstaendigkeit.py` | Vollständigkeitsprüfung: importierte Ausführungen (IBs `fifoPnlRealized`) gegen IBs `FIFOPerformanceSummaryInBase` je verfügbarem, modellfreiem Fenster und Anlageklasse — deckt fehlende Round Trips auf, die die Genauigkeitsprüfung nicht sehen kann |
+| `pseudonym.py` | Gemeinsamer Baustein: stabiler, gesalzener Hash je `conid` für Ausgaben, die Instrumente einzeln referenzieren müssen (Regel 2); Salz liegt bei `fixtures/golden/`, außerhalb des Repositorys |
 
 Aufruf aus dem Projektverzeichnis:
 `.venv\Scripts\python.exe werkzeuge\abgleich\<skript>.py`
