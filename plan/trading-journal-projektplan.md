@@ -604,9 +604,24 @@ Optionen pauschal als offen zu zählen; das traf die Wirkung, aber nicht die
 Ursache und erzeugte an Stichtagen, an denen Verfall und Buchung zusammenfallen,
 16 beziehungsweise 34 neue Abweichungen. Die Regel ist ersatzlos gestrichen.
 
-*Monetär, Jahressummen.* Das selbst berechnete realisierte Ergebnis stimmt je
-Kalenderjahr und je Anlageklasse mit den Jahressummen der Kontoauszüge überein.
-Diese Hälfte ist unverzichtbar: der Bestandsabgleich prüft, **welche** Positionen
+*Monetär — zwei verschiedene Fragen, zwei verschiedene Prüfungen.*
+
+**Genauigkeit, je Ausführung.** Das selbst berechnete Ergebnis wird je schließender
+Ausführung gegen IBs `fifoPnlRealized` gestellt. Das sind über 15.000 Prüfpunkte
+statt fünf Jahressummen, und jede Abweichung ist einzeln zuordenbar — ein
+Aggregattest hätte die Prämienregel nie als Ursache sichtbar gemacht, sondern nur
+eine unerklärte Differenz gezeigt. Voraussetzung: `realized_pnl_verfuegbar` ist
+true; Exporte mit Modell-Attributen scheiden aus.
+
+**Vollständigkeit, je Jahr.** Der Vergleich je Ausführung deckt nur Ausführungen
+ab, die importiert wurden — ein vollständig fehlender Round Trip fiele nicht auf,
+weil es nichts zu vergleichen gäbe, und der Bestandsabgleich sieht ihn nicht, wenn
+die Position am Stichtag geschlossen war. Gegenprüfung ist der Flex-Abschnitt
+**Realized and Unrealized Performance Summary in Base**, je Kalenderjahr und
+Anlageklasse. Kontoauszüge sind dafür nicht erforderlich und liegen für die
+Historie ohnehin nicht vor.
+
+Beide Hälften sind unverzichtbar: der Bestandsabgleich prüft, **welche** Positionen
 offen sind, nicht **wie viel Geld** entstanden ist. Falscher Multiplikator, schief
 verteilte Kommission bei Teilschließungen und ein FX-Kurs vom falschen Tag lassen
 die Positionszahlen unberührt und entwerten trotzdem jede spätere Auswertung.
@@ -633,9 +648,20 @@ nur passend kalibriert.
 *Die Prämienregel gehört zu AP-04.* Sie setzt `assignment_links` voraus, die dort
 entstehen. AP-03 kann ohne sie abgenommen werden — unter einer Bedingung: **die
 dadurch verbleibende Differenz wird bei der Abnahme als Zahl festgeschrieben**, je
-Instrument und je Jahr. Die Abnahme von AP-04 enthält dann das Kriterium, dass
-genau diese Zahl auf null geht. Eine bezifferte Schuld ist etwas anderes als ein
-offener Punkt.
+Instrument und je Jahr. Eine bezifferte Schuld ist etwas anderes als ein offener
+Punkt.
+
+*Form der Bezifferung.* Eine Summe je Jahr und Währung genügt nicht — sie kann
+auch dann auf null gehen, wenn sich Fehler über Instrumente hinweg aufheben, und
+prüft damit das Ergebnis statt der Regel. Die Tabelle wird deshalb **je Instrument
+unter stabilen Pseudonymen** committet: gesalzener Hash der `conid`, Salz bei den
+Golden-Fixtures außerhalb des Repositorys. Damit sind die Zahlen versioniert und
+prüfbar, die Identitäten bleiben draußen, und AP-04 testet je Pseudonym auf null
+statt nur in der Summe.
+
+Die Abnahme von AP-04 enthält dann zwei Kriterien: diese Zahlen gehen je Pseudonym
+auf null, und die Differenz zwischen Options- und Aktienseite entspricht je Währung
+der Prämie, die in noch offenen Aktienpositionen geparkt ist.
 
 *Gleichstand bei identischem Zeitstempel.* Der FIFO-Gleichstand wird nach
 `tradeID` aufsteigend aufgelöst. Ob IBs eigene Zuordnung derselben Ordnung folgt,
