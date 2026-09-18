@@ -624,6 +624,12 @@ Fremdwährungs-conids bei der Umrechnung — bei letzteren ist zuerst zu prüfen
 es Positionen mit mehreren Schließungen zu unterschiedlichen Kursen sind; wenn ja,
 wird die Umrechnungsregel verfeinert statt die Fälle geduldet.
 
+*Zweites Kriterium für die Prämienregel.* Die festgeschriebene Restdifferenz muss
+nicht nur auf null gehen — die Differenz zwischen Options- und Aktienseite muss je
+Währung der Prämie entsprechen, die in noch offenen Aktienpositionen geparkt ist.
+Trifft beides zugleich zu, ist die Regel nachweislich richtig umgesetzt und nicht
+nur passend kalibriert.
+
 *Die Prämienregel gehört zu AP-04.* Sie setzt `assignment_links` voraus, die dort
 entstehen. AP-03 kann ohne sie abgenommen werden — unter einer Bedingung: **die
 dadurch verbleibende Differenz wird bei der Abnahme als Zahl festgeschrieben**, je
@@ -632,9 +638,12 @@ genau diese Zahl auf null geht. Eine bezifferte Schuld ist etwas anderes als ein
 offener Punkt.
 
 *Gleichstand bei identischem Zeitstempel.* Der FIFO-Gleichstand wird nach
-`tradeID` aufsteigend aufgelöst. `tradeID` ist innerhalb eines Handelstages
-monoton, und IBs Zuordnung folgt derselben Ordnung. Damit wird der Abgleich
-zeilengenau statt nur summengenau, und Regressionen fallen je Ausführung auf.
+`tradeID` aufsteigend aufgelöst. Ob IBs eigene Zuordnung derselben Ordnung folgt,
+ist **nicht belegt**: eine erzwungen numerische Sortierung liefert dasselbe
+Ergebnis wie die bestehende, die verbleibenden Abweichungen bleiben unverändert.
+Die Regel gilt daher als festgelegte Konvention des Journals, nicht als
+nachgebildetes IB-Verhalten. Sie ist durch Tests eingefroren (AP-03vp), damit das
+Verhalten nicht unbemerkt wandert.
 
 *Reihenfolge:* Jahresexporte ziehen, Kapitalmaßnahmen anwenden, Bestandsabgleich
 wiederholen, Jahressummen prüfen. Keine Abnahme vor diesem Durchlauf.
@@ -789,6 +798,9 @@ beim starken Modell.
 
 **Ziel:** Den OA-Trade-Export einlesen und mit den Ketten verknüpfen, um Strategie,
 Endzustand und ein zweites Ergebnis als Referenz zu erhalten.
+**Formatspezifikation:** `auftraege/AP-13-anhang-oa-format.md` — XLSX mit
+Arbeitsblatt `Trades`, elf Spalten, uneinheitliche Zahlenformate innerhalb der
+Datei, Leg-Grammatik der Spalte `Strikes`, Klammernummer als Schlüssel.
 **Umfang:** Parser für den Export (deutsches Zahlenformat, `Profit` mit
 Währungszeichen, `Strikes` als Leg-Spezifikation) · Fingerabdruck-Verknüpfung nach
 §6.1 · Übernahme von `Strategy` und `Status` in Kette und Strukturen · Abgleich des
