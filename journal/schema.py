@@ -394,6 +394,76 @@ flex_securities_info = Table(
 # Abgeleitet (jederzeit neu berechenbar)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# OptionApp-Trade-Export (AP-13, Rohdaten)
+# ---------------------------------------------------------------------------
+
+# Der Export ist eine XLSX-Datei mit einem Arbeitsblatt `Trades` und elf
+# Spalten; Format und Fallstricke stehen in
+# `auftraege/AP-13-anhang-oa-format.md`. Die Tabellen halten den Rohbestand,
+# die Verknüpfung mit den Ketten macht AP-04/AP-13 (starkes Modell).
+optionapp_trades = Table(
+    "optionapp_trades",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    # Klammernummer am Ende von `Name` — der einzige Verknüpfungsschlüssel
+    # (§6.1); läuft gegen executions.oa_trade.
+    Column("oa_trade", Text, nullable=False, index=True),
+    # Zeitstempel im dritten Format (JJJJ/MM/TT hh:mm:ss), Zeitzone ungeprüft:
+    # ausdrücklich NICHT zum Abgleich verwenden (Anhang, Punkt 4).
+    Column("entry_zeit", DateTime, nullable=False),
+    Column("schluss_zeit", DateTime, nullable=True),
+    Column("strategie", Text, nullable=False),
+    # Freier, vom Nutzer gepflegter Text — trägt keinen Schlüssel.
+    Column("name_roh", Text, nullable=False),
+    Column("strikes_roh", Text, nullable=False),
+    # `Quantity` ist ein Verhältnis n/m; beide Zahlen getrennt, weil ihre
+    # Gleichheit nicht vorausgesetzt werden darf.
+    Column("menge_zaehler", ExactDecimal, nullable=False),
+    Column("menge_nenner", ExactDecimal, nullable=False),
+    Column("offen_preis", ExactDecimal, nullable=True),
+    Column("schluss_preis", ExactDecimal, nullable=True),
+    # `-` heißt „kein Stop" und ist etwas anderes als `0`: Rohwert bleibt
+    # erhalten, der Zahlwert ist NULL, wenn kein Stop gesetzt war.
+    Column("stop_roh", Text, nullable=False),
+    Column("stop_wert", ExactDecimal, nullable=True),
+    # `Profit` steht als Text im deutschen Format mit Währungszeichen.
+    Column("profit", ExactDecimal, nullable=False),
+    Column("profit_waehrung", Text, nullable=True),
+    Column("status", Text, nullable=False),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("oa_trade", name="uq_optionapp_trades_oa_trade"),
+)
+
+optionapp_legs = Table(
+    "optionapp_legs",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "optionapp_trade_id",
+        ForeignKey("optionapp_trades.id"),
+        nullable=False,
+        index=True,
+    ),
+    # Reihenfolge innerhalb der Spalte `Strikes` — die Grammatik ist
+    # positionsbehaftet, zwei bis vier Legs je Trade.
+    Column("position", Integer, nullable=False),
+    # +1 long, -1 short (führendes Minus in der Leg-Grammatik).
+    Column("richtung", Integer, nullable=False),
+    Column("menge", ExactDecimal, nullable=False),
+    # Rohwert der Quelle: 'C' oder 'P'.
+    Column("right", Text, nullable=False),
+    Column("strike", ExactDecimal, nullable=False),
+    Column("expiry", Date, nullable=False),
+    Column("roh", Text, nullable=False),
+    UniqueConstraint(
+        "optionapp_trade_id", "position", name="uq_optionapp_legs_position"
+    ),
+    CheckConstraint("richtung IN (-1, 1)", name="ck_optionapp_legs_richtung"),
+    CheckConstraint("\"right\" IN ('C', 'P')", name="ck_optionapp_legs_right"),
+)
+
 legs = Table(
     "legs",
     metadata,
