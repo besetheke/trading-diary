@@ -1426,3 +1426,32 @@ Kommissionswährung, `Amount`/`Amount In Base` → nur `roh_json`.
 Anhang und den Modellsplit umzustellen (Parser gegen synthetische Fixtures:
 günstiges Modell; Abnahme gegen Echtdaten: starkes Modell). Der Parser hängt
 nicht von AP-03 ab, nur die Abnahme über Jahressummen.
+
+## OF-31 · OptionApp-Export: darf `Open` leer sein?
+
+Der Formatanhang (AP-13) regelt leere Zellen nur für `Close` und `Close Time`
+(bei offenen Trades). Für `Open` steht „leer möglich: siehe unten“ — die
+Verweisstelle behandelt aber nur die Schließung. In den Referenzexporten ist
+`Open` stets gefüllt; ein leerer Fall wurde nie beobachtet.
+
+**Annahme:** `ingest/optionapp.py`, `_zahlzelle`: Eine leere `Open`-Zelle wird
+als `offen_preis = NULL` gebucht, nicht als Fehler. Das Schema trägt das Feld
+als nullable. Sollte ein echter Export einen offenen Trade ohne Eröffnungspreis
+liefern, ist neu zu entscheiden, ob das ein Defekt der Quelle ist (Abbruch) —
+bis dahin geht kein Trade verloren.
+
+## OF-32 · `tests/test_ingest_optionapp.py` verletzt I001, sobald der Parser existiert
+
+Befund der AP-13-Teil-1-Umsetzung (18.09.2026): `ruff check . --no-cache`
+schlägt nach Anlegen von `ingest/optionapp.py` mit `I001` in
+`tests/test_ingest_optionapp.py:29` an — zwischen den First-party-Importen
+steht eine Leerzeile. Ohne das Modul klassifiziert ruff
+`from ingest.optionapp import …` nicht als First-party und meldet nichts;
+deshalb war der Befund in AP-13p (ohne Modul) unsichtbar. Dieselbe Falle wie
+in AP-02, dort nachträglich als I001-Falle dokumentiert.
+
+Die Datei ist Abnahmebasis und für das Umsetzungspaket unveränderlich (Regel
+1). Behebung braucht ein Korrekturpaket nach Regel 1a (`aendert_tests: ja`,
+`locker`): die Leerzeile in Zeile 30 löschen — reine Formatierung, es ändert
+sich keine Erwartung.
+
