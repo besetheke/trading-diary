@@ -7,6 +7,9 @@ dependencies = [
     "SQLAlchemy>=2.0",
     "alembic>=1.13",
     "pydantic>=2.7",
+    # AP-13: Der OptionApp-Trade-Export ist eine echte XLSX-Datei
+    # (Arbeitsblatt `Trades`), kein CSV — ohne Leser nicht einlesbar.
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
