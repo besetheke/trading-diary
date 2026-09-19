@@ -1525,3 +1525,48 @@ Zeitfenster-Fälle mit gegenläufigen Legs liefern, ist zu klären, ob „gleich
 Seite" stattdessen etwas anderes meint (z. B. dieselbe Rolle innerhalb eines
 Rolls) — nicht zu raten, sondern am dann vorliegenden Fall zu messen.
 
+## OF-35 · AP-04 Teil 2: drei offene Punkte bei der Kettenbildung
+
+**Befund 19.09.2026, beim Bau von `engine/chains.py`** (Structures → Chains,
+Schritte 2a–4). Drei Punkte, alle dokumentiert statt geraten (Regel 10).
+
+**1. Futures-Roll-Zeitfenster nicht spezifiziert.** Schritt 3 verlangt
+„Schließung Front-Monat und Eröffnung Back-Monat … wird als `contract_roll`
+behandelt", nennt aber kein Zeitfenster — anders als Schritt 2, der explizit
+3 Minuten nennt. **Angenommen:** dasselbe Zeitfenster (`ZEITFENSTER` aus
+`engine.structures`) gilt auch für Futures-Rolls. Nicht an den Golden-Daten
+breit geprüft — nur 8–10 Future-Structures liegen überhaupt vor.
+
+**2. Keine Options-Roll-Erkennung ohne OA-Referenz.** Der Plan spricht die
+Roll-Erkennung explizit nur für Futures (Schritt 3) und implizit für
+OptionApp-Positionen an (§6.1: „OA-Trades mit mehr als einer Expiry
+(gerollt): 27" — die Kettenidentität liegt dort in `oa_trade` über
+`oa_order`-Grenzen hinweg). Für Optionspositionen **ohne** OA-Referenz fehlt
+eine vergleichbare Regel. **Angenommen:** solche Structures werden nicht
+automatisch verkettet — jede ist ihre eigene, ungerollte Kette. Das ist
+plausibel (`0a. … Keine Heuristik, keine Zeitfenster` unterstreicht, dass
+OA-Positionen bewusst ohne Heuristik auskommen, und für den Rest nennt der
+Plan schlicht keine Regel), aber nicht explizit bestätigt.
+
+**3. Die genaue Referenzmenge für den Golden-Test ist nicht identifiziert.**
+Plan §6, AP-04 nennt „1.261 Transaktionen → 134 Chains, davon 66 BCS und
+68 BPS" gegen einen „bekannten Referenzdatensatz"; §6.1 erwähnt separat den
+„Golden-Test-Datensatz mit den 134 DAX-Ketten … in einem späteren Zeitraum"
+als Kontrast zum Referenzexport 2022/23. Welche Datei(en) unter
+`fixtures/golden/` genau diese 1.261 Transaktionen enthalten, ist aus dem
+Plan allein nicht ableitbar — der zweite Referenzexport (Februar 2026,
+1.376 Ausführungen) liegt nahe, aber nicht mit 1.261 identisch. Ohne die
+exakte Teilmenge lässt sich die Abnahmezahl nicht direkt nachrechnen.
+
+**Ersatzweise Plausibilitätsmessung, gesamte Historie 2022–2026 (kein
+Abnahmenachweis):** 8.880 Structures → 8.803 Chains, davon 137 mit
+Eröffnungstyp `BCS` und 1.895 mit `BPS`. Endzustände: 3.999 `Geschlossen`,
+3.724 `Verfall`, 928 `Assigned`, 152 `Offen`. Keine dieser Zahlen ist mit
+134/66/68 direkt vergleichbar — andere Zeitspanne, andere Instrumente
+(SPX/RUT/QQQ/XSP über die ganze Historie statt eines DAX-lastigen
+Teilzeitraums), keine Absicht, sie zu approximieren.
+
+**Vor der Golden-Abnahme von AP-04 zu klären:** welche Datei(en)/welcher
+Zeitraum den 1.261-Transaktionen-Datensatz bilden — Planer- oder
+Nutzerentscheidung, nicht aus den vorliegenden Daten zu erraten.
+

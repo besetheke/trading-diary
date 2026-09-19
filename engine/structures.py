@@ -107,6 +107,14 @@ class Structure:
     schluss_ereignistyp: str | None = None
     brutto_pnl: Decimal | None = None
     kommission_gesamt: Decimal = Decimal(0)
+    # Optionsrechte, die unter den Legs vorkommen ('C'/'P') — Grundlage für
+    # die Seite (Call/Put) einer Kette; leer bei Aktien/Futures.
+    rechte: frozenset[str] = frozenset()
+    # (oa_trade, oa_order) der eröffnenden Ausführung, falls per OA-Referenz
+    # gebildet — Grundlage der Kettenidentität bei OptionApp-Positionen
+    # (mehrere oa_order-Werte unter demselben oa_trade sind Rolls derselben
+    # Kette, AP-04 Teil 2).
+    oa_trade: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,7 +311,7 @@ def _mengen_vergleichbar(a: Decimal, b: Decimal) -> bool:
     return abs(a - b) / max(a, b) <= MENGENTOLERANZ
 
 
-def _schliessung_bestimmen(
+def schliessung_bestimmen(
     cluster: list[_ArbeitsLeg], exec_je_id: Mapping[str, Mapping]
 ) -> tuple[str, datetime | None, str | None, Decimal | None]:
     """Schließung einer Structure — nur vollständig, wenn jedes Leg zu ist.
@@ -372,12 +380,14 @@ def _structure_bilden(
         )
     )
 
-    status, geschlossen_am, schluss_ereignistyp, brutto_pnl = _schliessung_bestimmen(
+    status, geschlossen_am, schluss_ereignistyp, brutto_pnl = schliessung_bestimmen(
         cluster, exec_je_id
     )
     kommission_gesamt = sum(
         (al.leg["kommission_gesamt"] for al in cluster), Decimal(0)
     )
+    rechte = frozenset(al.right for al in cluster if al.right)
+    oa_trade = erste.oa_trade if methode == "oa" else None
 
     return Structure(
         leg_schluessel=leg_schluessel,
@@ -398,6 +408,8 @@ def _structure_bilden(
         schluss_ereignistyp=schluss_ereignistyp,
         brutto_pnl=brutto_pnl,
         kommission_gesamt=kommission_gesamt,
+        rechte=rechte,
+        oa_trade=oa_trade,
     )
 
 
