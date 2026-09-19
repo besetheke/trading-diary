@@ -1494,3 +1494,34 @@ gewesen, nicht von echten Lücken (erste Fassung des Skripts, verworfen).
 Ausführungsmenge, gegen IBs eigene Summary-Zahl — das isoliert fehlende
 Ausführungen von der bekannten Bewertungsdifferenz.
 
+## OF-34 · AP-04: „gleiche Seite" beim Zeitfenster-Fallback nicht eindeutig
+
+**Befund 18./19.09.2026, beim Bau von `engine/structures.py` (AP-04, Teil 1 —
+Legs → Structures).** Schritt 2 der Erkennungsreihenfolge verlangt für den
+Zeitfenster-Fallback „gleichem Underlying, gleicher Seite und vergleichbarer
+Menge". Eine Structure aus gegenläufigen Legs (z. B. ein Vertical: ein Long-
+und ein Short-Bein) hat per Definition keine einheitliche `side` — „gleiche
+Seite" kann sich deshalb nicht auf die ganze entstehende Structure beziehen.
+
+**Angenommene Lesart (dokumentiert im Modul-Docstring):** „gleiche Seite"
+gilt je Leg-Paar, das der Cluster-Algorithmus prüft, nicht über die ganze
+Structure — zwei Legs mit identischem `side` finden sich im Zeitfenster,
+ein drittes mit anderer Seite eröffnet einen eigenen Cluster, sofern es
+nicht bereits über `exec_batch` oder eine OA-Referenz mit den anderen
+verbunden ist. Diese Lesart lässt echte Verticals (Long+Short gleichzeitig)
+weiterhin über `exec_batch`/OA zu, nur der *Fallback* bleibt auf
+Gleichrichtung beschränkt.
+
+**Nicht an den Golden-Daten prüfbar:** Gemessen über alle 24.902
+Handelszeilen der Golden-Exporte trägt **jede einzelne** entweder eine
+OA-Referenz (`oa_trade` + `oa_order`, 7.844) oder einen `exec_batch`
+(17.058) — keine einzige braucht den Zeitfenster-Fallback. Die Annahme ist
+deshalb an echten Daten nicht gegenprüfbar; die Testabdeckung stützt sich
+auf synthetische Fixtures (`tests/test_structures.py`).
+
+**Entscheidung nötig, falls die Annahme sich als falsch erweist:** Sollte
+künftig ein Konto ohne `ibExecID`/OA-Referenz auftauchen und echte
+Zeitfenster-Fälle mit gegenläufigen Legs liefern, ist zu klären, ob „gleiche
+Seite" stattdessen etwas anderes meint (z. B. dieselbe Rolle innerhalb eines
+Rolls) — nicht zu raten, sondern am dann vorliegenden Fall zu messen.
+
