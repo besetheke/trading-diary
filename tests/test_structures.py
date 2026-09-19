@@ -46,12 +46,24 @@ def _exec(
     }
 
 
-def _leg(open_exec_id, close_exec_id, *, conid, menge="1") -> dict:
+def _leg(
+    open_exec_id,
+    close_exec_id,
+    *,
+    conid,
+    menge="1",
+    offen_ja_nein=True,
+    brutto_pnl=None,
+    kommission_gesamt="0",
+) -> dict:
     return {
         "conid": conid,
         "open_exec_id": open_exec_id,
         "close_exec_id": close_exec_id,
         "menge": Decimal(menge),
+        "offen_ja_nein": offen_ja_nein,
+        "brutto_pnl": Decimal(brutto_pnl) if brutto_pnl is not None else None,
+        "kommission_gesamt": Decimal(kommission_gesamt),
     }
 
 
@@ -398,6 +410,121 @@ def test_mehr_als_zwanzig_ereigniszeilen_am_stichtag_erzeugen_keine_structure():
 
     assert ergebnis.structures == ()
     assert len(ergebnis.nicht_strukturiert) == 25
+
+
+# ---------------------------------------------------------------------------
+# Schließung — nur vollständig, wenn jedes Leg der Structure zu ist
+# ---------------------------------------------------------------------------
+
+
+def test_vollstaendig_geschlossene_structure_traegt_schluss_und_ergebnis():
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="C"),
+        602: _instrument(602, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5050", right="C"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E2", conid=602, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E3", conid=601, side="SELL", handelszeit=datetime(2026, 9, 10, 15, 0, 0)),
+        _exec("E4", conid=602, side="BUY", handelszeit=datetime(2026, 9, 10, 15, 0, 0)),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="150.00",
+             kommission_gesamt="-1.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-80.00",
+             kommission_gesamt="-1.00"),
+    ]
+
+    ergebnis = bilde_structures(legs, executions, instrumente)
+
+    assert len(ergebnis.structures) == 1
+    structure = ergebnis.structures[0]
+    assert structure.status == "geschlossen"
+    assert structure.geschlossen_am == datetime(2026, 9, 10, 15, 0, 0)
+    assert structure.schluss_ereignistyp == "trade"
+    assert structure.brutto_pnl == Decimal("70.00")
+    assert structure.kommission_gesamt == Decimal("-2.00")
+
+
+def test_teilweise_geschlossene_structure_bleibt_offen():
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="C"),
+        602: _instrument(602, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5050", right="C"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E2", conid=602, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E3", conid=601, side="SELL", handelszeit=datetime(2026, 9, 10, 15, 0, 0)),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="150.00",
+             kommission_gesamt="-1.00"),
+        _leg("E2", None, conid=602, offen_ja_nein=True, kommission_gesamt="-1.00"),
+    ]
+
+    ergebnis = bilde_structures(legs, executions, instrumente)
+
+    assert len(ergebnis.structures) == 1
+    structure = ergebnis.structures[0]
+    assert structure.status == "offen"
+    assert structure.geschlossen_am is None
+    assert structure.brutto_pnl is None
+
+
+def test_verfall_setzt_schluss_ereignistyp_expiry():
+    instrumente = {601: _instrument(601, asset_class="OPT", underlying="SPX",
+                                     expiry=date(2026, 9, 18), strike="5000", right="C")}
+    executions = [
+        _exec("E1", conid=601, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=601, side="SELL", handelszeit=datetime(2026, 9, 18, 21, 0, 0),
+              ereignistyp="expiry"),
+    ]
+    legs = [_leg("E1", "E2", conid=601, offen_ja_nein=False, brutto_pnl="-150.00",
+                 kommission_gesamt="-1.00")]
+
+    ergebnis = bilde_structures(legs, executions, instrumente)
+
+    assert ergebnis.structures[0].schluss_ereignistyp == "expiry"
+    assert ergebnis.structures[0].status == "geschlossen"
+
+
+def test_zuteilung_hat_vorrang_vor_verfall_bei_gemischtem_schluss():
+    """Ein Spread, dessen kurzes Bein zugeteilt wird, während das lange
+    verfällt: Zuteilung ist die folgenreichere Ereignisart und gewinnt."""
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="P"),
+        602: _instrument(602, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="4950", right="P"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.10"),
+        _exec("E3", conid=601, side="BUY", handelszeit=datetime(2026, 9, 18, 21, 0, 0),
+              ereignistyp="assignment"),
+        _exec("E4", conid=602, side="SELL", handelszeit=datetime(2026, 9, 18, 21, 0, 0),
+              ereignistyp="expiry"),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="-500.00",
+             kommission_gesamt="-1.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="0.00",
+             kommission_gesamt="-1.00"),
+    ]
+
+    ergebnis = bilde_structures(legs, executions, instrumente)
+
+    assert ergebnis.structures[0].schluss_ereignistyp == "assignment"
 
 
 # ---------------------------------------------------------------------------

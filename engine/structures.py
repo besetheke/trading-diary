@@ -97,6 +97,16 @@ class Structure:
     dte_bei_eroeffnung: int | None
     methode: str  # oa / exec_batch / zeitfenster
     erkennung: str  # auto / heuristik (CLAUDE.md Regel 7)
+    # Schließung — nur gesetzt, wenn ALLE Legs der Structure geschlossen sind;
+    # eine teilgeschlossene Structure gilt als offen (kein irreführendes
+    # Teilergebnis). ``schluss_ereignistyp`` ist die Ereignisart der letzten
+    # Schließung — Grundlage für den Kettenendzustand (Verfall/Zuteilung/
+    # Ausübung/gewöhnlich geschlossen), den die Kettenbildung daraus ableitet.
+    status: str = "offen"  # offen / geschlossen
+    geschlossen_am: datetime | None = None
+    schluss_ereignistyp: str | None = None
+    brutto_pnl: Decimal | None = None
+    kommission_gesamt: Decimal = Decimal(0)
 
 
 @dataclass(frozen=True)
@@ -240,7 +250,7 @@ def bilde_structures(
         methode_je_gruppe[schluessel] = "zeitfenster"
 
     structures = [
-        _structure_bilden(cluster, methode_je_gruppe[schluessel])
+        _structure_bilden(cluster, methode_je_gruppe[schluessel], exec_je_id)
         for schluessel, cluster in gruppen.items()
     ]
     structures.sort(key=lambda s: (s.eroeffnet_am, s.underlying))
@@ -293,7 +303,43 @@ def _mengen_vergleichbar(a: Decimal, b: Decimal) -> bool:
     return abs(a - b) / max(a, b) <= MENGENTOLERANZ
 
 
-def _structure_bilden(cluster: list[_ArbeitsLeg], methode: str) -> Structure:
+def _schliessung_bestimmen(
+    cluster: list[_ArbeitsLeg], exec_je_id: Mapping[str, Mapping]
+) -> tuple[str, datetime | None, str | None, Decimal | None]:
+    """Schließung einer Structure — nur vollständig, wenn jedes Leg zu ist.
+
+    Priorität der Ereignisart bei gemischten Schlüssen innerhalb einer
+    Structure (etwa ein Spread, dessen kurzes Bein zugeteilt wird, während
+    das lange verfällt): Zuteilung vor Ausübung vor Verfall vor gewöhnlicher
+    Schließung — die folgenreichste Art gewinnt, nicht die häufigste.
+    """
+    geschlossene = [al for al in cluster if al.leg.get("offen_ja_nein") is False]
+    if len(geschlossene) != len(cluster):
+        return "offen", None, None, None
+
+    geschlossen_am = max(
+        exec_je_id[al.leg["close_exec_id"]]["handelszeit"] for al in geschlossene
+    )
+    ereignisarten = {
+        exec_je_id[al.leg["close_exec_id"]]["ereignistyp"] for al in geschlossene
+    }
+    for vorrang in ("assignment", "exercise", "expiry", "trade"):
+        if vorrang in ereignisarten:
+            schluss_ereignistyp = vorrang
+            break
+    else:
+        schluss_ereignistyp = next(iter(ereignisarten))
+
+    brutto_pnl = sum(
+        (al.leg["brutto_pnl"] for al in geschlossene if al.leg.get("brutto_pnl") is not None),
+        Decimal(0),
+    )
+    return "geschlossen", geschlossen_am, schluss_ereignistyp, brutto_pnl
+
+
+def _structure_bilden(
+    cluster: list[_ArbeitsLeg], methode: str, exec_je_id: Mapping[str, Mapping]
+) -> Structure:
     """Schritt 1a: mehrere Legs mit gleichem conid und gleicher Richtung
     (mehrere Fills desselben Orderbeins) verdichten sich über die Summe der
     Menge — sie werden hier nicht zu getrennten Beinen der Structure."""
@@ -326,6 +372,13 @@ def _structure_bilden(cluster: list[_ArbeitsLeg], methode: str) -> Structure:
         )
     )
 
+    status, geschlossen_am, schluss_ereignistyp, brutto_pnl = _schliessung_bestimmen(
+        cluster, exec_je_id
+    )
+    kommission_gesamt = sum(
+        (al.leg["kommission_gesamt"] for al in cluster), Decimal(0)
+    )
+
     return Structure(
         leg_schluessel=leg_schluessel,
         asset_class=asset_class,
@@ -340,6 +393,11 @@ def _structure_bilden(cluster: list[_ArbeitsLeg], methode: str) -> Structure:
         dte_bei_eroeffnung=dte,
         methode=methode,
         erkennung="auto",
+        status=status,
+        geschlossen_am=geschlossen_am,
+        schluss_ereignistyp=schluss_ereignistyp,
+        brutto_pnl=brutto_pnl,
+        kommission_gesamt=kommission_gesamt,
     )
 
 
