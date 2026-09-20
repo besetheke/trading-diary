@@ -14,6 +14,18 @@ Rückfrage präzisiert).
 verschiedene ``oa_order``-Werte hinweg) bilden eine Kette — gemessen in §6.1
 („27 OA-Trades mit mehr als einer Expiry"). Keine Heuristik nötig.
 
+**Klarstellung (Nutzer, 19.09.2026): OA rollt nicht selbst.** Jeder Roll
+wird manuell über TWS ausgeführt, nie durch OA. Die ``oa_trade``-Nummer ist
+die vom Nutzer in OA gepflegte Kettenreferenz — sie ordnet eine über TWS
+gerollte Fortsetzung derselben Kampagne zu, ist aber selbst kein
+Roll-Mechanismus. Folge für dieses Modul: Der eigentliche Rollvorgang muss
+über Schritt 1/2 (``exec_batch``/Zeitfenster) erkennbar sein, genau wie bei
+jeder anderen Structure auch — ``_rolls_verketten()`` läuft deshalb bewusst
+über **alle** Structures, OA-referenzierte eingeschlossen, nicht nur über
+die ohne ``oa_trade``. Eine TWS-gerollte Fortsetzung, die selbst keine
+OA-Referenz trägt, wird so trotzdem an die OA-Kette angehängt, wenn
+``exec_batch``/Zeitfenster passen.
+
 **1, Roll in einer Order.** Schließt eine Combo-Ausführung — erkennbar am
 gemeinsamen ``exec_batch`` — zugleich Legs einer Structure und eröffnet neue
 auf demselben Basiswert, ist das ein Roll. Dieser Weg gilt für **alle**

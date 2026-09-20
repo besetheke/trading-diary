@@ -1583,3 +1583,91 @@ erkennbar, welche Seite falsch liegt. **Ersetzt durch drei Prüfungen (Plan
   braucht es eine manuelle Durchsicht gerollter Ketten, eingefroren als
   Fixture.
 
+## OF-36 · AP-04: OA-Abgleich durchgeführt — 92,4 %, fünf offene Abweichungen
+
+**Befund 19./20.09.2026.** Der reale OptionApp-Export lag inzwischen vor
+(`fixtures/golden/Trades_2026-02_OA.xlsx`, 66 Trades, Zeitraum 30.01.–
+27.02.2026) — der erste der drei AP-04-Abnahmeprüfungen (Plan §6, „Externe
+Referenz, OA-Teil") konnte damit erstmals laufen:
+`werkzeuge/abgleich/golden_oa_abgleich.py`.
+
+**Vorab korrigierte Annahme: Vergleichsbasis ist das erste Kettenglied,
+nicht das letzte.** Die XLSX zeigt keine Roll-Historie — nur eine
+Momentaufnahme je Trade. Gemessen: Der Vergleich gegen das **erste**
+Kettenglied trifft in 61 von 66 Fällen (92,4 %), gegen das letzte nur in 55
+von 66 (83,3 %). Die Datei bildet also die **Eröffnungs**-Legs ab, nicht den
+finalen Zustand nach etwaigen Rolls.
+
+**Ergebnis: 61 von 66 OA-Trades (92,4 %) stimmen in Anzahl und
+Zusammensetzung der Legs exakt mit dem ersten Kettenglied überein.** Kein
+`oa_trade` fehlt in den Flex-Ausführungen (0 von 66), keiner bildet mehr als
+eine Kette (0 von 66) — die Kettenidentität selbst (Schritt 0a) ist damit
+strukturell bestätigt.
+
+**Fünf Abweichungen, klares Muster, Ursache noch nicht bewiesen.** In allen
+fünf Fällen fehlt bei uns **genau ein** Bein gegenüber der Referenz — nie
+eines zu viel. Untersucht: Bei drei der fünf existiert unter demselben
+`oa_trade`, aber anderer `oa_order`, eine Ausführung mit `oa_rolle =
+'Close Order'`, zeitlich 36 bis 142 Minuten nach der ersten Eröffnung — ein
+plausibler, aber **nicht bewiesener** Kandidat für das fehlende Bein (etwa
+eine mehrstufige Eröffnung, bei der ein Bein aus Liquiditätsgründen in einer
+zweiten, separaten Order nachgereicht wurde). Bei den übrigen zwei gibt es
+unter demselben `oa_trade` gar keine Ausführung mit anderer `oa_order` — das
+fehlende Bein taucht in den Flex-Daten unter dieser Nummer nicht auf.
+
+**Klarstellung, die die Interpretation einschränkt (Nutzer, 19.09.2026): OA
+rollt nicht selbst — jeder Roll läuft manuell über TWS.** Die
+`oa_trade`-Nummer ist damit die vom Nutzer in OA gepflegte Kettenreferenz,
+kein von OA ausgeführter Mechanismus. Für `engine/chains.py` ändert das
+nichts (`_rolls_verketten()` — Schritt 1/2 — läuft bereits über **alle**
+Structures, OA-referenzierte eingeschlossen, nicht nur über die ohne
+`oa_trade`; verifiziert am Code). Für die fünf Abweichungen bedeutet es aber:
+Das „Close Order"-Muster ist **kein** Hinweis auf einen fehlgeschlagenen
+Roll-Mechanismus (den gibt es innerhalb von OA gar nicht), sondern müsste,
+falls es die Erklärung ist, eine mehrstufige **Eröffnung** sein — nicht
+geraten, sondern am nächsten OA-Export oder durch gezielte Nachfrage zu
+klären.
+
+**Nicht Teil dieses Fundes:** Endzustand-Übereinstimmung (XLSX-`Status` vs.
+Ketten-`endzustand`) wurde ebenfalls gemessen, aber verworfen — die
+Kreuztabelle zeigt, dass OAs Status-Vokabular (`CLOSED`/`EXPIRED`/`STOPPED`)
+nicht 1:1 auf unseren Endzustand (`Geschlossen`/`Verfall`/`Assigned`)
+abbildbar ist (z. B. 17 von 23 `EXPIRED`-Trades enden bei uns mit `Verfall`,
+6 mit `Assigned` — plausibel bei einem Spread, dessen eines Bein verfällt,
+während das andere zugeteilt wird, aber ein geratenes Mapping wäre hier
+Regel-10-widrig). Kein Teil der 92,4-%-Zahl.
+
+**Für die Abnahme von AP-04:** Der OA-Abgleich ist durchgeführt, aber noch
+nicht „exakt" im Sinne des Plans (66 von 66). Die fünf Abweichungen sind
+benannt, nicht erklärt — vor einer Abnahme zu klären, nicht wegzuparametrisieren.
+
+## OF-37 · AP-13-Parser: `Close Time = '-'` bei laufenden/abgebrochenen Trades nicht vorgesehen
+
+**Befund 19./20.09.2026, beim ersten Einlesen echter OA-Exporte.**
+`ingest/optionapp.py` bricht an `Trades_2026-01_OA.xlsx` und
+`Trades_2026-08_OA.xlsx` ab: `'Close Time' folgt nicht dem Format
+JJJJ/MM/TT hh:mm:ss: '-'`. Gemessen über alle drei realen Exporte:
+
+| Datei | Zeilen | `Close`/`Close Time` = `-` | zugehöriger `Status` |
+|---|---|---|---|
+| 2026-01 | 268 | 187 | 179 × `CANCELED`, 8 × `RUNNING` |
+| 2026-02 | 66 | 0 | — |
+| 2026-08 | 178 | 24 | 24 × `PARTIALLY STOPPED` |
+
+Der Anhang (`AP-13-anhang-oa-format.md`) und AP-13p sahen für `Close`/
+`Close Time` nur „gefüllt" oder „leer" vor (offener Trade), gemessen an den
+beiden Referenzexporten aus §6.1, die ausschließlich abgeschlossene Trades
+enthielten. Der reale Bestand zeigt einen dritten Fall: `-` bedeutet „noch
+nicht geschlossen" — analog zur bereits bekannten `Stops`-Spalte, wo `-`
+„kein Stop" heißt (Anhang, Eigenheit 2) — bei den Status `CANCELED`,
+`RUNNING` und `PARTIALLY STOPPED` (ein teilweise gestoppter Trade hat
+offenbar noch keine einheitliche Schlusszeit für den Gesamttrade).
+
+**Nicht behoben, nicht geraten.** Betrifft nur die Januar- und
+August-Datei, nicht die für den OA-Abgleich (OF-36) verwendete
+Februar-Datei. Braucht ein Korrekturpaket nach Regel 1a an der
+AP-13p-Abnahmebasis (`aendert_tests: ja`): ein Fixture-Fall mit `Close Time
+= '-'`, ein Test, der `schluss_zeit = None` statt eines Abbruchs erwartet —
+dieselbe Behandlung wie bei `Stops`. Umsetzung danach wie bei AP-13 Teil 1
+beim günstigen Modell.
+
