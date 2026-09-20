@@ -481,6 +481,9 @@ legs = Table(
     # Kostenangabe liefert (OF-23): kein stiller Nullwert, sondern markiert —
     # eine Nullbasis erzeugte beim Verkauf einen Scheingewinn in voller Höhe.
     Column("basis_ungeklaert", Boolean, nullable=False, server_default="0"),
+    # Entleerbar: nicht jede Leg landet in einer Struktur. Der P7-Vorfilter
+    # schließt alles aus, was nicht per Trade eröffnet wurde (AP-04, Block A).
+    Column("structure_id", ForeignKey("structures.structure_id"), nullable=True, index=True),
 )
 
 structures = Table(
@@ -512,6 +515,12 @@ structures = Table(
     # Pflichtfeld (CLAUDE.md, Regel 7); Wertebereich gemäß §5:
     # order_id / heuristik / manuell.
     Column("erkennung", Text, nullable=False),
+    # Inhaltlicher Schlüssel, damit ein Rebuild abgleichen statt neu anlegen
+    # kann: die aufsteigend sortierten `open_exec_id` der Legs, mit `|`
+    # verbunden. Ohne ihn bekäme dieselbe Struktur bei jedem Lauf eine neue
+    # Nummer, und die Fremdschlüssel in `chain_overrides` zeigten ins Leere
+    # (AP-04v).
+    Column("natur_schluessel", Text, nullable=False, unique=True),
     CheckConstraint(
         "erkennung IN ('order_id', 'heuristik', 'manuell')",
         name="ck_structures_erkennung",
@@ -535,6 +544,10 @@ chains = Table(
     # Berichtswährung EUR (P4); die Umrechnung geschieht in der Analyseschicht
     # über fx_rates, das Ergebnis wird hier gespeichert.
     Column("netto_pnl_eur", ExactDecimal, nullable=True),
+    # Wie bei `structures`: der Naturschlüssel der eröffnenden Struktur, mit
+    # `k:` davor. Rolls hängen hinten an, der Kettenanfang bleibt derselbe —
+    # deshalb überlebt die `chain_id` einen Rebuild (AP-04v).
+    Column("natur_schluessel", Text, nullable=False, unique=True),
 )
 
 chain_links = Table(
