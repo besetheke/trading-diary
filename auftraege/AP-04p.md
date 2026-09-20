@@ -1,7 +1,7 @@
 ---
 titel: Persistenz der Ketten und journal rebuild
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-04v
 ---
 

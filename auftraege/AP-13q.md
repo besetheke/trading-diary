@@ -1,7 +1,7 @@
 ---
 titel: Parsernachbesserung - Close und Close Time als '-' (OF-37)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13pl
 ---
 

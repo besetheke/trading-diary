@@ -1,7 +1,7 @@
 ---
 titel: Korrektur der Abnahmebasis AP-04v - Testaufbau des verwaisten Overrides (OF-38)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04v
 aendert_tests: ja
 ---
