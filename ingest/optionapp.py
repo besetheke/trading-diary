@@ -17,6 +17,11 @@ Grundsätze (Vertrag aus ``auftraege/AP-13p.md``):
   deutschen Format mit Währungszeichen (`-1.234,56 $`) und wird eigens
   zerlegt: Währungszeichen nach ``profit_waehrung``, Tausenderpunkte weg,
   Komma zu Punkt.
+- **Der Strich heißt „gibt es nicht"** (Vertrag 8, Nachtrag AP-13pl/OF-37):
+  `Close` und `Close Time` dürfen bei noch nicht geschlossenen Trades ``-``
+  tragen — dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3). Nur der
+  exakte Strich nach ``strip()``; `Open` und `Entry Time` bleiben Pflichtfelder
+  und kennen ihn nicht.
 - **Roh erhalten.** `Name`, `Strikes`, `Stops` und `Status` bleiben als Rohwert
   stehen; das vollständige Zeilenbild steht in ``roh_json``. `Status` wird
   nie auf bekannte Werte abgebildet.
@@ -149,17 +154,26 @@ def _textwert(zelle, kontext: str, feld: str, pflicht: bool = True) -> str | Non
     return wert
 
 
-def _zahlzelle(zelle, kontext: str, feld: str) -> Decimal | None:
+def _zahlzelle(
+    zelle, kontext: str, feld: str, *, strich_heisst_leer: bool = False
+) -> Decimal | None:
     """`Open`/`Close` stehen als Zahl in der Zelle (Vertrag 2).
 
     ``Decimal(str(wert))`` — openpyxl liefert ``float``, und ``str()`` davon
     ist die kürzeste darstellende Form: 11.49 bleibt 11.49, ohne
     Float-Arithmetik (Regel 5). Steht der Wert ausnahmsweise als Text in der
     Zelle, wird er mit Dezimalpunkt gelesen.
+
+    ``strich_heisst_leer`` (Vertrag 8, Nachtrag AP-13pl/OF-37): Nur für
+    `Close` — der exakte Strich nach ``strip()`` heißt „noch nicht
+    geschlossen", dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3).
+    `Open` bleibt Pflichtfeld; dort ist der Strich weiterhin ein Fehler.
     """
     if zelle is None or (isinstance(zelle, str) and not zelle.strip()):
         return None
     rohwert = zelle.strip() if isinstance(zelle, str) else str(zelle)
+    if strich_heisst_leer and rohwert == "-":
+        return None
     try:
         return Decimal(rohwert)
     except InvalidOperation as fehler:
@@ -209,10 +223,20 @@ def _mengenwert(zelle, kontext: str) -> tuple[Decimal, Decimal]:
     return Decimal(zaehler), Decimal(nenner)
 
 
-def _zeitwert(zelle, kontext: str, feld: str, pflicht: bool = True) -> datetime | None:
-    """`JJJJ/MM/TT hh:mm:ss`, naiv gespeichert, wie geliefert (Vertrag 7)."""
+def _zeitwert(
+    zelle, kontext: str, feld: str, pflicht: bool = True, *, strich_heisst_leer: bool = False
+) -> datetime | None:
+    """`JJJJ/MM/TT hh:mm:ss`, naiv gespeichert, wie geliefert (Vertrag 7).
+
+    ``strich_heisst_leer`` (Vertrag 8, Nachtrag AP-13pl/OF-37): Nur für
+    `Close Time` — der exakte Strich nach ``strip()`` heißt „noch nicht
+    geschlossen", dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3).
+    `Entry Time` bleibt Pflichtfeld; dort ist der Strich weiterhin ein Fehler.
+    """
     rohwert = _textwert(zelle, kontext, feld, pflicht=pflicht)
     if rohwert is None:
+        return None
+    if strich_heisst_leer and rohwert == "-":
         return None
     try:
         return datetime.strptime(rohwert, "%Y/%m/%d %H:%M:%S")
@@ -300,7 +324,9 @@ def _trade_zeile(zeile: tuple, zeilen_nummer: int) -> _TradeInhalt:
     kontext = _kontext(zeilen_nummer, oa_trade)
 
     entry_zeit = _zeitwert(zeile[0], kontext, "Entry Time")
-    schluss_zeit = _zeitwert(zeile[9], kontext, "Close Time", pflicht=False)
+    schluss_zeit = _zeitwert(
+        zeile[9], kontext, "Close Time", pflicht=False, strich_heisst_leer=True
+    )
     menge_zaehler, menge_nenner = _mengenwert(zeile[4], kontext)
     stop_roh, stop_wert = _stopwert(zeile[7], kontext)
     profit, profit_waehrung = _profitwert(zeile[8], kontext)
@@ -315,7 +341,7 @@ def _trade_zeile(zeile: tuple, zeilen_nummer: int) -> _TradeInhalt:
         "menge_zaehler": menge_zaehler,
         "menge_nenner": menge_nenner,
         "offen_preis": _zahlzelle(zeile[5], kontext, "Open"),
-        "schluss_preis": _zahlzelle(zeile[6], kontext, "Close"),
+        "schluss_preis": _zahlzelle(zeile[6], kontext, "Close", strich_heisst_leer=True),
         "stop_roh": stop_roh,
         "stop_wert": stop_wert,
         "profit": profit,
