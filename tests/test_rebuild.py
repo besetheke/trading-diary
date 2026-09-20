@@ -24,9 +24,8 @@ from sqlalchemy import insert, select
 
 pytest.importorskip("journal.rebuild")
 
-from journal.rebuild import rebuild  # noqa: E402
-
 from journal.db import create_db_engine  # noqa: E402
+from journal.rebuild import rebuild  # noqa: E402
 from journal.schema import (  # noqa: E402
     chain_links,
     chain_overrides,
@@ -362,6 +361,10 @@ def test_verwaister_override_wird_gezaehlt_und_nicht_geloescht(migrated_db):
 
     engine = create_db_engine(migrated_db)
     with engine.begin() as verbindung:
+        # Die abgeleiteten Zeilen gehen mit: `legs.open_exec_id` verweist auf
+        # `executions.exec_id`, und eine zurückgenommene Fehleinspielung nimmt
+        # das Abgeleitete ohnehin mit (AP-04vk, OF-38).
+        verbindung.execute(legs.delete().where(legs.c.open_exec_id == "A2"))
         verbindung.execute(executions.delete().where(executions.c.exec_id == "A2"))
 
     ergebnis = rebuild(migrated_db)

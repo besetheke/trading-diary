@@ -1671,3 +1671,88 @@ AP-13p-Abnahmebasis (`aendert_tests: ja`): ein Fixture-Fall mit `Close Time
 dieselbe Behandlung wie bei `Stops`. Umsetzung danach wie bei AP-13 Teil 1
 beim günstigen Modell.
 
+## OF-38 · Verwaister Override: Löschen einer Execution scheitert am FK der Legs (AP-04v)
+
+**Befund 20.09.2026, bei der Umsetzung von AP-04p.**
+`tests/test_rebuild.py::test_verwaister_override_wird_gezaehlt_und_nicht_geloescht`
+setzt einen Override, löscht danach die Ausführung, auf der die Struktur
+beruhte, per nacktem `DELETE FROM executions` — und ruft dann `rebuild()`.
+Das DELETE scheitert zwingend am Fremdschlüssel:
+
+- Nach Vertrag 15 schreibt der Rebuild `legs` vollständig aus
+  `MatchingErgebnis.legs` — für das volle Fixture sind das 10 Zeilen,
+  darunter die offene Aktien-Leg mit `open_exec_id = 'A2'` (verlangt von
+  `test_grundlauf_schreibt_die_erwarteten_zeilen`:
+  `legs == 10` und `zuordnung['A1']`).
+- `legs.open_exec_id` verweist mit `NO ACTION` auf `executions.exec_id`
+  (Initialmigration; `PRAGMA foreign_key_list(legs)` verifiziert), und
+  `journal/db.py` setzt `PRAGMA foreign_keys=ON`.
+
+Derselbe Codepfad (volles Fixture → Rebuild) muss die A2-Leg also schreiben
+und darf sie zugleich nicht geschrieben haben — ohne Änderung an Test oder
+Migration nicht erfüllbar. AP-04v wurde ohne Referenzimplementierung
+committet („Dieses Paket implementiert die Persistenz nicht"), der Test lief
+daher vermutlich nie grün. Die Verwaist-Logik selbst ist in Ordnung: Mit
+realistischer Import-Rücknahme (Execution mitsamt ihrer Legs-Zeile gelöscht,
+nachgestellt gegen eine migrierte Datenbank) erfüllt die Umsetzung jede
+Assertion des Tests — `overrides_verwaist == 1`, `overrides_angewandt == 0`,
+`chain_overrides` unangetastet, Struktur `A2` bleibt override-gesichert
+stehen, die leer gewordene `k:A2` wird gelöscht.
+
+**Nicht behoben, nicht geraten** (Plan §11.3, Guardrail 10: Eintrag und
+Abbruch statt Testanpassung durch das günstige Modell). Zwei Korrekturen
+lägen beim starken Modell:
+
+1. **Migration:** `ON DELETE CASCADE` auf `legs.open_exec_id` /
+   `legs.close_exec_id` (und konsequenterweise
+   `assignment_links.option_exec_id` / `assignment_links.stock_exec_id`) —
+   Abgeleitetes stirbt mit seinen Rohdaten, passend zu „jederzeit neu
+   berechenbar". Der Test bliebe unverändert; empfohlen.
+2. **Test:** Das DELETE in `test_verwaister_…` um das Mitlöschen der
+   abhängigen `legs`-Zeile ergänzen — entspricht dem im Test zitierten
+   Vorgang („fehlerhafter Import zurückgenommen") auch ohne CASCADE.
+
+Die Umsetzung von AP-04p ist abgesehen davon vollständig: alle übrigen
+Tests aus `tests/test_rebuild.py` grün, Gesamtsuite und `ruff check .`
+sauber.
+
+**Aufgelöst 20.09.2026 durch AP-04vk — Variante 2, nicht die empfohlene
+Variante 1.** Der Fehler steckte im Testaufbau, nicht im Schema. Eine
+Kaskade hätte das Schema geändert, damit ein schlecht geschriebener Aufbau
+ausführbar wird; sie brächte zudem nichts, weil produktiv niemand
+Ausführungen löscht (Regel 4) und der nächste `rebuild()` eine verwaiste
+Leg ohnehin entfernt — `legs` wird vollständig neu geschrieben. Der
+Testaufbau löscht jetzt die abhängige `legs`-Zeile mit, wie es eine
+zurückgenommene Fehleinspielung täte. **Keine Assertion wurde geändert**,
+die Prüflogik ist unverändert. Alle 16 Tests aus `tests/test_rebuild.py`
+laufen grün.
+
+Die Diagnose des günstigen Modells war in jedem Punkt zutreffend, und das
+Vorgehen — Widerspruch beweisen, eintragen, Test nicht anfassen, abbrechen
+— war genau richtig.
+
+## OF-39 · `methode = 'zuteilung'` bildet auf `erkennung = 'order_id'` ab
+
+**Annahme, dokumentiert 20.09.2026 (Regel 10).** Vertrag 12 aus AP-04v
+listete für `structures.erkennung` nur `oa`, `exec_batch` und
+`zeitfenster`. `engine/chains.py` erzeugt aber die synthetische Struktur
+des Zuteilungsübergangs mit `methode = 'zuteilung'` (Zeile 156) — ein
+vierter Wert, den der Vertrag überging. Das ist eine Lücke der
+Abnahmebasis, keine der Umsetzung.
+
+Die Umsetzung bildet ihn auf `order_id` ab. **Begründung:** Die Spalte
+kennt nur `order_id`/`heuristik`/`manuell`, also kein `auto`. Eine
+Zuteilung ist eine vom Broker gebuchte Tatsache (`ereignistyp =
+'assignment'`), kein aus zeitlicher Nähe gezogener Schluss — `heuristik`
+wäre also falsch. Dieselbe Begründung trägt bereits die Attribution auf
+der Kettenseite: `chain_links.erkennung` steht für denselben Übergang auf
+`auto` (AP-04).
+
+**Wo es unsauber bleibt:** `order_id` behauptet wörtlich eine Ordernummer,
+die es hier nicht gibt. Das Vokabular der Spalte stammt aus AP-01 und
+unterscheidet nur zwei Herkünfte, wo es fachlich drei gibt (belegt durch
+Ordernummer, belegt durch Brokerereignis, erschlossen). Solange nichts
+davon abhängt, ist das folgenlos; sobald eine Auswertung nach
+Belegqualität filtert, gehört das Vokabular erweitert — dann über eine
+Migration, nicht über eine Umdeutung.
+

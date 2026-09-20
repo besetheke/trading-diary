@@ -141,6 +141,13 @@ dieser beiden neuen Dateien. Kein bestehender Test wird angefasst.
     über Order-ID oder über Heuristik gebildet. Das Feld
     `Structure.erkennung` der Dataclass ist **nicht** die Quelle dieser
     Spalte.
+    **Nachtrag AP-04vk:** Es gibt einen vierten Wert, den diese Liste
+    zunächst überging — `engine/chains.py` erzeugt die synthetische
+    Struktur des Zuteilungsübergangs mit `methode = 'zuteilung'`. Sie
+    bildet auf `order_id` ab: Die Spalte kennt kein `auto`, und eine
+    Zuteilung ist eine Brokertatsache, kein Schluss aus zeitlicher Nähe —
+    dieselbe Begründung, mit der `chain_links.erkennung` für denselben
+    Übergang `auto` trägt (OF-39).
 13. **`chains`:** `underlying`, `asset_class`, `seite`, `eroeffnet_am`,
     `beendet_am`, `anzahl_rolls`, `endzustand` aus der `Chain`.
     `netto_pnl_eur` bleibt leer (siehe Entscheidung 2).
