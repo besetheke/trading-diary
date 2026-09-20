@@ -338,6 +338,10 @@ def test_options_roll_in_einer_order_ueber_gemeinsamen_exec_batch():
     chain = ergebnis.chains[0]
     assert chain.anzahl_rolls == 1
     assert chain.underlying == "DAX"
+    # Regel 7: Der gemeinsame exec_batch belegt den Roll über die
+    # Order-Nummer — das ist kein Schluss aus zeitlicher Nähe.
+    assert chain.glieder[0].erkennung == "auto"
+    assert chain.glieder[1].erkennung == "auto"
 
 
 def test_options_roll_in_zwei_orders_ueber_zeitfenster():
@@ -374,6 +378,11 @@ def test_options_roll_in_zwei_orders_ueber_zeitfenster():
     assert len(ergebnis.chains) == 1
     chain = ergebnis.chains[0]
     assert chain.anzahl_rolls == 1
+    # Regel 7: Hier schließt nur zeitliche Nähe auf den Roll. Die Kette muss
+    # austragen, dass sie auf einer Heuristik beruht — sonst ist später nicht
+    # mehr unterscheidbar, welche Verknüpfung belegt und welche geschlossen ist.
+    assert chain.glieder[0].erkennung == "auto"
+    assert chain.glieder[1].erkennung == "heuristik"
 
 
 def test_options_roll_andere_seite_verkettet_nicht():

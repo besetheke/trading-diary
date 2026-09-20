@@ -218,12 +218,19 @@ def _zuteilungs_fortsetzungen(
 # ---------------------------------------------------------------------------
 
 
-def _rolls_verketten(structures: list[Structure]) -> dict[int, int]:
+def _rolls_verketten(structures: list[Structure]) -> dict[int, tuple[int, str]]:
     """Liefert je Index einer schließenden Structure den Index derjenigen,
     die den Roll fortsetzt — zuerst über Schritt 1 (gemeinsamer
     ``exec_batch``, alle Anlageklassen), dann über Schritt 2 (Zeitfenster,
-    nur Optionen, für alles, was Schritt 1 nicht verkettet hat)."""
-    fortsetzung: dict[int, int] = {}
+    nur Optionen, für alles, was Schritt 1 nicht verkettet hat).
+
+    Mitgeliefert wird die Erkennungsart der Verknüpfung (CLAUDE.md Regel 7):
+    Schritt 1 belegt den Roll über die Order-Nummer und ist ``auto``,
+    Schritt 2 schließt aus zeitlicher Nähe und ist ``heuristik``. Der Plan
+    verlangt diese Unterscheidung ausdrücklich — eine Kette muss austragen,
+    ob sie über Order-ID oder über eine Heuristik entstanden ist.
+    """
+    fortsetzung: dict[int, tuple[int, str]] = {}
     verbraucht: set[int] = set()
 
     # Schritt 1: dieselbe Combo-Ausführung schließt die eine, eröffnet die
@@ -239,7 +246,7 @@ def _rolls_verketten(structures: list[Structure]) -> dict[int, int]:
         for kandidat_index in oeffnungsindizes_je_batch.get(s.schluss_exec_batch, []):
             if kandidat_index == index or kandidat_index in verbraucht:
                 continue
-            fortsetzung[index] = kandidat_index
+            fortsetzung[index] = (kandidat_index, "auto")
             verbraucht.add(kandidat_index)
             break
 
@@ -274,7 +281,7 @@ def _rolls_verketten(structures: list[Structure]) -> dict[int, int]:
                 if beste is None or kandidat.eroeffnet_am < structures[beste].eroeffnet_am:
                     beste = kandidat_index
             if beste is not None:
-                fortsetzung[index] = beste
+                fortsetzung[index] = (beste, "heuristik")
                 verbraucht.add(beste)
     return fortsetzung
 
@@ -320,8 +327,16 @@ def bilde_chains(
 
     # Rolls (Schritt 1/2) verschmelzen zwei (bislang eigenständige)
     # Sequenzen — auch dann, wenn eine Seite bereits Teil einer OA-Kette ist.
+    # Erkennungsart je angehängter Structure: die Verknüpfung, die sie in die
+    # Kette gebracht hat (Regel 7). Wer nicht über einen Roll dazukam —
+    # Kettenkopf oder OA-Gruppierung — trägt ``auto``: beides sind Belege,
+    # keine Schlüsse aus zeitlicher Nähe.
+    erkennung_je_index = {
+        nach_index: erkennung for nach_index, erkennung in roll_fortsetzung.values()
+    }
+
     index_zu_sequenz = {i: seq_id for seq_id, seq in enumerate(sequenzen) for i in seq}
-    for von_index, nach_index in roll_fortsetzung.items():
+    for von_index, (nach_index, _erkennung) in roll_fortsetzung.items():
         von_seq = index_zu_sequenz[von_index]
         nach_seq = index_zu_sequenz[nach_index]
         if von_seq == nach_seq:
@@ -338,24 +353,26 @@ def bilde_chains(
         sequenz_indizes = sorted(
             set(sequenz_indizes), key=lambda i: structures[i].eroeffnet_am
         )
-        glied_structures = [structures[i] for i in sequenz_indizes]
+        glied_paare = [
+            (structures[i], erkennung_je_index.get(i, "auto")) for i in sequenz_indizes
+        ]
 
         # Zuteilungsübergang: hängt die synthetische Fortsetzung an, sofern
-        # eine gefunden wurde — auch mitten in einer OA-Kette möglich.
-        anhang: list[Structure] = []
+        # eine gefunden wurde — auch mitten in einer OA-Kette möglich. Die
+        # Zuteilung ist eine Brokertatsache, kein Schluss: ``auto``.
         for i in sequenz_indizes:
             if i in zuteilungs_fortsetzung:
-                anhang.append(zuteilungs_fortsetzung[i])
-        alle_structures = glied_structures + anhang
+                glied_paare.append((zuteilungs_fortsetzung[i], "auto"))
+        alle_structures = [s for s, _ in glied_paare]
 
         glieder = tuple(
             ChainGlied(
                 structure=s,
                 sequenz=pos + 1,
                 verknuepfungstyp="open" if pos == 0 else "roll",
-                erkennung="auto",
+                erkennung=erkennung,
             )
-            for pos, s in enumerate(alle_structures)
+            for pos, (s, erkennung) in enumerate(glied_paare)
         )
 
         letzte_structure = alle_structures[-1]
