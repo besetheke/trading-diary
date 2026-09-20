@@ -1494,7 +1494,7 @@ gewesen, nicht von echten Lücken (erste Fassung des Skripts, verworfen).
 Ausführungsmenge, gegen IBs eigene Summary-Zahl — das isoliert fehlende
 Ausführungen von der bekannten Bewertungsdifferenz.
 
-## OF-34 · AP-04: „gleiche Seite" beim Zeitfenster-Fallback nicht eindeutig
+## OF-34 · AP-04: „gleiche Seite" beim Zeitfenster-Fallback — aufgelöst
 
 **Befund 18./19.09.2026, beim Bau von `engine/structures.py` (AP-04, Teil 1 —
 Legs → Structures).** Schritt 2 der Erkennungsreihenfolge verlangt für den
@@ -1503,70 +1503,83 @@ Menge". Eine Structure aus gegenläufigen Legs (z. B. ein Vertical: ein Long-
 und ein Short-Bein) hat per Definition keine einheitliche `side` — „gleiche
 Seite" kann sich deshalb nicht auf die ganze entstehende Structure beziehen.
 
-**Angenommene Lesart (dokumentiert im Modul-Docstring):** „gleiche Seite"
-gilt je Leg-Paar, das der Cluster-Algorithmus prüft, nicht über die ganze
-Structure — zwei Legs mit identischem `side` finden sich im Zeitfenster,
-ein drittes mit anderer Seite eröffnet einen eigenen Cluster, sofern es
-nicht bereits über `exec_batch` oder eine OA-Referenz mit den anderen
-verbunden ist. Diese Lesart lässt echte Verticals (Long+Short gleichzeitig)
-weiterhin über `exec_batch`/OA zu, nur der *Fallback* bleibt auf
-Gleichrichtung beschränkt.
+Erste, dokumentierte Annahme (18./19.09.2026): „gleiche Seite" gelte je
+Leg-Paar mit identischem `side`. Nicht an den Golden-Daten prüfbar (keine
+Ausführung dort braucht den Fallback) und im Nachhinein **falsch**.
 
-**Nicht an den Golden-Daten prüfbar:** Gemessen über alle 24.902
-Handelszeilen der Golden-Exporte trägt **jede einzelne** entweder eine
-OA-Referenz (`oa_trade` + `oa_order`, 7.844) oder einen `exec_batch`
-(17.058) — keine einzige braucht den Zeitfenster-Fallback. Die Annahme ist
-deshalb an echten Daten nicht gegenprüfbar; die Testabdeckung stützt sich
-auf synthetische Fixtures (`tests/test_structures.py`).
+**Aufgelöst 19.09.2026 (Nutzer, Plan präzisiert).** Der Plan trennt jetzt
+ausdrücklich Strukturbildung (Block A) von Kettenbildung (Block B) — beide
+hatten unterschiedliche Regeln, die vorher unter einer Nummerierung
+vermischt waren. Block A, Schritt 2 verlangt **gegenläufige Richtungen**,
+nicht gleiche: Der Fallback führt zwei getrennt ausgeführte Beine EINER
+Structure zusammen (ein Long-Bein aus der einen Order, das Short-Bein aus
+einer unmittelbar danach platzierten zweiten), nicht mehrere unabhängige,
+gleichgerichtete Eröffnungen. `engine/structures.py` ist entsprechend
+korrigiert (`_zeitfenster_clustern`: `richtung != anker.richtung` statt
+`==`), Tests angepasst.
 
-**Entscheidung nötig, falls die Annahme sich als falsch erweist:** Sollte
-künftig ein Konto ohne `ibExecID`/OA-Referenz auftauchen und echte
-Zeitfenster-Fälle mit gegenläufigen Legs liefern, ist zu klären, ob „gleiche
-Seite" stattdessen etwas anderes meint (z. B. dieselbe Rolle innerhalb eines
-Rolls) — nicht zu raten, sondern am dann vorliegenden Fall zu messen.
+## OF-35 · AP-04 Teil 2: Kettenbildung — Stand nach der Planpräzisierung
 
-## OF-35 · AP-04 Teil 2: drei offene Punkte bei der Kettenbildung
+**Befund 19.09.2026, beim Bau von `engine/chains.py`.** Ursprünglich drei
+Punkte; nach Rückfrage beim Nutzer sind zwei davon aufgelöst, einer bleibt
+in engerer Form bestehen.
 
-**Befund 19.09.2026, beim Bau von `engine/chains.py`** (Structures → Chains,
-Schritte 2a–4). Drei Punkte, alle dokumentiert statt geraten (Regel 10).
+**1. Futures-Roll: kein Zeitfenster, nur `exec_batch` (aufgelöst, enger
+gefasst).** Frühere Annahme: dasselbe 3-Minuten-Fenster wie bei Optionen
+gilt auch für Futures-Rolls. **Nutzer 19.09.2026:** falsch — Futures
+verketten sich automatisch **nur** über einen gemeinsamen `exec_batch`
+(„Roll in einer Order"). Eine Front-Monat-Schließung und eine
+Back-Monat-Eröffnung am selben Handelstag **ohne** gemeinsamen `exec_batch`
+sind höchstens ein Kandidat für eine manuelle Bestätigung, kein
+automatischer Link — Futures sind ein seltener Fall, eine Heuristik dafür
+brächte mehr Risiko als Nutzen. `engine/chains.py` ist entsprechend
+umgesetzt (keine Zeitfenster-Funktion mehr für Futures). **Weiterhin offen:**
+Die Kandidatenmarkierung selbst (Front-Monat-Schließung + Back-Monat-
+Eröffnung ohne `exec_batch`, zur manuellen Bestätigung vorgeschlagen) ist
+noch nicht gebaut — das braucht den Override-Mechanismus der
+Persistenzschicht, der insgesamt noch aussteht.
 
-**1. Futures-Roll-Zeitfenster nicht spezifiziert.** Schritt 3 verlangt
-„Schließung Front-Monat und Eröffnung Back-Monat … wird als `contract_roll`
-behandelt", nennt aber kein Zeitfenster — anders als Schritt 2, der explizit
-3 Minuten nennt. **Angenommen:** dasselbe Zeitfenster (`ZEITFENSTER` aus
-`engine.structures`) gilt auch für Futures-Rolls. Nicht an den Golden-Daten
-breit geprüft — nur 8–10 Future-Structures liegen überhaupt vor.
+**2. Options-Roll ohne OA-Referenz: doch erkannt (aufgelöst, Annahme
+widerlegt).** Frühere Annahme: keine automatische Verkettung ohne
+OA-Referenz. **Nutzer 19.09.2026:** falsch, und zwar folgenreich — ohne
+Rollerkennung gäbe es für DAX und ESTX50 gar keine Ketten, und die
+Roll-Degradationsauswertung (§1, erste der drei Kernfragen) wäre
+unbeantwortbar. Zwei Wege, beide jetzt umgesetzt: **Roll in einer Order**
+(dieselbe Combo-Ausführung schließt die alte und eröffnet die neue
+Structure, erkennbar am gemeinsamen `exec_batch` — der Regelfall, weil
+Rolls laut Nutzer üblicherweise in einer Order ausgeführt werden) und
+**Roll in zwei Orders** (3-Minuten-Fenster, gleicher Basiswert, gleiche
+Seite, vergleichbare Menge — die Expiry ist hier bewusst keine Bedingung,
+ein Roll wechselt sie gerade). Golden-Sanity-Lauf danach: Chains sinken von
+8.803 auf 7.009, mit Rollketten bis zu 14 Gliedern — genau das erwartbare
+Bild für rollierte Index-Strategien.
 
-**2. Keine Options-Roll-Erkennung ohne OA-Referenz.** Der Plan spricht die
-Roll-Erkennung explizit nur für Futures (Schritt 3) und implizit für
-OptionApp-Positionen an (§6.1: „OA-Trades mit mehr als einer Expiry
-(gerollt): 27" — die Kettenidentität liegt dort in `oa_trade` über
-`oa_order`-Grenzen hinweg). Für Optionspositionen **ohne** OA-Referenz fehlt
-eine vergleichbare Regel. **Angenommen:** solche Structures werden nicht
-automatisch verkettet — jede ist ihre eigene, ungerollte Kette. Das ist
-plausibel (`0a. … Keine Heuristik, keine Zeitfenster` unterstreicht, dass
-OA-Positionen bewusst ohne Heuristik auskommen, und für den Rest nennt der
-Plan schlicht keine Regel), aber nicht explizit bestätigt.
+**3. Die Golden-Referenzzahl „1.261 → 134" ist gestrichen, nicht nur
+ungeklärt.** War zunächst als „Herkunft nicht identifizierbar" dokumentiert.
+**Nutzer 19.09.2026, nach eigener Prüfung:** Die Zahl stammt aus einer
+älteren Ad-hoc-Auswertung (Nico), deren Quelldatei und Methode nie
+festgehalten wurden — auch die Größenordnung (DAX bis Ende Juni: 1.309
+Zeilen, davon 1.157 ohne Ereignisse) trifft die 1.261 nicht genau. Als
+Abnahmekriterium für das schwierigste Bauteil des Projekts ist eine Zahl
+unbekannter Herkunft und Methode untauglich: Bei Abweichung wäre nicht
+erkennbar, welche Seite falsch liegt. **Ersetzt durch drei Prüfungen (Plan
+§6, AP-04, „Abnahme"):**
 
-**3. Die genaue Referenzmenge für den Golden-Test ist nicht identifiziert.**
-Plan §6, AP-04 nennt „1.261 Transaktionen → 134 Chains, davon 66 BCS und
-68 BPS" gegen einen „bekannten Referenzdatensatz"; §6.1 erwähnt separat den
-„Golden-Test-Datensatz mit den 134 DAX-Ketten … in einem späteren Zeitraum"
-als Kontrast zum Referenzexport 2022/23. Welche Datei(en) unter
-`fixtures/golden/` genau diese 1.261 Transaktionen enthalten, ist aus dem
-Plan allein nicht ableitbar — der zweite Referenzexport (Februar 2026,
-1.376 Ausführungen) liegt nahe, aber nicht mit 1.261 identisch. Ohne die
-exakte Teilmenge lässt sich die Abnahmezahl nicht direkt nachrechnen.
-
-**Ersatzweise Plausibilitätsmessung, gesamte Historie 2022–2026 (kein
-Abnahmenachweis):** 8.880 Structures → 8.803 Chains, davon 137 mit
-Eröffnungstyp `BCS` und 1.895 mit `BPS`. Endzustände: 3.999 `Geschlossen`,
-3.724 `Verfall`, 928 `Assigned`, 152 `Offen`. Keine dieser Zahlen ist mit
-134/66/68 direkt vergleichbar — andere Zeitspanne, andere Instrumente
-(SPX/RUT/QQQ/XSP über die ganze Historie statt eines DAX-lastigen
-Teilzeitraums), keine Absicht, sie zu approximieren.
-
-**Vor der Golden-Abnahme von AP-04 zu klären:** welche Datei(en)/welcher
-Zeitraum den 1.261-Transaktionen-Datensatz bilden — Planer- oder
-Nutzerentscheidung, nicht aus den vorliegenden Daten zu erraten.
+- *Externe Referenz, OA-Teil:* Kettenbildung stimmt für OA-geführte
+  Positionen exakt mit dem OA-Trade-Export überein (Anzahl und
+  Zusammensetzung) — eine von der Engine unabhängige Quelle. **Noch nicht
+  durchgeführt:** Der reale Februar-2026-OA-Export (137 Trades) liegt nicht
+  vor; `fixtures/golden/` enthält keine XLSX-Datei, nur die synthetischen
+  AP-13p-Fixtures. Ohne die echte Datei ist dieser — der härteste und
+  wichtigste — Abnahmenachweis nicht führbar.
+- *Invarianten, gesamter Bestand:* geprüft und bestanden
+  (`werkzeuge/abgleich/golden_ketten_invarianten.py`, 19.09.2026) — über
+  die gesamte Golden-Historie (8.880 Structures, 7.009 Chains) liegt keine
+  Structure in zwei Ketten, kein Nicht-Schlussglied einer Kette ist offen,
+  jede Rollverknüpfung bleibt auf demselben Underlying, und die
+  Ketten-Ergebnissumme stimmt exakt mit der unabhängig aufsummierten
+  Struktur-Ergebnissumme überein (0 von 6.857 geprüften Ketten weicht ab).
+- *Stichprobe, Nicht-OA-Teil (DAX/ESTX50):* noch nicht durchgeführt — dafür
+  braucht es eine manuelle Durchsicht gerollter Ketten, eingefroren als
+  Fixture.
 

@@ -1,11 +1,14 @@
 """Legs → Structures: Zusammenfassung gemeinsam eröffneter Legs (AP-04, Teil 1).
 
-Erste Hälfte der Erkennungsreihenfolge aus §6, Abschnitt AP-04 — „Legs →
-Positionen". Die zweite Hälfte, „Positionen → Ketten" (Zuteilungsübergang,
-Futures-Rolls, Override-Mechanismus, `journal rebuild`), ist eigens zu
-bauen und nicht Teil dieses Moduls.
+Block A der Erkennungsreihenfolge aus §6, Abschnitt AP-04 — „Legs →
+Struktur". Block B, „Strukturen → Kette" (Rolls, Zuteilungsübergang,
+Override-Mechanismus, `journal rebuild`), ist eigens zu bauen
+(``engine.chains``) und nicht Teil dieses Moduls. Die beiden Blöcke sind
+bewusst getrennt: „gleiche Expiry" gilt **nur** für die Strukturbildung hier
+— beim Verketten (Block B) wäre die Bedingung sinnwidrig, ein Roll wechselt
+gerade die Expiry (Plan, 19.09.2026, nach Rückfrage präzisiert).
 
-Erkennungsreihenfolge, wie im Plan nummeriert:
+Block A, wie im Plan nummeriert:
 
 - **0, Vorfilter (P7).** Nur Legs, deren eröffnende Ausführung
   ``ereignistyp == 'trade'`` trägt, nehmen an der Strukturbildung teil. Ohne
@@ -13,37 +16,35 @@ Erkennungsreihenfolge, wie im Plan nummeriert:
   über mehrere Basiswerte zu Phantomstrukturen. Legs mit anderer
   Eröffnungsart (etwa eine durch Zuteilung entstandene Aktienposition)
   werden benannt zurückgegeben, nicht stillschweigend einsortiert — ihre
-  Einordnung ist Sache der Kettenbildung (Zuteilungsübergang, AP-04 Teil 2).
-- **0a, höchste Priorität: OptionApp-Referenz.** Trägt die eröffnende
-  Ausführung eine strukturierte ``orderReference`` (``oa_trade`` **und**
-  ``oa_order`` gesetzt — bereits von ``ingest/flex.py`` geparst, §6.1),
-  bestimmt das Paar (OA-Trade, OA-Order) die Structure. Die Order-Nummer
-  allein ist nicht global eindeutig; erst das Paar ist es.
-- **1, primär: Ausführungsidentität.** Ohne OA-Referenz gruppiert
-  ``exec_batch`` (die ersten zwei Segmente von ``ibExecID``, bereits von
-  ``ingest/flex.py`` berechnet) Legs derselben Combo-Ausführung.
+  Einordnung ist Sache der Kettenbildung (Zuteilungsübergang, ``engine.chains``).
+- **0a, OptionApp-Referenz.** Trägt die eröffnende Ausführung eine
+  strukturierte ``orderReference`` (``oa_trade`` **und** ``oa_order``
+  gesetzt — bereits von ``ingest/flex.py`` geparst, §6.1), bestimmt das Paar
+  (OA-Trade, OA-Order) die Structure. Die Order-Nummer allein ist nicht
+  global eindeutig; erst das Paar ist es.
+- **1, ``ibExecID``-Präfix.** Ohne OA-Referenz gruppiert ``exec_batch`` (die
+  ersten zwei Segmente von ``ibExecID``, bereits von ``ingest/flex.py``
+  berechnet) Legs derselben Combo-Ausführung.
 - **1a, Teilfills.** Mehrere Legs mit gleichem ``conid`` und gleicher
   Richtung innerhalb einer Gruppe (mehrere Fills desselben Orderbeins) werden
   zu einer Leg-Position verdichtet — die Menge wird summiert, nicht als
   eigene Position gezählt.
-- **2, sekundär: Zeitfenster.** Fehlt sowohl OA-Referenz als auch
+- **2, Zeitfenster, nur ersatzweise.** Fehlt sowohl OA-Referenz als auch
   ``exec_batch``, gilt ein Fenster von 3 Minuten bei gleichem Underlying,
-  gleicher Expiry und vergleichbarer Menge (höchstens 20 % Abweichung).
-  Gleicher Basiswert und gleiche Expiry sind Pflichtbedingung, nicht
-  Feinschliff (§6, Beleg: acht sekundengleiche Legs aus zwei getrennten
-  Orders auf SPY und XSP dürfen nicht verschmelzen).
+  gleicher Expiry, **gegenläufigen Richtungen** und vergleichbarer Menge
+  (höchstens 20 % Abweichung) — zwei getrennt ausgeführte Beine einer
+  Struktur finden so zueinander. Gleicher Basiswert und gleiche Expiry sind
+  Pflichtbedingung, nicht Feinschliff (§6, Beleg: acht sekundengleiche Legs
+  aus zwei getrennten Orders auf SPY und XSP dürfen nicht verschmelzen).
+- **3, keine Zwei-Bein-Annahme.** Structures sind nicht auf zwei Legs
+  beschränkt; zwei, drei und vier kommen regulär vor (Iron Condors u. Ä.).
 
-**Offene Annahme (Regel 10, siehe OFFENE_FRAGEN.md OF-34):** Das Plan-Wort
-„gleicher Seite" für Schritt 2 ist nicht eindeutig — eine Structure aus
-gegenläufigen Legs (z. B. ein Vertical) hat per Definition keine einheitliche
-``side``. Angenommen: „gleiche Seite" gilt je Leg-Paar, das über das
-Zeitfenster gruppiert wird, nicht über die ganze entstehende Structure —
-zwei Legs mit identischem ``side`` können einander im Zeitfenster finden,
-ein drittes mit anderer Seite bildet einen eigenen Cluster, sofern nicht
-über ``exec_batch``/OA bereits verbunden. Diese Annahme ist an den
-Golden-Daten nicht prüfbar: Keine einzige Ausführung dort braucht das
-Zeitfenster (alle 24.902 Handelszeilen tragen entweder eine OA-Referenz oder
-``exec_batch``).
+Frühere Fassung dieses Moduls nahm „gleiche Seite" für Schritt 2 an
+(dieselbe Richtung je Cluster) — das war eine dokumentierte, an den
+Golden-Daten nicht prüfbare Annahme (OF-34). Der Plan stellt seitdem klar:
+Schritt 2 verlangt **gegenläufige** Richtungen, weil er zwei Beine EINER
+Struktur zusammenführt, nicht mehrere unabhängige Eröffnungen. OF-34 ist
+damit aufgelöst.
 """
 
 from collections.abc import Iterable, Mapping
@@ -115,6 +116,14 @@ class Structure:
     # (mehrere oa_order-Werte unter demselben oa_trade sind Rolls derselben
     # Kette, AP-04 Teil 2).
     oa_trade: str | None = None
+    # exec_batch der eröffnenden bzw. schließenden Ausführungen — Grundlage
+    # des Kettenschritts B1 „Roll in einer Order" (engine.chains): schließt
+    # eine Combo-Ausführung Legs einer Structure und eröffnet zugleich Legs
+    # einer anderen, teilen sich beide denselben exec_batch. ``None``, wenn
+    # nicht per exec_batch gebildet bzw. wenn die Schließung uneinheitliche
+    # exec_batch-Werte trägt (keine gemeinsame Roll-Order).
+    oeffnungs_exec_batch: str | None = None
+    schluss_exec_batch: str | None = None
 
 
 @dataclass(frozen=True)
@@ -269,14 +278,20 @@ def bilde_structures(
 
 
 def _zeitfenster_clustern(legs: list[_ArbeitsLeg]) -> list[list[_ArbeitsLeg]]:
-    """Schritt 2: 3-Minuten-Fenster, gleicher Basiswert, gleiche Expiry,
-    gleiche Seite je Paar, Menge höchstens 20 % abweichend vom Cluster-Anfang.
+    """Struktur-Schritt 2 (Ersatzweg A): 3-Minuten-Fenster, gleicher
+    Basiswert, gleiche Expiry, **gegenläufige Richtungen**, Menge höchstens
+    20 % abweichend vom Cluster-Anfang.
 
     Gleicher Basiswert und gleiche Expiry sind Pflichtbedingung (§6) — die
     Vorsortierung danach verhindert von vornherein jede Vermischung über
-    Underlyings oder Verfallstermine hinweg. Innerhalb einer
-    (Underlying, Expiry)-Gruppe entscheidet die Zeit- und Mengennähe zum
-    jeweils ersten Leg eines Clusters (kein Kettendrift über mehrere Schritte).
+    Underlyings oder Verfallstermine hinweg. Gegenläufige Richtungen, weil
+    dieser Weg zwei getrennt ausgeführte Beine EINER Struktur zusammenführt
+    (z. B. ein Long-Bein aus der einen Order, das Short-Bein einer
+    unmittelbar danach platzierten zweiten Order) — nicht, um mehrere
+    unabhängige, gleichgerichtete Eröffnungen zu verschmelzen. Innerhalb
+    einer (Underlying, Expiry)-Gruppe entscheidet die Zeit- und Mengennähe
+    zum jeweils ersten Leg eines Clusters (kein Kettendrift über mehrere
+    Schritte).
     """
     je_underlying_expiry: dict[tuple, list[_ArbeitsLeg]] = {}
     for al in legs:
@@ -291,9 +306,9 @@ def _zeitfenster_clustern(legs: list[_ArbeitsLeg]) -> list[list[_ArbeitsLeg]]:
             for cluster in offene_cluster:
                 anker = cluster[0]
                 if (
-                    al.richtung == anker.richtung
+                    al.richtung != anker.richtung
                     and al.handelszeit - anker.handelszeit <= ZEITFENSTER
-                    and _mengen_vergleichbar(al.menge, anker.menge)
+                    and mengen_vergleichbar(al.menge, anker.menge)
                 ):
                     ziel = cluster
                     break
@@ -305,7 +320,7 @@ def _zeitfenster_clustern(legs: list[_ArbeitsLeg]) -> list[list[_ArbeitsLeg]]:
     return alle_cluster
 
 
-def _mengen_vergleichbar(a: Decimal, b: Decimal) -> bool:
+def mengen_vergleichbar(a: Decimal, b: Decimal) -> bool:
     if a == 0 or b == 0:
         return a == b
     return abs(a - b) / max(a, b) <= MENGENTOLERANZ
@@ -313,24 +328,30 @@ def _mengen_vergleichbar(a: Decimal, b: Decimal) -> bool:
 
 def schliessung_bestimmen(
     cluster: list[_ArbeitsLeg], exec_je_id: Mapping[str, Mapping]
-) -> tuple[str, datetime | None, str | None, Decimal | None]:
+) -> tuple[str, datetime | None, str | None, Decimal | None, str | None]:
     """Schließung einer Structure — nur vollständig, wenn jedes Leg zu ist.
 
     Priorität der Ereignisart bei gemischten Schlüssen innerhalb einer
     Structure (etwa ein Spread, dessen kurzes Bein zugeteilt wird, während
     das lange verfällt): Zuteilung vor Ausübung vor Verfall vor gewöhnlicher
     Schließung — die folgenreichste Art gewinnt, nicht die häufigste.
+
+    Der fünfte Rückgabewert ist der ``exec_batch`` der schließenden
+    Ausführungen, wenn alle denselben tragen — Grundlage für Kettenschritt
+    B1 „Roll in einer Order" (``engine.chains``): schließt dieselbe
+    Combo-Ausführung zugleich eine andere Structure, teilen sich beide den
+    exec_batch. ``None`` bei uneinheitlichen Werten oder wenn keiner gesetzt
+    ist.
     """
     geschlossene = [al for al in cluster if al.leg.get("offen_ja_nein") is False]
     if len(geschlossene) != len(cluster):
-        return "offen", None, None, None
+        return "offen", None, None, None, None
 
     geschlossen_am = max(
         exec_je_id[al.leg["close_exec_id"]]["handelszeit"] for al in geschlossene
     )
-    ereignisarten = {
-        exec_je_id[al.leg["close_exec_id"]]["ereignistyp"] for al in geschlossene
-    }
+    schluss_execs = [exec_je_id[al.leg["close_exec_id"]] for al in geschlossene]
+    ereignisarten = {satz["ereignistyp"] for satz in schluss_execs}
     for vorrang in ("assignment", "exercise", "expiry", "trade"):
         if vorrang in ereignisarten:
             schluss_ereignistyp = vorrang
@@ -338,11 +359,14 @@ def schliessung_bestimmen(
     else:
         schluss_ereignistyp = next(iter(ereignisarten))
 
+    schluss_batches = {satz.get("exec_batch") for satz in schluss_execs}
+    schluss_exec_batch = next(iter(schluss_batches)) if len(schluss_batches) == 1 else None
+
     brutto_pnl = sum(
         (al.leg["brutto_pnl"] for al in geschlossene if al.leg.get("brutto_pnl") is not None),
         Decimal(0),
     )
-    return "geschlossen", geschlossen_am, schluss_ereignistyp, brutto_pnl
+    return "geschlossen", geschlossen_am, schluss_ereignistyp, brutto_pnl, schluss_exec_batch
 
 
 def _structure_bilden(
@@ -380,14 +404,15 @@ def _structure_bilden(
         )
     )
 
-    status, geschlossen_am, schluss_ereignistyp, brutto_pnl = schliessung_bestimmen(
-        cluster, exec_je_id
+    status, geschlossen_am, schluss_ereignistyp, brutto_pnl, schluss_exec_batch = (
+        schliessung_bestimmen(cluster, exec_je_id)
     )
     kommission_gesamt = sum(
         (al.leg["kommission_gesamt"] for al in cluster), Decimal(0)
     )
     rechte = frozenset(al.right for al in cluster if al.right)
     oa_trade = erste.oa_trade if methode == "oa" else None
+    oeffnungs_exec_batch = erste.exec_batch if methode == "exec_batch" else None
 
     return Structure(
         leg_schluessel=leg_schluessel,
@@ -410,6 +435,8 @@ def _structure_bilden(
         kommission_gesamt=kommission_gesamt,
         rechte=rechte,
         oa_trade=oa_trade,
+        oeffnungs_exec_batch=oeffnungs_exec_batch,
+        schluss_exec_batch=schluss_exec_batch,
     )
 
 

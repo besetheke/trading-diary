@@ -28,6 +28,7 @@ AP-02.
 | `golden_geldtest_restdifferenz_je_instrument.py` | Erzeugt `auftraege/AP-03-restdifferenz-je-instrument.csv` — die für AP-04 bezifferte Prämien-Restdifferenz je Instrument (Pseudonym), nicht nur aggregiert |
 | `golden_geldtest_vollstaendigkeit.py` | Vollständigkeitsprüfung: importierte Ausführungen (IBs `fifoPnlRealized`) gegen IBs `FIFOPerformanceSummaryInBase` je verfügbarem, modellfreiem Fenster und Anlageklasse — deckt fehlende Round Trips auf, die die Genauigkeitsprüfung nicht sehen kann |
 | `pseudonym.py` | Gemeinsamer Baustein: stabiler, gesalzener Hash je `conid` für Ausgaben, die Instrumente einzeln referenzieren müssen (Regel 2); Salz liegt bei `fixtures/golden/`, außerhalb des Repositorys |
+| `golden_ketten_invarianten.py` | AP-04: prüft `engine.chains.bilde_chains()` gegen die gesamte Golden-Historie auf vier Invarianten (keine Structure in zwei Ketten, nur das letzte Kettenglied darf offen sein, jede Rollverknüpfung bleibt auf demselben Underlying, Ketten- und Struktur-Ergebnissumme stimmen überein) — die zweite der drei AP-04-Abnahmeprüfungen |
 
 Aufruf aus dem Projektverzeichnis:
 `.venv\Scripts\python.exe werkzeuge\abgleich\<skript>.py`

@@ -243,15 +243,20 @@ def test_verfall_schliesst_ohne_folgeposition():
 # ---------------------------------------------------------------------------
 
 
-def test_futures_front_monat_schliessung_und_back_monat_eroeffnung_ist_ein_roll():
+def test_futures_roll_in_einer_order_ueber_gemeinsamen_exec_batch():
+    """Futures verketten sich automatisch nur über Schritt 1 (derselbe
+    exec_batch, Nutzer 19.09.2026) — Front-Monat-Schließung und
+    Back-Monat-Eröffnung in derselben Combo-Ausführung."""
     instrumente = {
         900: _instrument(900, asset_class="FUT", underlying="ES", expiry=date(2026, 9, 19)),
         901: _instrument(901, asset_class="FUT", underlying="ES", expiry=date(2026, 12, 19)),
     }
     executions = [
         _exec("F1", conid=900, side="BUY", handelszeit=datetime(2026, 8, 1, 10, 0, 0)),
-        _exec("F2", conid=900, side="SELL", handelszeit=datetime(2026, 9, 15, 14, 0, 0)),
-        _exec("F3", conid=901, side="BUY", handelszeit=datetime(2026, 9, 15, 14, 1, 0)),
+        _exec("F2", conid=900, side="SELL", handelszeit=datetime(2026, 9, 15, 14, 0, 0),
+              exec_batch="5.20"),
+        _exec("F3", conid=901, side="BUY", handelszeit=datetime(2026, 9, 15, 14, 0, 0),
+              exec_batch="5.20"),
     ]
     legs = [
         _leg("F1", "F2", conid=900, offen_ja_nein=False, brutto_pnl="1000.00"),
@@ -266,7 +271,11 @@ def test_futures_front_monat_schliessung_und_back_monat_eroeffnung_ist_ein_roll(
     assert [g.structure.typ for g in chain.glieder] == ["Future", "Future"]
 
 
-def test_futures_eroeffnung_ausserhalb_des_fensters_bleibt_eigene_kette():
+def test_futures_ohne_gemeinsamen_exec_batch_bleibt_getrennt_trotz_naher_zeit():
+    """Kein Zeitfenster-Fallback für Futures (Schritt 3, Nutzer 19.09.2026):
+    Front-Monat-Schließung und Back-Monat-Eröffnung am selben Handelstag,
+    aber ohne gemeinsamen exec_batch, verketten sich nicht automatisch —
+    das wäre höchstens ein manuell zu bestätigender Kandidat."""
     instrumente = {
         900: _instrument(900, asset_class="FUT", underlying="ES", expiry=date(2026, 9, 19)),
         901: _instrument(901, asset_class="FUT", underlying="ES", expiry=date(2026, 12, 19)),
@@ -274,11 +283,125 @@ def test_futures_eroeffnung_ausserhalb_des_fensters_bleibt_eigene_kette():
     executions = [
         _exec("F1", conid=900, side="BUY", handelszeit=datetime(2026, 8, 1, 10, 0, 0)),
         _exec("F2", conid=900, side="SELL", handelszeit=datetime(2026, 9, 15, 14, 0, 0)),
-        _exec("F3", conid=901, side="BUY", handelszeit=datetime(2026, 9, 15, 14, 10, 0)),
+        _exec("F3", conid=901, side="BUY", handelszeit=datetime(2026, 9, 15, 14, 0, 30)),
     ]
     legs = [
         _leg("F1", "F2", conid=900, offen_ja_nein=False, brutto_pnl="1000.00"),
         _leg("F3", None, conid=901),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert len(ergebnis.chains) == 2
+    assert all(c.anzahl_rolls == 0 for c in ergebnis.chains)
+
+
+# ---------------------------------------------------------------------------
+# Options-Roll ohne OA-Referenz (Schritte 1 und 2)
+# ---------------------------------------------------------------------------
+
+
+def test_options_roll_in_einer_order_ueber_gemeinsamen_exec_batch():
+    """Regelfall für Rolls ohne OA-Referenz (Nutzer 19.09.2026): eine
+    Combo-Ausführung schließt die alte und eröffnet die neue Structure."""
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="DAX", expiry=date(2026, 9, 18),
+                          strike="19000", right="P"),
+        602: _instrument(602, asset_class="OPT", underlying="DAX", expiry=date(2026, 9, 18),
+                          strike="18900", right="P"),
+        701: _instrument(701, asset_class="OPT", underlying="DAX", expiry=date(2026, 10, 16),
+                          strike="18800", right="P"),
+        702: _instrument(702, asset_class="OPT", underlying="DAX", expiry=date(2026, 10, 16),
+                          strike="18700", right="P"),
+    }
+    zeit_roll = datetime(2026, 9, 15, 15, 0, 0)
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="3.1"),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="3.1"),
+        _exec("E3", conid=601, side="BUY", handelszeit=zeit_roll, exec_batch="3.9"),
+        _exec("E4", conid=602, side="SELL", handelszeit=zeit_roll, exec_batch="3.9"),
+        _exec("E5", conid=701, side="SELL", handelszeit=zeit_roll, exec_batch="3.9"),
+        _exec("E6", conid=702, side="BUY", handelszeit=zeit_roll, exec_batch="3.9"),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=702),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert len(ergebnis.chains) == 1
+    chain = ergebnis.chains[0]
+    assert chain.anzahl_rolls == 1
+    assert chain.underlying == "DAX"
+
+
+def test_options_roll_in_zwei_orders_ueber_zeitfenster():
+    """Ohne gemeinsamen exec_batch greift Schritt 2: 3-Minuten-Fenster,
+    gleicher Basiswert, gleiche Seite, vergleichbare Menge — die Expiry
+    unterscheidet sich zwangsläufig und ist keine Bedingung."""
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 9, 18),
+                          strike="4900", right="P"),
+        602: _instrument(602, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 9, 18),
+                          strike="4850", right="P"),
+        701: _instrument(701, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 10, 16),
+                          strike="4800", right="P"),
+        702: _instrument(702, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 10, 16),
+                          strike="4750", right="P"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E3", conid=601, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 0, 0)),
+        _exec("E4", conid=602, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 0, 0)),
+        _exec("E5", conid=701, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+        _exec("E6", conid=702, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=702),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert len(ergebnis.chains) == 1
+    chain = ergebnis.chains[0]
+    assert chain.anzahl_rolls == 1
+
+
+def test_options_roll_andere_seite_verkettet_nicht():
+    """Eine Put-Struktur, die schließt, verkettet sich nicht mit einer neu
+    eröffneten Call-Struktur, selbst wenn Zeitfenster und Menge passen."""
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 9, 18),
+                          strike="4900", right="P"),
+        602: _instrument(602, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 9, 18),
+                          strike="4850", right="P"),
+        701: _instrument(701, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 10, 16),
+                          strike="5200", right="C"),
+        702: _instrument(702, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 10, 16),
+                          strike="5250", right="C"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E3", conid=601, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 0, 0)),
+        _exec("E4", conid=602, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 0, 0)),
+        _exec("E5", conid=701, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+        _exec("E6", conid=702, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=702),
     ]
 
     ergebnis = _bilde(legs, executions, instrumente)

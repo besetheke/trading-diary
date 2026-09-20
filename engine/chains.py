@@ -1,49 +1,56 @@
-"""Structures → Chains: Zuteilungsübergang, Rolls, Kettenidentität (AP-04,
-Teil 2 — „Positionen → Ketten").
+"""Structures → Chains: Rolls, Zuteilungsübergang, Kettenidentität (AP-04,
+Teil 2 — Block B, „Strukturen → Kette").
 
 Baut auf ``engine.structures.bilde_structures()`` auf. Reines Modul wie
 ``engine.matching``/``engine.structures`` — keine DB, kein `journal rebuild`,
 kein Override-Mechanismus; das bleibt Sache der Persistenzschicht.
 
-Erkennungsreihenfolge, Fortsetzung (§6, AP-04):
+Block B ist von Block A (Legs → Struktur, ``engine.structures``) bewusst
+getrennt: „gleiche Expiry" gilt nur für die Strukturbildung dort — hier wäre
+sie sinnwidrig, ein Roll wechselt gerade die Expiry (Plan, 19.09.2026, nach
+Rückfrage präzisiert).
 
-- **2a, Zuteilung.** Schließt eine Structure per Zuteilung
-  (``schluss_ereignistyp == 'assignment'``), und liefert ein zeitgleich per
-  Zuteilung eröffnetes Aktienbein auf demselben Underlying (aus
-  ``nicht_strukturiert``, s. Teil 1), setzt sich die Kette in dieser
-  Aktienposition fort — als eigene, synthetisch gebildete Structure
-  (Methode ``zuteilung``), bis diese ihrerseits schließt.
-- **3, Futures.** Schließt eine Future-Structure und eröffnet eine andere
-  Future-Structure auf demselben Underlying innerhalb desselben
-  Zeitfensters wie Schritt 2 (§6 nennt für Futures-Rolls kein eigenes
-  Fenster; ``ZEITFENSTER`` aus ``engine.structures`` wird wiederverwendet —
-  **dokumentierte Annahme, siehe OFFENE_FRAGEN.md OF-35**), ist das ein
-  ``contract_roll``.
-- **4, Aktien.** Keine automatische Kettenbildung: Tranchen bleiben
-  eigenständige Structures/Ketten. Die einzige Ausnahme ist die Fortsetzung
-  aus Schritt 2a — eine per Zuteilung entstandene Position wird dort
-  ausdrücklich an die vorangehende Kette angehängt, nicht als neue,
-  unabhängige Aktienkette gezählt.
+**0a, OptionApp-Referenz.** Structures mit derselben OA-Trade-Nummer (über
+verschiedene ``oa_order``-Werte hinweg) bilden eine Kette — gemessen in §6.1
+(„27 OA-Trades mit mehr als einer Expiry"). Keine Heuristik nötig.
 
-**Kettenidentität bei OptionApp-Positionen.** Trägt eine Structure eine
-OA-Referenz, bilden alle Structures mit **demselben** ``oa_trade`` (über
-verschiedene ``oa_order``-Werte hinweg) eine Kette — das ist die
-gemessene Roll-Semantik aus §6.1 („OA-Trades mit mehr als einer Expiry:
-27"). Ohne OA-Referenz und ohne Futures-Roll bildet jede Structure ihre
-eigene, ungerollte Kette.
+**1, Roll in einer Order.** Schließt eine Combo-Ausführung — erkennbar am
+gemeinsamen ``exec_batch`` — zugleich Legs einer Structure und eröffnet neue
+auf demselben Basiswert, ist das ein Roll. Dieser Weg gilt für **alle**
+Anlageklassen und ist bei Optionen ohne OA-Referenz der Regelfall, weil
+Rolls üblicherweise als eine Order ausgeführt werden.
 
-**Offene Annahme (Regel 10, OF-35):** Für Optionspositionen **ohne**
-OA-Referenz nennt der Plan keine Roll-Erkennung analog zu Futures — nur
-Schritt 3 spricht ausdrücklich von Futures. Angenommen: Options-Rolls ohne
-OA-Referenz werden **nicht** automatisch verkettet; jede so gebildete
-Structure ist ihre eigene, ungerollte Kette. Das ist an den Golden-Daten
-nur indirekt over den Vergleich mit der Referenzzahl (134 Ketten, 66 BCS,
-68 BPS) prüfbar, nicht direkt belegt.
+**2, Roll in zwei Orders.** Schließung und Eröffnung innerhalb von
+``ZEITFENSTER`` (3 Minuten), gleicher Basiswert, gleiche Seite (Call/Put),
+vergleichbare Menge — nur für Optionen (OPT/FOP); die Expiry unterscheidet
+sich hier zwangsläufig und ist deshalb keine Bedingung. Nur Structures, die
+nicht bereits über Schritt 1 verkettet wurden.
+
+**2a, Zuteilung.** Schließt eine Structure per Zuteilung
+(``schluss_ereignistyp == 'assignment'``), und liefert ein zeitgleich per
+Zuteilung eröffnetes Aktienbein auf demselben Underlying (aus
+``nicht_strukturiert``, s. Teil 1), setzt sich die Kette in dieser
+Aktienposition fort — als eigene, synthetisch gebildete Structure (Methode
+``zuteilung``), bis diese ihrerseits schließt.
+
+**3, Futures — kein Zeitfenster.** Nur Schritt 1 (derselbe ``exec_batch``)
+verkettet Futures automatisch. Eine Front-Monat-Schließung und eine
+Back-Monat-Eröffnung am selben Handelstag **ohne** gemeinsamen ``exec_batch``
+sind höchstens ein Kandidat für eine manuelle Bestätigung — dieses Modul
+markiert solche Kandidaten nicht; das braucht den (noch nicht gebauten)
+Override-Mechanismus der Persistenzschicht. Futures sind bei den bekannten
+Konten ein seltener Fall; eine Heuristik dafür brächte mehr Risiko als
+Nutzen (Nutzer, 19.09.2026).
+
+**4, Aktien.** Keine automatische Kettenbildung: Tranchen bleiben
+eigenständige Structures/Ketten. Die einzige Ausnahme ist die Fortsetzung
+aus Schritt 2a.
 """
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 from engine.structures import (
@@ -52,6 +59,7 @@ from engine.structures import (
     NichtStrukturiert,
     Structure,
     StrukturErgebnis,
+    mengen_vergleichbar,
     schliessung_bestimmen,
 )
 
@@ -62,6 +70,8 @@ ENDZUSTAND_JE_EREIGNIS = {
     "expiry": "Verfall",
     "trade": "Geschlossen",
 }
+
+OPTIONS_ANLAGEKLASSEN = frozenset({"OPT", "FOP"})
 
 # ---------------------------------------------------------------------------
 # Ergebnis
@@ -74,7 +84,7 @@ class ChainGlied:
 
     structure: Structure
     sequenz: int
-    verknuepfungstyp: str  # open / roll (close/adjust: s. Modul-Docstring, noch nicht vergeben)
+    verknuepfungstyp: str  # open / roll (close/adjust: noch nicht vergeben)
     erkennung: str  # auto / heuristik / manuell (CLAUDE.md Regel 7)
 
 
@@ -88,6 +98,10 @@ class Chain:
     beendet_am: datetime | None
     anzahl_rolls: int
     endzustand: str | None  # Verfall / Geschlossen / Assigned / Offen
+    # Summe über alle Glieder — None, solange mindestens eines offen ist
+    # (dieselbe Regel wie bei Structure: kein irreführendes Teilergebnis).
+    brutto_pnl: Decimal | None
+    kommission_gesamt: Decimal
 
 
 @dataclass(frozen=True)
@@ -112,8 +126,8 @@ def _zuteilungs_structure(
     ist nach P7 dort ausdrücklich ausgeschlossen)."""
     oeffnung = executions[leg["open_exec_id"]]
 
-    status, geschlossen_am, schluss_ereignistyp, brutto_pnl = schliessung_bestimmen(
-        [SimpleNamespace(leg=leg)], executions
+    status, geschlossen_am, schluss_ereignistyp, brutto_pnl, schluss_exec_batch = (
+        schliessung_bestimmen([SimpleNamespace(leg=leg)], executions)
     )
     return Structure(
         leg_schluessel=(ns.leg_schluessel,),
@@ -136,6 +150,8 @@ def _zuteilungs_structure(
         kommission_gesamt=leg["kommission_gesamt"],
         rechte=frozenset(),
         oa_trade=None,
+        oeffnungs_exec_batch=None,
+        schluss_exec_batch=schluss_exec_batch,
     )
 
 
@@ -186,41 +202,69 @@ def _zuteilungs_fortsetzungen(
 
 
 # ---------------------------------------------------------------------------
-# Futures-Rolls (Schritt 3)
+# Rolls: Schritt 1 (eine Order) und Schritt 2 (zwei Orders)
 # ---------------------------------------------------------------------------
 
 
-def _futures_rolls_verketten(structures: list[Structure]) -> dict[int, int]:
-    """Liefert je Index einer schließenden Future-Structure den Index der
-    Structure, die den Roll fortsetzt (nächste Future-Eröffnung desselben
-    Underlyings innerhalb von ``ZEITFENSTER`` nach der Schließung)."""
+def _rolls_verketten(structures: list[Structure]) -> dict[int, int]:
+    """Liefert je Index einer schließenden Structure den Index derjenigen,
+    die den Roll fortsetzt — zuerst über Schritt 1 (gemeinsamer
+    ``exec_batch``, alle Anlageklassen), dann über Schritt 2 (Zeitfenster,
+    nur Optionen, für alles, was Schritt 1 nicht verkettet hat)."""
+    fortsetzung: dict[int, int] = {}
+    verbraucht: set[int] = set()
+
+    # Schritt 1: dieselbe Combo-Ausführung schließt die eine, eröffnet die
+    # andere Structure — erkennbar am gemeinsamen exec_batch.
+    oeffnungsindizes_je_batch: dict[str, list[int]] = {}
+    for index, s in enumerate(structures):
+        if s.oeffnungs_exec_batch:
+            oeffnungsindizes_je_batch.setdefault(s.oeffnungs_exec_batch, []).append(index)
+
+    for index, s in enumerate(structures):
+        if s.status != "geschlossen" or not s.schluss_exec_batch:
+            continue
+        for kandidat_index in oeffnungsindizes_je_batch.get(s.schluss_exec_batch, []):
+            if kandidat_index == index or kandidat_index in verbraucht:
+                continue
+            fortsetzung[index] = kandidat_index
+            verbraucht.add(kandidat_index)
+            break
+
+    # Schritt 2: kein gemeinsamer exec_batch — 3-Minuten-Fenster, gleicher
+    # Basiswert, gleiche Seite, vergleichbare Menge. Nur Optionen; die
+    # Expiry ist bewusst keine Bedingung (ein Roll wechselt sie gerade).
     je_underlying: dict[str, list[int]] = {}
     for index, s in enumerate(structures):
-        if s.typ == "Future":
+        if s.asset_class in OPTIONS_ANLAGEKLASSEN:
             je_underlying.setdefault(s.underlying, []).append(index)
 
-    fortsetzung_je_index: dict[int, int] = {}
     for indizes in je_underlying.values():
-        indizes.sort(key=lambda i: structures[i].eroeffnet_am)
-        verbraucht: set[int] = set()
-        for i in indizes:
-            s = structures[i]
+        indizes_sortiert = sorted(indizes, key=lambda i: structures[i].eroeffnet_am)
+        for index in indizes_sortiert:
+            if index in fortsetzung:
+                continue
+            s = structures[index]
             if s.status != "geschlossen" or s.geschlossen_am is None:
                 continue
             beste = None
-            for j in indizes:
-                if j == i or j in verbraucht:
+            for kandidat_index in indizes_sortiert:
+                if kandidat_index == index or kandidat_index in verbraucht:
                     continue
-                kandidat = structures[j]
+                kandidat = structures[kandidat_index]
                 delta = kandidat.eroeffnet_am - s.geschlossen_am
                 if delta.total_seconds() < 0 or delta > ZEITFENSTER:
                     continue
+                if kandidat.rechte != s.rechte:
+                    continue
+                if not mengen_vergleichbar(kandidat.menge, s.menge):
+                    continue
                 if beste is None or kandidat.eroeffnet_am < structures[beste].eroeffnet_am:
-                    beste = j
+                    beste = kandidat_index
             if beste is not None:
-                fortsetzung_je_index[i] = beste
+                fortsetzung[index] = beste
                 verbraucht.add(beste)
-    return fortsetzung_je_index
+    return fortsetzung
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +278,7 @@ def bilde_chains(
     executions: Iterable[Mapping],
     instruments: Mapping[int, Mapping],
 ) -> KettenErgebnis:
-    """Verkettet Structures zu Chains (§6, AP-04, Schritte 2a–4)."""
+    """Verkettet Structures zu Chains (§6, AP-04, Block B)."""
     executions_je_id = {satz["exec_id"]: satz for satz in executions}
     legs_je_schluessel = {
         LegSchluessel(leg["open_exec_id"], leg.get("close_exec_id")): leg for leg in legs
@@ -244,11 +288,12 @@ def bilde_chains(
     zuteilungs_fortsetzung = _zuteilungs_fortsetzungen(
         struktur_ergebnis, legs_je_schluessel, executions_je_id, instruments
     )
-    futures_fortsetzung = _futures_rolls_verketten(structures)
+    roll_fortsetzung = _rolls_verketten(structures)
 
     # Kettenidentität: OA-Trade gruppiert über oa_order-Grenzen hinweg;
     # sonst ist jede Structure zunächst ihre eigene Kette, es sei denn, sie
-    # wird unten als Fortsetzung an eine vorhergehende angehängt.
+    # wird unten über einen Roll (Schritt 1/2) an eine vorhergehende
+    # angehängt.
     ketten_sequenzen: dict[str, list[int]] = {}
     eigene_kette: list[int] = []
     for index, s in enumerate(structures):
@@ -261,9 +306,10 @@ def bilde_chains(
     for index in eigene_kette:
         sequenzen.append([index])
 
-    # Futures-Rolls verschmelzen zwei (bislang eigenständige) Sequenzen.
+    # Rolls (Schritt 1/2) verschmelzen zwei (bislang eigenständige)
+    # Sequenzen — auch dann, wenn eine Seite bereits Teil einer OA-Kette ist.
     index_zu_sequenz = {i: seq_id for seq_id, seq in enumerate(sequenzen) for i in seq}
-    for von_index, nach_index in futures_fortsetzung.items():
+    for von_index, nach_index in roll_fortsetzung.items():
         von_seq = index_zu_sequenz[von_index]
         nach_seq = index_zu_sequenz[nach_index]
         if von_seq == nach_seq:
@@ -312,11 +358,24 @@ def bilde_chains(
         anzahl_rolls = len(alle_structures) - 1
 
         asset_classes = {s.asset_class for s in alle_structures}
-        asset_class = alle_structures[0].asset_class if len(asset_classes) > 1 else next(
-            iter(asset_classes)
+        asset_class = (
+            alle_structures[0].asset_class
+            if len(asset_classes) > 1
+            else next(iter(asset_classes))
         )
         seite = _seite_bestimmen(alle_structures)
         underlying = alle_structures[0].underlying
+        kommission_gesamt = sum(
+            (s.kommission_gesamt for s in alle_structures), Decimal(0)
+        )
+        brutto_pnl = (
+            sum(
+                (s.brutto_pnl for s in alle_structures if s.brutto_pnl is not None),
+                Decimal(0),
+            )
+            if vollstaendig_geschlossen
+            else None
+        )
 
         chains.append(
             Chain(
@@ -328,6 +387,8 @@ def bilde_chains(
                 beendet_am=beendet_am,
                 anzahl_rolls=anzahl_rolls,
                 endzustand=endzustand,
+                brutto_pnl=brutto_pnl,
+                kommission_gesamt=kommission_gesamt,
             )
         )
 

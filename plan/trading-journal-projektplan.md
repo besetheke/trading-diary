@@ -428,8 +428,8 @@ Grundlage: Activity-Flex-Export 01.04.2022–31.03.2023, 3.971 Ausführungen
 - `ibExecID` fehlt bei Ereigniszeilen. Unkritisch: diese nehmen nach P7 ohnehin
   nicht an der Strukturbildung teil.
 - Der Zeitraum 2022/23 besteht fast vollständig aus Einzelaktienoptionen (FSLY,
-  UPST, EBAY, KSS, DAL, PYPL, STNE, INTC). Der Golden-Test-Datensatz mit den
-  134 DAX-Ketten liegt in einem späteren Zeitraum.
+  UPST, EBAY, KSS, DAL, PYPL, STNE, INTC) und unterscheidet sich damit deutlich
+  vom heutigen Indexbuch.
 
 **Befunde aus dem zweiten Referenzexport (Februar 2026, 1.376 Ausführungen,
 1.350 Optionen, 24 Aktien, 2 Futures, EUR und USD):**
@@ -678,42 +678,76 @@ Ein Aktiensplit im Testdatensatz wird korrekt verarbeitet. Mindestens 35 Tests.
 ### AP-04 · Structure- und Chain-Erkennung ⚠ Kernstück
 **Ziel:** Legs → Positionen → Ketten.
 
-**Erkennungsreihenfolge (P5, P7):**
-0. **Vorfilter:** Zeilen mit `ereignistyp != 'trade'` werden aus der
-   Strukturbildung ausgeschlossen und getrennt verarbeitet. Ohne diesen Schritt
-   verklebt ein Zeitfenster die Tagesabschlussbuchungen zu Phantomstrukturen —
-   im Referenzexport 29 Legs über vier Basiswerte im selben Zeitstempel.
-0a. **Höchste Priorität, OptionApp-Referenz:** trägt die Ausführung eine
-   strukturierte `orderReference`, liefert sie die Kette (OA-Trade), die
-   Strukturaktion (OA-Trade plus OA-Order) und die Rolle (Open/Close/Profit
-   Target) direkt. Keine Heuristik, keine Zeitfenster. Generische Werkzeugnamen
-   sind zu verwerfen, siehe §6.1.
-1. **Primär, Ausführungsidentität:** ohne OA-Referenz gruppieren Legs mit gleichem
-   `ibExecID`-Präfix (erste zwei Segmente) zu einer Structure. Eine
-   Combo-Ausführung, die gleichzeitig Legs schließt und öffnet, ist ein Roll.
-   Belege in §6.1.
+**Zwei getrennte Aufgaben.** Erst Legs zu einer Struktur zusammenfassen, dann
+Strukturen zu einer Kette verketten. Die Regeln unterscheiden sich; sie zu
+vermischen ist die häufigste Fehlerquelle. Insbesondere gilt „gleiche Expiry" nur
+für die Strukturbildung — beim Verketten wäre die Bedingung sinnwidrig, denn ein
+Roll wechselt gerade die Expiry.
+
+**A · Legs → Struktur (P5, P7)**
+
+0. **Vorfilter:** Zeilen mit `ereignistyp != 'trade'` nehmen nicht teil (P7).
+0a. **OptionApp-Referenz:** Legs mit gleichem Paar (OA-Trade, OA-Order) bilden eine
+   Struktur. Generische Werkzeugnamen verwerfen, §6.1.
+1. **`ibExecID`-Präfix:** Legs mit gleichen ersten zwei Segmenten bilden eine
+   Struktur.
 1a. **Teilfills:** mehrere Ausführungen desselben Kontrakts mit gleicher
-   `ibOrderID` werden vor der Strukturbildung zu einer Leg-Position verdichtet.
-   `ibOrderID` gruppiert **keine** Combo-Legs und darf dafür nicht verwendet werden.
-2. **Sekundär, Zeitfenster:** fehlt die `ibExecID` oder wurde in getrennten Orders
-   gehandelt, gilt ein Fenster von **3 Minuten** bei gleichem Underlying, gleicher
-   Seite und vergleichbarer Menge (Abweichung höchstens 20 %). Alle Werte
-   konfigurierbar. **Gleicher Basiswert und gleiche Expiry sind Pflichtbedingung,
-   nicht Feinschliff:** im Referenzexport liegen am 03.09. um 17:20:42 acht Legs
-   sekundengleich — ein Iron Condor auf SPY und einer auf XSP, zwei getrennte
-   Orders. Sekundengleichheit belegt keine gemeinsame Order.
-2a. **Zuteilung:** ein `assignment` auf eine Option und die zeitgleiche
-   Gegenbuchung im Basiswert werden über `assignment_links` verbunden. Die Kette
-   setzt sich in der entstandenen Aktienposition fort, bis diese geschlossen ist.
-3. **Futures:** Schließung Front-Monat und Eröffnung Back-Monat auf dasselbe
-   Underlying wird als `contract_roll` behandelt.
-4. **Aktien:** keine automatische Kettenbildung. Tranchen bleiben eigenständige
-   Structures und können manuell zu einer Campaign gebündelt werden.
+   `ibOrderID` werden vorab zu einer Leg-Position verdichtet. `ibOrderID` gruppiert
+   **keine** Combo-Legs.
+2. **Zeitfenster, nur ersatzweise:** 3 Minuten, gleicher Basiswert, **gleiche
+   Expiry**, gegenläufige Richtungen, vergleichbare Menge. Sekundengleichheit allein
+   belegt nichts, §6.1.
+3. Strukturen sind nicht auf zwei Legs beschränkt; zwei, drei und vier kommen
+   regulär vor.
+
+**B · Strukturen → Kette**
+
+0a. **OptionApp-Referenz:** Strukturen mit gleicher OA-Trade-Nummer bilden eine
+   Kette. Die Rolle (`Open Order`, `Close Order`, `Profit Target`) liefert zugleich
+   die Verknüpfungsart. Keine Heuristik nötig.
+1. **Roll in einer Order:** schließt eine Combo-Ausführung — erkennbar am
+   gemeinsamen `ibExecID`-Präfix — gleichzeitig Legs einer bestehenden Struktur und
+   eröffnet neue auf demselben Basiswert, ist das ein Roll. **Dieser Weg gilt für
+   alle Anlageklassen und ist bei Optionen ohne OA-Referenz der Regelfall**, weil
+   Rolls üblicherweise als eine Order ausgeführt werden. Ohne ihn gäbe es für DAX
+   und ESTX50 keine Ketten und die Roll-Degradation aus §1 wäre unbeantwortbar.
+2. **Roll in zwei Orders:** Schließung und Eröffnung innerhalb von 3 Minuten,
+   gleicher Basiswert, gleiche Seite, vergleichbare Menge. Die Expiry unterscheidet
+   sich hier zwangsläufig.
+2a. **Zuteilung:** ein `assignment` und die zeitgleiche Gegenbuchung im Basiswert
+   werden über `assignment_links` verbunden; die Kette setzt sich in der
+   entstandenen Aktienposition fort.
+3. **Futures: kein Zeitfenster.** Nur der `ibExecID`-Präfix verkettet automatisch.
+   Schließung Front-Monat und Eröffnung Back-Monat am selben Handelstag werden als
+   Kandidat markiert und **manuell bestätigt**. Futures sind ein seltener Fall; eine
+   Heuristik dafür brächte mehr Risiko als Nutzen.
+4. **Aktien:** keine automatische Verkettung. Tranchen bleiben eigenständig und
+   können manuell zu einer Campaign gebündelt werden; Aktien aus Zuteilung sind
+   davon ausgenommen (2a).
 
 **Ausgang:** Chain-Aufbau, Override-Mechanismus, `journal rebuild`-Kommando.
-**Abnahme:** Golden-Test gegen den bekannten Referenzdatensatz — 1.261
-Transaktionen führen zu 134 Chains, davon 66 BCS und 68 BPS. Abweichungen sind zu
-erklären, nicht wegzuparametrisieren. Jede Chain trägt aus, ob sie über Order-ID
+**Abnahme:** Eine frühere Fassung nannte als Golden-Test „1.261 Transaktionen →
+134 Ketten, davon 66 BCS und 68 BPS". **Diese Zahl ist gestrichen.** Sie stammt aus
+einer älteren Ad-hoc-Auswertung, deren Quelldatei und Methode nie festgehalten
+wurden. Ein Maßstab, dessen Zustandekommen niemand nachvollziehen kann, taugt nicht
+als Abnahmekriterium für das schwierigste Bauteil des Projekts: bei Abweichung
+wüsste man nicht, welche Seite falsch liegt, und würde im Zweifel die Engine an die
+alte Auswertung anpassen.
+
+Stattdessen gelten drei Prüfungen:
+
+*Externe Referenz, OA-Teil.* Für Positionen mit OptionApp-Referenz stimmt die
+Kettenbildung exakt mit dem OA-Trade-Export überein, in Anzahl und Zusammensetzung
+— eine unabhängige Quelle, die nichts von der Engine weiß.
+
+*Invarianten, gesamter Bestand.* Keine Struktur liegt in zwei Ketten. Jede
+Rollverknüpfung hat eine schließende und eine eröffnende Seite auf demselben
+Basiswert. Die Summe der Ketten-Ergebnisse entspricht der Summe der
+Struktur-Ergebnisse. Eine abgeschlossene Kette enthält keine offene Struktur.
+
+*Stichprobe, Nicht-OA-Teil.* Für DAX und ESTX50 existiert keine externe Referenz.
+Eine Stichprobe gerollter Ketten wird einmal manuell durchgesehen, bestätigt und
+als Fixture eingefroren. Jede Chain trägt aus, ob sie über Order-ID
 oder Heuristik gebildet wurde. Manuelle Overrides überleben ein vollständiges
 `rebuild`.
 **Zusätzliche Pflichttests:** Ein Zeitstempel mit mehr als 20 Ereigniszeilen über
@@ -867,7 +901,7 @@ Gehört in die `CLAUDE.md` des Repos.
 |---|---|---|
 | M0 | AP-00 | Datenlage geklärt, Flex-Query vollständig |
 | M1 | AP-01, AP-02 | Rohdaten vollständig und reproduzierbar in der DB |
-| M2 | AP-03, AP-04 | Ketten korrekt erkannt, Golden-Test grün |
+| M2 | AP-03, AP-04 | Ketten korrekt erkannt, OA-Abgleich und Invarianten grün |
 | M3 | AP-05, AP-06 | Die drei Kernfragen aus §1 per CLI beantwortbar |
 | M4 | AP-07, AP-08 | Bedienbares Tool |
 | M5 | AP-10 bis AP-13 | Steuer, Absichtserfassung, OptionApp-Abgleich (AP-09 gestrichen) |

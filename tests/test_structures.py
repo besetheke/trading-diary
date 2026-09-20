@@ -262,6 +262,32 @@ def test_teilfills_desselben_beins_verdichten_sich_zu_einer_menge():
 
 
 def test_zeitfenster_gruppiert_legs_ohne_oa_und_exec_batch():
+    """Zwei getrennt ausgeführte Beine EINER Struktur — gegenläufige
+    Richtungen, deshalb ein Long- und ein Short-Bein (Plan, 19.09.2026:
+    Schritt 2 führt zwei Beine einer Struktur zusammen, keine unabhängigen
+    gleichgerichteten Eröffnungen)."""
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="C"),
+        602: _instrument(602, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5050", right="C"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 2, 30)),
+    ]
+    legs = [_leg("E1", None, conid=601), _leg("E2", None, conid=602)]
+
+    ergebnis = bilde_structures(legs, executions, instrumente)
+
+    assert len(ergebnis.structures) == 1
+    assert ergebnis.structures[0].methode == "zeitfenster"
+
+
+def test_gleiche_richtung_verschmilzt_nicht_im_zeitfenster():
+    """Gegenprobe: zwei gleichgerichtete Eröffnungen sind keine gemeinsame
+    Struktur, auch innerhalb des Zeitfensters — Schritt 2 führt zwei Beine
+    EINER Struktur zusammen, nicht mehrere unabhängige Eröffnungen."""
     instrumente = {
         601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
                           strike="5000", right="C"),
@@ -276,8 +302,7 @@ def test_zeitfenster_gruppiert_legs_ohne_oa_und_exec_batch():
 
     ergebnis = bilde_structures(legs, executions, instrumente)
 
-    assert len(ergebnis.structures) == 1
-    assert ergebnis.structures[0].methode == "zeitfenster"
+    assert len(ergebnis.structures) == 2
 
 
 def test_zeitfenster_ueberschritten_bleibt_getrennt():
@@ -289,7 +314,7 @@ def test_zeitfenster_ueberschritten_bleibt_getrennt():
     }
     executions = [
         _exec("E1", conid=601, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
-        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 3, 1)),
+        _exec("E2", conid=602, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 3, 1)),
     ]
     legs = [_leg("E1", None, conid=601), _leg("E2", None, conid=602)]
 
@@ -350,7 +375,7 @@ def test_mengenabweichung_ueber_20_prozent_bleibt_getrennt():
     executions = [
         _exec("E1", conid=601, side="BUY", menge="10",
               handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
-        _exec("E2", conid=602, side="BUY", menge="7",
+        _exec("E2", conid=602, side="SELL", menge="7",
               handelszeit=datetime(2026, 9, 1, 10, 0, 30)),
     ]
     legs = [
