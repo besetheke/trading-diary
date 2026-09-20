@@ -73,6 +73,10 @@ Nur diese, keine weiteren.
    stiftet ausschließlich die Klammernummer.
 8. **Offene Trades.** `Close` und `Close Time` dürfen leer sein; dann bleiben
    `schluss_preis` und `schluss_zeit` leer. Der Trade wird trotzdem gebucht.
+   **Nachtrag AP-13pl (OF-37):** Beide Spalten dürfen statt leer auch den
+   Strich `-` tragen — im realen Bestand der Regelfall für noch nicht
+   geschlossene Trades. Er bedeutet dasselbe wie leer, genau wie in der
+   Spalte `Stops` (Vertrag 3), und gilt nur für den exakten Wert `-`.
 9. **`Status`.** Rohwert speichern. Unbekannte Werte werden **nicht** auf
    bekannte abgebildet, sondern gebucht und in `OFFENE_FRAGEN.md` gemeldet.
 10. **Idempotenz.** Zweimal dieselbe `oa_trade`-Nummer mit identischem Inhalt

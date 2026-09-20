@@ -1,6 +1,6 @@
 """Erzeugt die synthetischen OptionApp-Fixtures für AP-13.
 
-Die vier XLSX-Dateien sind Binärdateien; dieses Skript hält nachvollziehbar
+Die fünf XLSX-Dateien sind Binärdateien; dieses Skript hält nachvollziehbar
 fest, was in ihnen steht. Alle Werte sind frei erfunden — der Anhang
 `auftraege/AP-13-anhang-oa-format.md` liefert nur Struktur und Grammatik,
 keine Kontodaten.
@@ -86,6 +86,53 @@ STANDARD = [
     ],
 ]
 
+# Noch nicht geschlossene Trades: `Close` und `Close Time` tragen den Strich,
+# nie nur eine der beiden Spalten (AP-13pl, OF-37). Je eine Zeile für die drei
+# im Bestand beobachteten Status. `[3003]` trägt zusätzlich einen gesetzten
+# Stop, damit belegt ist, dass der Strich in `Close` die übrigen Spalten nicht
+# mitreißt.
+LAUFEND = [
+    [
+        "2026/01/12 10:05:00",
+        "SPX: IC",
+        "Abgebrochen [3001]",
+        "-1xP5000 (260220) / 1xP4950 (260220)",
+        "1/1",
+        2.4,
+        "-",
+        "-",
+        "0,00 $",
+        "-",
+        "CANCELED",
+    ],
+    [
+        "2026/01/20 14:30:00",
+        "QQQ: DC14/28",
+        "Laeuft noch [3002]",
+        "-1xC520 (260306) / 1xC530 (260306)",
+        "2/2",
+        1.75,
+        "-",
+        "-",
+        "0,00 $",
+        "-",
+        "RUNNING",
+    ],
+    [
+        "2026/08/04 09:45:00",
+        "XSP: IF7",
+        "Teilweise gestoppt [3003]",
+        "-1xP600 (260918) / 1xP590 (260918) / -1xC640 (260918)",
+        "3/3",
+        3.6,
+        "-",
+        "14.4",
+        "-125,00 $",
+        "-",
+        "PARTIALLY STOPPED",
+    ],
+]
+
 # Eine Zelle, die der Grammatik nicht folgt: `Z` ist weder Call noch Put.
 GRAMMATIK_DEFEKT = [
     [
@@ -164,6 +211,7 @@ def schreiben(name: str, zeilen: list[list]) -> None:
 
 if __name__ == "__main__":
     schreiben("oa_standard.xlsx", STANDARD)
+    schreiben("oa_laufend.xlsx", LAUFEND)
     schreiben("oa_grammatik_defekt.xlsx", GRAMMATIK_DEFEKT)
     schreiben("oa_ohne_klammernummer.xlsx", OHNE_NUMMER)
     schreiben("oa_doppelte_nummer.xlsx", DOPPELTE_NUMMER)

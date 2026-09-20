@@ -177,6 +177,49 @@ def test_offener_trade_bleibt_ohne_schliessung(migrated_db):
     assert trades["1004"]["status"] == "UNMANAGED"
 
 
+def test_strich_in_close_und_close_time_heisst_offen(migrated_db):
+    """Vertrag 8, erweitert durch AP-13pl (OF-37): Bei noch nicht
+    geschlossenen Trades tragen `Close` und `Close Time` den Strich — nie
+    nur eine der beiden Spalten. Er bedeutet dasselbe wie eine leere Zelle
+    und dasselbe wie `-` in `Stops`: „gibt es nicht", nicht „unlesbar".
+
+    Gemessen an den realen Exporten trifft das 187 von 268 Zeilen der
+    Januar- und 24 von 178 Zeilen der Augustdatei; ohne diese Behandlung
+    ist keine von beiden einlesbar.
+    """
+    _importiere(migrated_db, "oa_laufend.xlsx")
+    trades = _trades(migrated_db)
+    assert sorted(trades) == ["3001", "3002", "3003"]
+    for nummer in ("3001", "3002", "3003"):
+        assert trades[nummer]["schluss_preis"] is None
+        assert trades[nummer]["schluss_zeit"] is None
+    assert trades["3001"]["status"] == "CANCELED"
+    assert trades["3002"]["status"] == "RUNNING"
+    assert trades["3003"]["status"] == "PARTIALLY STOPPED"
+
+
+def test_strich_laesst_uebrige_felder_unberuehrt(migrated_db):
+    """Der Strich in `Close` gilt nur für `Close` — er reißt die übrigen
+    Spalten nicht mit. `[3003]` trägt einen gesetzten Stop, einen
+    Eröffnungspreis, ein Ergebnis und drei Legs.
+
+    Von Hand nachgerechnet (Regel 8): `Stops` `14.4` ist ein gesetzter Stop
+    (Vertrag 3), `-125,00 $` ist deutsch geschrieben und wird zu
+    `Decimal("-125.00")` mit Währung `$` (Vertrag 2), und die
+    `Strikes`-Zelle zerfällt an ` / ` in drei Legs (Vertrag 5).
+    """
+    _importiere(migrated_db, "oa_laufend.xlsx")
+    trades = _trades(migrated_db)
+    dreitausenddrei = trades["3003"]
+    assert dreitausenddrei["stop_roh"] == "14.4"
+    assert dreitausenddrei["stop_wert"] == Decimal("14.4")
+    assert dreitausenddrei["offen_preis"] == Decimal("3.6")
+    assert dreitausenddrei["profit"] == Decimal("-125.00")
+    assert dreitausenddrei["profit_waehrung"] == "$"
+    assert dreitausenddrei["entry_zeit"] == datetime(2026, 8, 4, 9, 45, 0)
+    assert len(_legs(migrated_db, dreitausenddrei["id"])) == 3
+
+
 def test_status_bleibt_rohwert(migrated_db):
     """Vertrag 9: Der Endzustand wird roh gespeichert, nicht abgebildet."""
     _importiere(migrated_db, "oa_standard.xlsx")
