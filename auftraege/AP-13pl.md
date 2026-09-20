@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis erweitern - Close und Close Time als '-' bei laufenden Trades (OF-37)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-13pk
 aendert_tests: ja
 ---

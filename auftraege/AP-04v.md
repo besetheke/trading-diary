@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer die AP-04-Persistenz (rebuild, Overrides)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04
 aendert_tests: ja
 ---
