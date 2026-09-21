@@ -1877,3 +1877,46 @@ Runde das Bild, liegt es nahe, Zeitfenster-Verknüpfungen wie die
 Futures-Rolls zu behandeln — als Kandidaten zur Bestätigung statt als Kette.
 Das betrifft die Roll-Degradation unmittelbar und ist eine Planfrage, keine
 stille Korrektur.
+
+### Zweite Runde, mit Preisen (21.09.2026) — bestätigt, und die Ursache wird sichtbar
+
+43 Nummern, alle beurteilt:
+
+| Block | richtig | falsch | unklar |
+|---|---|---|---|
+| Belegt (`exec_batch`) | 8 | **0** | 0 |
+| Heuristik (Zeitfenster) | 12 | **10** | 3 |
+| Gegenprobe (nicht verkettet) | 3 | **4** | 3 |
+
+**Die Menge ist der wunde Punkt, nicht die Zeit.** Sechs von neun
+Bemerkungen nennen sie: „Pos gesplitted" (zweimal), „Zeit stimmt, Anzahl
+nicht" (zweimal), „Spread erweitert", „Anzahl Pos nicht richtig
+(gesplittet?)". Ein Roll ist im Bestand **keine Eins-zu-eins-Nachfolge**
+einer Struktur durch eine andere: Positionen werden geteilt, zusammengelegt,
+erweitert, teilweise gerollt. Das Kettenmodell unterstellt genau diese
+Eins-zu-eins-Nachfolge. Deshalb prüft die Mengenregel eine Gleichheit, die
+es nicht gibt, und scheitert in beide Richtungen.
+
+**Der Befund, der schwerer wiegt als jede Fehlerquote (Nutzer, 21.09.2026):**
+„Retrospektiv ist es nicht mehr so einfach zu erkennen, was gerollt wurde."
+Ist die Absicht im Nachhinein selbst für den Händler nicht sicher
+rekonstruierbar, gibt es für den heuristischen Teil **keine belastbare
+Wahrheit** — weder für ein Abnahmekriterium noch als Lernmaterial für ein
+Modell. Das ist keine Eigenschaft der Engine, sondern der Datenlage: Der
+Broker zeichnet Ausführungen auf, keine Absichten.
+
+**Erwogen und verworfen: ein gelerntes Modell.** Der Gedanke lag nahe, die
+Erkennung aus den Bestätigungen lernen zu lassen statt Schwellen von Hand
+zu setzen. Dagegen sprechen drei Dinge, keines davon algorithmischer Natur:
+Das Material ist dünn und unsicher (43 Urteile, sechs davon „unklar"), ein
+darauf trainiertes Modell erbt diese Unsicherheit und verbirgt sie hinter
+einem Punktwert, und AP-06 verlangt Drilldown bis zur Ausführung — eine
+Zahl, die niemand aufdröseln kann, erfüllt das nicht. Wo Lernen sich lohnen
+würde: **Kandidaten sortieren**, damit die wahrscheinlichsten zuerst zur
+Bestätigung kommen. Als Arbeitserleichterung, nicht als Wahrheitsquelle.
+Zurückgestellt, bis genug bestätigte Fälle vorliegen.
+
+**Entschieden (Nutzer, 21.09.2026):** Nur belegte Verknüpfungen bilden
+Ketten; Zeitfenster-Treffer werden Kandidaten zur Bestätigung. Ausformuliert
+im Plan, §6, AP-04, Block B. Die eigentliche Abhilfe liegt vorn, nicht
+hinten: AP-11 schreibt die Absicht beim Aufsetzen mit.
