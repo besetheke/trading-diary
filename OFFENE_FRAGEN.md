@@ -1641,6 +1641,52 @@ Regel-10-widrig). Kein Teil der 92,4-%-Zahl.
 nicht „exakt" im Sinne des Plans (66 von 66). Die fünf Abweichungen sind
 benannt, nicht erklärt — vor einer Abnahme zu klären, nicht wegzuparametrisieren.
 
+**Ursache gefunden 21.09.2026 — kontoweite Verrechnung über OA-Trades
+hinweg. Eine Entscheidung steht aus (Nutzer).** Die frühere Vermutung (eine
+nachgereichte zweite Order) war falsch. In allen fünf Fällen existiert die
+Ausführung des „fehlenden" Beins: gleiche OA-Tradenummer, gleiche
+`oa_order`, `oa_rolle = 'Open Order'`, in derselben Sekunde wie die übrigen
+Beine. Sie eröffnet aber keine Leg — **der FIFO-Abgleich hat sie als
+Schließung einer gegenläufigen Position im selben Kontrakt verbraucht, die
+ein anderer OA-Trade 0,2 bis 119 Stunden vorher eröffnet hatte.** In allen
+fünf Fällen: andere OA-Tradenummer, Gegenrichtung, gleiche `conid`, Menge 1.
+
+Das ist kein Engine-Fehler, sondern der Plan: AP-03 legt „FIFO-Matching pro
+conid" fest, und IB verrechnet genauso — kontoweit, je Kontrakt. OA bucht
+dagegen je Trade und führt beide Beine weiter. Auf Brokerebene gibt es das
+Bein nicht; in OA gibt es es.
+
+**Umfang über die gesamte Historie:** 206 von 5.598 Ausführungen mit
+`oa_rolle = 'Open Order'` (3,7 %) hat der FIFO-Abgleich als Schließung
+verbraucht, **ausnahmslos** gegen eine Position eines *anderen* OA-Trades.
+184 OA-Trades sind betroffen, 58 Fälle 2025, 148 im Jahr 2026 — steigend.
+
+**Folge für den OA-Abgleich (Februardatei):** 61 exakt, 5 durch kontoweite
+Verrechnung erklärt, **0 unerklärt.** `golden_oa_abgleich.py` weist die
+Kategorie jetzt eigens aus.
+
+**Folge darüber hinaus — das ist die eigentliche Frage:** Für diese 184
+Trades verschiebt sich das Ergebnis zwischen OA-Trades. Ein Trade verliert
+ein Bein, ein anderer wird durch eine fremde Ausführung früher geschlossen.
+Die Kettensumme stimmt (Invariante 4 hält), die Zuordnung je Trade nicht —
+und genau die braucht die Frage „wie schneidet Strategie X ab".
+
+**Nicht entschieden, nicht geraten (Regel 10).** Drei Wege:
+
+1. **Brokersicht bleibt, Abnahmekriterium wird präzisiert.** Die Engine
+   bleibt bei FIFO pro conid; das OA-Kriterium lautet „exakt, außer bei
+   kontoweiter Verrechnung — diese Fälle werden gelistet". Folge: Die
+   Ergebnisse je Strategie sind für 184 Trades verzerrt.
+2. **Zuordnung nach OA-Trade vor FIFO.** Tragen beide Ausführungen eine
+   OA-Referenz, schließt eine Eröffnung nie die Position eines anderen
+   Trades. Folge: weicht vom IB-FIFO ab; die angenommene Geldprüfung aus
+   AP-03 (je Schließung gegen `fifoPnlRealized`) bricht für diese Fälle und
+   müsste über ein Korrekturpaket neu gefasst werden.
+3. **Zwei Schichten.** Legs bleiben IB-FIFO (Brokerwahrheit, Geldprüfung
+   unverändert); darüber eine Zuordnungsschicht nach Absicht, auf der
+   Strukturen, Ketten und Strategieauswertung aufsetzen. Folge: sauberste
+   Trennung, aber das meiste Bauwerk.
+
 ## OF-37 · AP-13-Parser: `Close Time = '-'` bei laufenden/abgebrochenen Trades nicht vorgesehen
 
 **Befund 19./20.09.2026, beim ersten Einlesen echter OA-Exporte.**
@@ -1755,4 +1801,30 @@ Ordernummer, belegt durch Brokerereignis, erschlossen). Solange nichts
 davon abhängt, ist das folgenlos; sobald eine Auswertung nach
 Belegqualität filtert, gehört das Vokabular erweitert — dann über eine
 Migration, nicht über eine Umdeutung.
+
+## OF-40 · AP-13-Parser: nicht ausgeführte Trades und eine zweite Exportvariante
+
+**Befund 21.09.2026.** Nach AP-13q liest der Parser die Februardatei
+vollständig, die Januar- und Augustdatei aber nicht. Gemessen (nur Formen
+und Zählwerte): `Profit` als Zahl statt deutschem Text (Januar, alle 268
+Zeilen), `Stops` leer (Januar 50), `Stops` mit zwei zeilengetrennten Werten
+(Januar 3, August 31 — nur bei Trades mit drei oder vier Legs), `Open = '-'`
+(Januar 179) und `Strikes` ohne Leg-Grammatik (Januar 207 Ausschnitte).
+
+Entscheidend: **Alle 207 Grammatikabweichungen gehören zu `CANCELED`- oder
+`RUNNING`-Trades** — Abbruchgründe bzw. geplante Legs mit Restlaufzeit
+statt Verfallsdatum. Über alle 1.114 Legs ausgeführter Trades hält die
+Grammatik ausnahmslos. Die Januardatei ist eine zweite Exportvariante,
+keine defekte Datei.
+
+**Geregelt durch AP-13pm (Abnahmebasis, Vertrag 14–18)**, Umsetzung AP-13r
+beim günstigen Modell. Ein Trockenlauf mit genau diesen Regeln liest alle
+drei Exporte vollständig; ohne Legs bleiben exakt die 179 `CANCELED`- und
+8 `RUNNING`-Trades.
+
+**Zwischenfall, Regel 2:** Beim ersten Lauf von `golden_oa_abgleich.py`
+über die Januar- und Augustdatei hat die unbehandelte Parsermeldung zwei
+OA-Tradenummern, einen Profit- und zwei Stopwerte in die Konsolenausgabe
+geschrieben. Das Skript fängt Parserfehler jetzt ab und nennt nur noch das
+betroffene Feld.
 
