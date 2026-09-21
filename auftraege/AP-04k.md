@@ -1,7 +1,7 @@
 ---
 titel: Zeitfenster-Rolls werden Kandidaten statt Ketten (OF-41)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04p
 aendert_tests: ja
 ---
