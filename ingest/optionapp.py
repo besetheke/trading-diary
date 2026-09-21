@@ -22,6 +22,15 @@ Grundsätze (Vertrag aus ``auftraege/AP-13p.md``):
   tragen — dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3). Nur der
   exakte Strich nach ``strip()``; `Open` und `Entry Time` bleiben Pflichtfelder
   und kennen ihn nicht.
+- **Nicht ausgeführte Trades** (Vertrag 14/15, Nachtrag AP-13pm/OF-40): Bei
+  `CANCELED` ist der Trade nie eröffnet — `Strikes` trägt dann keinen Leg und
+  wird nicht zerlegt, was immer darin steht; `Open` darf bei diesem einen
+  Status den Strich tragen. Bei `RUNNING` stehen geplante Legs in Restlaufzeit-
+  form (``-<n>DTE``) statt mit Verfallsdatum; auch sie werden nicht zerlegt.
+  Jeder andere Status bleibt unverändert streng: Freitext oder Grammatikbruch
+  bei einem ausgeführten Trade bricht ab. `Profit` kann in der zweiten
+  Exportvariante als Zahl statt deutschem Text stehen; ein leeres oder
+  mehrzeiliges `Stops` ist „keine Angabe" beziehungsweise ohne Einzelwert.
 - **Roh erhalten.** `Name`, `Strikes`, `Stops` und `Status` bleiben als Rohwert
   stehen; das vollständige Zeilenbild steht in ``roh_json``. `Status` wird
   nie auf bekannte Werte abgebildet.
@@ -71,6 +80,11 @@ KOPFZEILE = (
 LEG_MUSTER = re.compile(
     r"^(-?)(\d+)x([CP])(\d+(?:\.\d+)?) \((\d{6})\)$"
 )
+
+# Geplanter Leg bei laufenden Trades (Vertrag 15): wie ein Leg, aber mit
+# Restlaufzeit `<n>DTE` statt Verfallsdatum — nicht ausgeführt, wird nicht
+# zerlegt, nur am Muster erkannt.
+GEPLANTER_LEG_MUSTER = re.compile(r"^(-?)(\d+)x([CP])(\d+(?:\.\d+)?)-(\d+)DTE$")
 
 # Profit im deutschen Format mit Währungszeichen: `-1.234,56 $`, `610,00 $`.
 PROFIT_MUSTER = re.compile(r"^\d{1,3}(?:\.\d{3})*(?:,\d+)?$")
@@ -164,10 +178,11 @@ def _zahlzelle(
     Float-Arithmetik (Regel 5). Steht der Wert ausnahmsweise als Text in der
     Zelle, wird er mit Dezimalpunkt gelesen.
 
-    ``strich_heisst_leer`` (Vertrag 8, Nachtrag AP-13pl/OF-37): Nur für
-    `Close` — der exakte Strich nach ``strip()`` heißt „noch nicht
-    geschlossen", dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3).
-    `Open` bleibt Pflichtfeld; dort ist der Strich weiterhin ein Fehler.
+    ``strich_heisst_leer`` (Vertrag 8, Nachtrag AP-13pl/OF-37): Für `Close`
+    heißt der exakte Strich nach ``strip()`` „noch nicht geschlossen",
+    dasselbe wie eine leere Zelle, wie bei `Stops` (Vertrag 3). Für `Open`
+    gilt der Strich nur bei `CANCELED` — „nie eröffnet" (Vertrag 14, OF-40);
+    bei jedem anderen Status bleibt `Open` Pflichtfeld.
     """
     if zelle is None or (isinstance(zelle, str) and not zelle.strip()):
         return None
@@ -185,7 +200,18 @@ def _profitwert(zelle, kontext: str) -> tuple[Decimal, str | None]:
 
     `-1.234,56 $`: Währungszeichen abtrennen (nach ``profit_waehrung``),
     Tausenderpunkte entfernen, Komma zu Punkt.
+
+    Steht eine Zahl in der Zelle (Vertrag 16, Januarvariante), wird sie wie
+    `Open`/`Close` über ``Decimal(str(wert))`` gelesen; eine Währung steht
+    nicht da und wird nicht unterstellt.
     """
+    if isinstance(zelle, (int, float)) and not isinstance(zelle, bool):
+        try:
+            return Decimal(str(zelle)), None
+        except InvalidOperation as fehler:
+            raise ValueError(
+                f"{kontext}: 'Profit' ist keine Zahl: {zelle!r}"
+            ) from fehler
     rohwert = _textwert(zelle, kontext, "Profit")
     waehrung = None
     treffer = PROFIT_WAEHRUNGS_MUSTER.search(rohwert)
@@ -204,14 +230,34 @@ def _profitwert(zelle, kontext: str) -> tuple[Decimal, str | None]:
 
 
 def _stopwert(zelle, kontext: str) -> tuple[str, Decimal | None]:
-    """`Stops`: `-` heißt „kein Stop", `0` ist ein gesetzter Stop (Vertrag 3)."""
-    stop_roh = _textwert(zelle, kontext, "Stops")
-    if stop_roh == "-":
+    """`Stops`: `-` heißt „kein Stop", `0` ist ein gesetzter Stop (Vertrag 3).
+
+    Vertrag 17 (OF-40): Eine leere Zelle heißt „keine Angabe" — `stop_roh`
+    bleibt leer (Pflichtspalte, deshalb ``""``), `stop_wert` ebenso; das ist
+    weder der Strich noch eine Null.
+
+    Vertrag 18: Stehen mehrere Stops zeilengetrennt in einer Zelle, muss jede
+    Zeile für sich Vertrag 3 genügen, sonst Abbruch mit Nennung. Der Rohwert
+    bleibt vollständig erhalten, samt Zeilenumbruch; `stop_wert` bleibt leer,
+    weil es keinen einzelnen Wert gibt.
+    """
+    stop_roh = _textwert(zelle, kontext, "Stops", pflicht=False) or ""
+    if not stop_roh:
         return stop_roh, None
-    try:
-        return stop_roh, Decimal(stop_roh)
-    except InvalidOperation as fehler:
-        raise ValueError(f"{kontext}: 'Stops' ist weder '-' noch Zahl: {stop_roh!r}") from fehler
+    werte: list[Decimal | None] = []
+    for zeilenwert in stop_roh.splitlines():
+        if zeilenwert == "-":
+            werte.append(None)
+            continue
+        try:
+            werte.append(Decimal(zeilenwert))
+        except InvalidOperation as fehler:
+            raise ValueError(
+                f"{kontext}: 'Stops' ist weder '-' noch Zahl: {zeilenwert!r}"
+            ) from fehler
+    if len(werte) == 1:
+        return stop_roh, werte[0]
+    return stop_roh, None
 
 
 def _mengenwert(zelle, kontext: str) -> tuple[Decimal, Decimal]:
@@ -303,6 +349,35 @@ def _legs_zerlegen(strikes: str, kontext: str) -> list[dict]:
     return legs
 
 
+def _strikes_lesen(zelle, status: str, kontext: str) -> tuple[str, list[dict]]:
+    """Liest `Strikes` abhängig vom Zustand des Trades (Vertrag 14/15, OF-40).
+
+    Bei `CANCELED` ist der Trade nie eröffnet: `Strikes` trägt dann keinen
+    Leg — was immer darin steht, es bleibt als Rohwert stehen, zerlegt wird
+    nichts. Ein leeres `Strikes` wird zu ``""``; die Spalte bleibt Pflicht,
+    ihr Inhalt ist es hier nicht.
+
+    Bei `RUNNING` können geplante Legs in Restlaufzeitform stehen (alle
+    Ausschnitte der Form ``[-]<Menge>x<C|P><Strike>-<n>DTE``): ebenfalls ohne
+    Zerlegung, Rohwert erhalten. Folgen alle Ausschnitte der normalen
+    Grammatik, werden sie normal zerlegt; Gemischtes oder anderes bricht in
+    ``_legs_zerlegen`` mit Nennung ab.
+
+    Der Statusbezug ist bewusst auf diese beiden Fälle geschnitten: Ob es
+    ausgeführte Legs gibt, ist eine Eigenschaft des Zustands — bei jedem
+    ausgeführten Trade bleibt eine Abweichung ein Defekt der Quelle.
+    """
+    if status == "CANCELED":
+        return _textwert(zelle, kontext, "Strikes", pflicht=False) or "", []
+    strikes_roh = _textwert(zelle, kontext, "Strikes")
+    if status == "RUNNING" and all(
+        GEPLANTER_LEG_MUSTER.match(ausschnitt)
+        for ausschnitt in strikes_roh.split(" / ")
+    ):
+        return strikes_roh, []
+    return strikes_roh, _legs_zerlegen(strikes_roh, kontext)
+
+
 # ---------------------------------------------------------------------------
 # Datei parsen
 # ---------------------------------------------------------------------------
@@ -330,7 +405,10 @@ def _trade_zeile(zeile: tuple, zeilen_nummer: int) -> _TradeInhalt:
     menge_zaehler, menge_nenner = _mengenwert(zeile[4], kontext)
     stop_roh, stop_wert = _stopwert(zeile[7], kontext)
     profit, profit_waehrung = _profitwert(zeile[8], kontext)
-    strikes_roh = _textwert(zeile[3], kontext, "Strikes")
+    # Der Status steuert, wie `Strikes` und `Open` zu lesen sind (Vertrag
+    # 14/15) — deshalb zuerst lesen, roh speichern, nie abbilden (Vertrag 9).
+    status = _textwert(zeile[10], kontext, "Status")
+    strikes_roh, legs = _strikes_lesen(zeile[3], status, kontext)
     felder = {
         "oa_trade": oa_trade,
         "entry_zeit": entry_zeit,
@@ -340,20 +418,24 @@ def _trade_zeile(zeile: tuple, zeilen_nummer: int) -> _TradeInhalt:
         "strikes_roh": strikes_roh,
         "menge_zaehler": menge_zaehler,
         "menge_nenner": menge_nenner,
-        "offen_preis": _zahlzelle(zeile[5], kontext, "Open"),
+        # Der Strich in `Open` heißt „nie eröffnet" — nur bei `CANCELED`
+        # (Vertrag 14); bei jedem anderen Status bleibt `Open` Pflicht.
+        "offen_preis": _zahlzelle(
+            zeile[5], kontext, "Open", strich_heisst_leer=status == "CANCELED"
+        ),
         "schluss_preis": _zahlzelle(zeile[6], kontext, "Close", strich_heisst_leer=True),
         "stop_roh": stop_roh,
         "stop_wert": stop_wert,
         "profit": profit,
         "profit_waehrung": profit_waehrung,
-        "status": _textwert(zeile[10], kontext, "Status"),
+        "status": status,
         # Vollständiges Zeilenbild; Zahlen als Text, damit JSON trägt.
         "roh_json": json.dumps(
             [None if zelle is None else str(zelle) for zelle in zeile],
             ensure_ascii=False,
         ),
     }
-    return _TradeInhalt(felder=felder, legs=_legs_zerlegen(strikes_roh, kontext))
+    return _TradeInhalt(felder=felder, legs=legs)
 
 
 def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
@@ -439,10 +521,13 @@ def _trade_schreiben(verbindung, trade: _TradeInhalt, lauf_id: int) -> int:
         insert(optionapp_trades).values(**trade.felder, import_run_id=lauf_id)
     )
     trade_id = ergebnis.inserted_primary_key[0]
-    verbindung.execute(
-        insert(optionapp_legs),
-        [{**leg, "optionapp_trade_id": trade_id} for leg in trade.legs],
-    )
+    if trade.legs:
+        # Ein Trade ohne Legs (nie eröffnet, geplant) wird ohne Legs gebucht —
+        # ein Insert mit leerer Liste wäre hier kein No-Op.
+        verbindung.execute(
+            insert(optionapp_legs),
+            [{**leg, "optionapp_trade_id": trade_id} for leg in trade.legs],
+        )
     return trade_id
 
 
