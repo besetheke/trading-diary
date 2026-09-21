@@ -1920,3 +1920,45 @@ Zurückgestellt, bis genug bestätigte Fälle vorliegen.
 Ketten; Zeitfenster-Treffer werden Kandidaten zur Bestätigung. Ausformuliert
 im Plan, §6, AP-04, Block B. Die eigentliche Abhilfe liegt vorn, nicht
 hinten: AP-11 schreibt die Absicht beim Aufsetzen mit.
+
+## OF-42 · Strukturbildung: eine Order über mehrere Verfallstermine
+
+**Befund 21.09.2026, aus der Stichprobe (Nr. 39, „Offensichtlicher Trade
+falsch gebaut").** Block A, Regel 1 fasst alle Legs mit gleichem
+`ibExecID`-Präfix zu einer Struktur zusammen — ohne Bedingung an die Expiry.
+Der beanstandete Fall ist eine `Custom`-Struktur mit vier Put-Legs über
+**zwei Verfallstermine**, alle aus einer einzigen Combo-Order.
+
+**Gemessen über den gesamten Bestand:** 382 der 8.880 Strukturen umfassen
+mehr als einen Verfallstermin, sämtlich als `Custom` klassifiziert.
+
+| Herkunft | Anzahl | Einordnung |
+|---|---|---|
+| OA-Referenz (`methode = 'oa'`) | 245 | **unbedenklich** — OA bucht solche Trades selbst so (Diagonalen, Doppeldiagonalen); der Referenzexport bestätigt die Form |
+| `exec_batch`, Order hat nur eröffnet | 80 | plausibel eine echte Diagonale |
+| `exec_batch`, Order hat zugleich Legs geschlossen | **57** | **verdächtig** — das ist das Bild eines in einer Order gebündelten Rolls |
+
+**Die Lücke liegt zwischen Block A und Block B.** Block B, Regel 1 erkennt
+den Roll daran, dass eine Combo-Order gleichzeitig schließt und eröffnet.
+Block A hat die eröffnende Seite dieser Order aber vorher schon zu **einer**
+Struktur verschmolzen — auch wenn sie zwei Verfallstermine umfasst. Wo die
+neue Position selbst wieder aus zwei Terminen besteht, ist nicht mehr
+unterscheidbar, was Fortsetzung und was eigenständige Position ist.
+
+**Nicht entschieden, nicht geraten (Regel 10).** Die Mehrterminigkeit allein
+ist **kein** Fehlerkennzeichen — 245 Fälle sind extern bestätigt. Zu klären
+ist nur, ob die 57 Fälle mit gleichzeitiger Schließung anders zu schneiden
+sind. Denkbare Wege: die eröffnende Seite einer schließenden Combo-Order nach
+Verfallstermin trennen, oder es beim heutigen Schnitt belassen und den Fall
+als Kandidat kennzeichnen. Beides berührt Block A und damit die
+Strukturbildung, nicht nur die Verkettung — ein eigener Auftrag, erst nach
+der Entscheidung zur Kettenidentität.
+
+**Nebenbefund zur Mengenwahrnehmung.** Zwei weitere Stichprobenhinweise
+zielen nicht auf einen Fehler, sondern auf einen Unterschied im Bild: Nr. 26
+(„Anzahl Pos nicht richtig (gesplittet?)") ist eine Vertikale über 31
+Kontrakte, aus Teilfills verdichtet (Block A, Regel 1a); Nr. 41 („Spread
+erweitert") sind zwei getrennte Zehnerpositionen sieben Stunden auseinander.
+Die Engine rechnet beides regelkonform. Für die Anzeige heißt das: Teilfills
+und Aufstockungen müssen sichtbar bleiben, sonst wirkt eine korrekte Menge
+falsch (AP-08).

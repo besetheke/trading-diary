@@ -108,14 +108,27 @@ def main() -> None:
     ketten_ergebnis = bilde_chains(struktur_ergebnis, legs, exec_rows, instruments)
     exec_je_id = {r["exec_id"]: r for r in exec_rows}
 
-    ketten_je_oa_trade: dict[str, list] = {}
+    # Verglichen wird die **früheste Struktur mit dieser OA-Nummer**, nicht das
+    # erste Glied der Kette. Beides fällt meist zusammen, aber nicht immer: Eine
+    # OA-Struktur kann als Fortsetzung an einer fremden Kette hängen, deren Kopf
+    # dann gar keine OA-Nummer trägt. Am Kettenkopf zu suchen meldete solche
+    # Fälle fälschlich als „ohne passende Kette" (gemessen: einmal im August).
+    struktur_je_oa_trade: dict[str, object] = {}
+    for struktur in struktur_ergebnis.structures:
+        if not struktur.oa_trade:
+            continue
+        bisher = struktur_je_oa_trade.get(struktur.oa_trade)
+        if bisher is None or struktur.eroeffnet_am < bisher.eroeffnet_am:
+            struktur_je_oa_trade[struktur.oa_trade] = struktur
+
+    ketten_je_oa_trade: dict[str, set] = {}
     for chain in ketten_ergebnis.chains:
-        erstes_glied = chain.glieder[0].structure
-        if erstes_glied.oa_trade:
-            ketten_je_oa_trade.setdefault(erstes_glied.oa_trade, []).append(chain)
+        for glied in chain.glieder:
+            if glied.structure.oa_trade:
+                ketten_je_oa_trade.setdefault(glied.structure.oa_trade, set()).add(id(chain))
 
     mehrfach = sum(1 for v in ketten_je_oa_trade.values() if len(v) > 1)
-    print(f"oa_trade-Werte mit mehr als einer Kette (sollte 0 sein): {mehrfach}")
+    print(f"oa_trade-Werte, deren Strukturen in mehreren Ketten liegen: {mehrfach}")
 
     # OF-36: Eröffnungen, die der FIFO-Abgleich (pro conid, kontoweit) als
     # Schließung einer Gegenposition eines ANDEREN OA-Trades verbraucht hat.
@@ -157,14 +170,13 @@ def main() -> None:
 
     for oa_trade in sorted(oa_je_trade, key=int):
         referenz = oa_je_trade[oa_trade]
-        ketten = ketten_je_oa_trade.get(oa_trade)
-        if not ketten:
+        eigene = struktur_je_oa_trade.get(oa_trade)
+        if eigene is None:
             fehlend += 1
             abweichend_pseudonyme.append(pseudonym(int(oa_trade), praefix="T"))
             continue
-        erstes_glied = ketten[0].glieder[0].structure
         ref_sig = _referenz_legs(referenz)
-        eig_sig = _eigene_legs(erstes_glied, exec_je_id, instruments)
+        eig_sig = _eigene_legs(eigene, exec_je_id, instruments)
         if ref_sig == eig_sig:
             exakt += 1
         elif not (eig_sig - ref_sig) and _kontoweit_verrechnet(
@@ -176,9 +188,9 @@ def main() -> None:
             abweichend_pseudonyme.append(pseudonym(int(oa_trade), praefix="T"))
 
     gesamt = len(oa_je_trade)
-    print(f"\nOhne passende Kette: {fehlend} von {gesamt}")
-    print(f"Erstes Kettenglied stimmt exakt mit der OA-Referenz überein: "
-          f"{exakt} von {gesamt} ({exakt / gesamt * 100:.1f} %)")
+    print(f"\nOhne eigene Struktur: {fehlend} von {gesamt}")
+    print(f"Früheste Struktur mit dieser OA-Nummer stimmt exakt mit der Referenz "
+          f"überein: {exakt} von {gesamt} ({exakt / gesamt * 100:.1f} %)")
     print(f"Abweichung durch kontoweite Verrechnung mit einem anderen OA-Trade (OF-36): "
           f"{verrechnet} von {gesamt}")
     print(f"Unerklärt: {len(abweichend_pseudonyme)} von {gesamt}")
