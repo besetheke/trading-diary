@@ -34,24 +34,32 @@ import hashlib
 import sys
 from collections import Counter
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import golden_bestandsabgleich_of23 as _bestandsabgleich  # noqa: E402
-from openpyxl import Workbook  # noqa: E402
+from openpyxl import Workbook, load_workbook  # noqa: E402
 from openpyxl.styles import Font, PatternFill  # noqa: E402
 
 from engine.chains import OPTIONS_ANLAGEKLASSEN, bilde_chains  # noqa: E402
 from engine.matching import bilde_legs  # noqa: E402
-from engine.structures import ZEITFENSTER, bilde_structures, mengen_vergleichbar  # noqa: E402
+from engine.structures import (  # noqa: E402
+    ZEITFENSTER,
+    LegSchluessel,
+    bilde_structures,
+    mengen_vergleichbar,
+)
 
 GOLDEN = Path(__file__).resolve().parents[2] / "fixtures" / "golden"
 ZIEL = GOLDEN / "Stichprobe_Ketten.xlsx"
 BASISWERTE = ("DAX", "ESTX50")
+# Der Heuristik-Block ist bewusst groß: Die erste Durchsicht (21.09.2026) fand
+# dort fünf Fehler in elf Ketten, im belegten Block keinen einzigen.
 UMFANG = {
-    ("DAX", "Heuristik"): 8,
-    ("ESTX50", "Heuristik"): 4,
+    ("DAX", "Heuristik"): 18,
+    ("ESTX50", "Heuristik"): 7,
     ("DAX", "Belegt"): 6,
     ("ESTX50", "Belegt"): 2,
 }
@@ -69,7 +77,8 @@ GEGENPROBE_UMFANG = {
 KOPF = [
     "Nr", "Block", "Basiswert", "Glied", "Verknüpfung", "Erkennung / Grund",
     "Eröffnet", "Geschlossen", "Schluss durch", "Legs", "Menge",
-    "Brutto", "Kommission", "Urteil", "Bemerkung", "Schlüssel",
+    "Preis auf", "Preis zu", "Brutto", "Kommission", "Urteil", "Bemerkung",
+    "Schlüssel",
 ]
 ERKLAERUNG = [
     "So prüfst du: Jede Nummer ist eine Kette (bzw. in der Gegenprobe ein Paar).",
@@ -77,6 +86,10 @@ ERKLAERUNG = [
     "richtig = so habe ich es gehandelt (Kette) bzw. das war KEIN Roll (Gegenprobe).",
     "falsch = die Engine liegt daneben — bitte unter 'Bemerkung' kurz, was stimmt.",
     "Spalte 'Schlüssel' nicht ändern: Darüber wird die Stichprobe später eingefroren.",
+    "'Preis auf' / 'Preis zu': Nettoprämie je Kontrakt, positiv = eingenommen, "
+    "negativ = bezahlt.",
+    "Achtung: 'Falsch' in Excel wird zu einem Wahrheitswert. Schreib lieber "
+    "'falsch -' mit einem Wort dahinter.",
 ]
 
 
@@ -107,22 +120,90 @@ def _legs_text(structure, exec_je_id, instruments) -> str:
     return " / ".join(f"{n}× {t}" if n > 1 else t for t, n in sorted(teile.items()))
 
 
+def _preis(structure, legs_je_schluessel, exec_je_id, *, schliessung: bool):
+    """Nettoprämie der Struktur je Kontrakt, positiv = eingenommen.
+
+    Verkauf bringt Prämie (positiv), Kauf kostet sie (negativ). Gerechnet
+    wird über die Menge der Leg, nicht über die der Ausführung — eine
+    Ausführung kann mehrere Legs bedienen.
+
+    Ohne die Preise ist ein Roll nicht von einem Wiedereinstieg zu
+    unterscheiden: Beide schließen und eröffnen kurz nacheinander. Erst der
+    Preis zeigt, ob die neue Position die alte fortsetzt (Nutzer, 21.09.2026).
+    """
+    summe = Decimal(0)
+    for schluessel in structure.leg_schluessel:
+        exec_id = schluessel.close_exec_id if schliessung else schluessel.open_exec_id
+        if exec_id is None:
+            continue
+        ausfuehrung = exec_je_id.get(exec_id)
+        leg = legs_je_schluessel.get(schluessel)
+        if ausfuehrung is None or leg is None:
+            continue
+        vorzeichen = 1 if ausfuehrung["side"] == "SELL" else -1
+        summe += Decimal(leg["menge"]) * Decimal(ausfuehrung["preis"]) * vorzeichen
+    if not summe:
+        return None
+    return round(float(summe / Decimal(structure.menge)), 4) if structure.menge else None
+
+
 def _zeile(nr, block, structure, glied, verknuepfung, erkennung, exec_je_id, instruments,
-           schluessel):
+           schluessel, legs_je_schluessel):
     return [
         nr, block, structure.underlying, glied, verknuepfung, erkennung,
         structure.eroeffnet_am, structure.geschlossen_am, structure.schluss_ereignistyp,
         _legs_text(structure, exec_je_id, instruments), float(structure.menge),
+        _preis(structure, legs_je_schluessel, exec_je_id, schliessung=False),
+        _preis(structure, legs_je_schluessel, exec_je_id, schliessung=True),
         float(structure.brutto_pnl) if structure.brutto_pnl is not None else None,
         float(structure.kommission_gesamt), None, None, schluessel,
     ]
 
 
+def _vorherige_urteile() -> tuple[dict, Path | None]:
+    """Liest Urteile der jüngsten vorhandenen Prüfdatei, je (Schlüssel, Glied).
+
+    So geht eine Durchsicht nicht verloren, wenn die Stichprobe um Spalten
+    oder Fälle erweitert wird.
+    """
+    vorhandene = sorted(GOLDEN.glob("Stichprobe_Ketten*.xlsx"))
+    if not vorhandene:
+        return {}, None
+    quelle = vorhandene[-1]
+    blatt = load_workbook(quelle, data_only=True)["Stichprobe"]
+    zeilen = list(blatt.iter_rows(values_only=True))
+    kopf = None
+    for nummer, zeile in enumerate(zeilen):
+        if zeile and zeile[0] == "Nr":
+            kopf = {name: i for i, name in enumerate(zeile) if name}
+            start = nummer + 1
+            break
+    if kopf is None or "Schlüssel" not in kopf:
+        return {}, quelle
+    urteile = {}
+    for zeile in zeilen[start:]:
+        if not zeile or zeile[kopf["Nr"]] is None:
+            continue
+        urteil = zeile[kopf["Urteil"]] if "Urteil" in kopf else None
+        bemerkung = zeile[kopf["Bemerkung"]] if "Bemerkung" in kopf else None
+        if urteil is None and bemerkung is None:
+            continue
+        urteile[(zeile[kopf["Schlüssel"]], zeile[kopf["Glied"]])] = (urteil, bemerkung)
+    return urteile, quelle
+
+
+def _naechste_datei() -> Path:
+    if not ZIEL.exists():
+        return ZIEL
+    nummer = 2
+    while (GOLDEN / f"Stichprobe_Ketten_v{nummer}.xlsx").exists():
+        nummer += 1
+    return GOLDEN / f"Stichprobe_Ketten_v{nummer}.xlsx"
+
+
 def main() -> None:
-    if ZIEL.exists():
-        print("Prüfdatei existiert bereits und wird nicht überschrieben "
-              "(sie kann Urteile enthalten). Zum Neuerzeugen vorher umbenennen.")
-        raise SystemExit(1)
+    vorherige, quelle = _vorherige_urteile()
+    ziel = _naechste_datei()
 
     exec_rows, instruments, corporate_actions, _offen = _bestandsabgleich.sammeln()
     massnahmen, _u, _o = _bestandsabgleich.kapitalmassnahmen_ableiten(
@@ -141,6 +222,9 @@ def main() -> None:
     strukturen = bilde_structures(legs, exec_rows, instruments)
     ketten = bilde_chains(strukturen, legs, exec_rows, instruments).chains
     exec_je_id = {r["exec_id"]: r for r in exec_rows}
+    legs_je_schluessel = {
+        LegSchluessel(leg["open_exec_id"], leg["close_exec_id"]): leg for leg in legs
+    }
 
     # Ketten-Blöcke
     kandidaten: dict[tuple[str, str], list] = {}
@@ -220,29 +304,48 @@ def main() -> None:
         zelle.font = Font(bold=True)
     urteil_fuellung = PatternFill("solid", fgColor="FFF2CC")
 
+    uebernommen = 0
+
+    def _anhaengen(zeile, glied_name, schluessel, hervorheben):
+        nonlocal uebernommen
+        altes = vorherige.get((schluessel, glied_name))
+        if altes is not None:
+            zeile[KOPF.index("Urteil")], zeile[KOPF.index("Bemerkung")] = altes
+            uebernommen += 1
+        blatt.append(zeile)
+        if hervorheben:
+            blatt.cell(blatt.max_row, KOPF.index("Urteil") + 1).fill = urteil_fuellung
+
     nr = 0
     for block, kette in auswahl:
         nr += 1
         schluessel = "k:" + _struktur_schluessel(kette.glieder[0].structure)
         for glied in kette.glieder:
-            blatt.append(_zeile(nr, block, glied.structure, glied.sequenz,
-                                glied.verknuepfungstyp, glied.erkennung,
-                                exec_je_id, instruments, schluessel))
-            if glied.sequenz == 1:
-                blatt.cell(blatt.max_row, KOPF.index("Urteil") + 1).fill = urteil_fuellung
+            _anhaengen(
+                _zeile(nr, block, glied.structure, glied.sequenz,
+                       glied.verknuepfungstyp, glied.erkennung,
+                       exec_je_id, instruments, schluessel, legs_je_schluessel),
+                glied.sequenz, schluessel, glied.sequenz == 1,
+            )
     for grund, alt, neu in gegenprobe:
         nr += 1
         schluessel = "p:" + _struktur_schluessel(alt) + ">" + _struktur_schluessel(neu)
-        blatt.append(_zeile(nr, "Gegenprobe", alt, "alt", "nicht verkettet", grund,
-                            exec_je_id, instruments, schluessel))
-        blatt.cell(blatt.max_row, KOPF.index("Urteil") + 1).fill = urteil_fuellung
-        blatt.append(_zeile(nr, "Gegenprobe", neu, "neu", "nicht verkettet", "-",
-                            exec_je_id, instruments, schluessel))
+        _anhaengen(
+            _zeile(nr, "Gegenprobe", alt, "alt", "nicht verkettet", grund,
+                   exec_je_id, instruments, schluessel, legs_je_schluessel),
+            "alt", schluessel, True,
+        )
+        _anhaengen(
+            _zeile(nr, "Gegenprobe", neu, "neu", "nicht verkettet", "-",
+                   exec_je_id, instruments, schluessel, legs_je_schluessel),
+            "neu", schluessel, False,
+        )
 
-    for spalte, breite in zip("ABCDEFGHIJKLMNOP", (5, 11, 9, 6, 13, 11, 17, 17, 12, 48,
-                                                    7, 10, 11, 12, 30, 12), strict=True):
+    for spalte, breite in zip("ABCDEFGHIJKLMNOPQR",
+                              (5, 11, 9, 6, 13, 22, 17, 17, 12, 48, 7, 10, 10, 10, 11,
+                               16, 34, 12), strict=True):
         blatt.column_dimensions[spalte].width = breite
-    mappe.save(ZIEL)
+    mappe.save(ziel)
 
     # Konsole: nur Zählwerte (Regel 2)
     zaehler = Counter(block for block, _ in auswahl)
@@ -253,7 +356,9 @@ def main() -> None:
           f"innerhalb von 30 Minuten)")
     print("Nicht verkettete Paare je Grund: "
           + ", ".join(f"{g}: {n}" for g, n in Counter(p[0] for p in paare).most_common()))
-    print("Prüfdatei geschrieben: fixtures/golden/Stichprobe_Ketten.xlsx")
+    if quelle is not None:
+        print(f"Urteile übernommen aus {quelle.name}: {uebernommen} Zeilen")
+    print(f"Prüfdatei geschrieben: fixtures/golden/{ziel.name}")
 
 
 if __name__ == "__main__":

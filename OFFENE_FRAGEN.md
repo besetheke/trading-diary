@@ -1828,3 +1828,52 @@ OA-Tradenummern, einen Profit- und zwei Stopwerte in die Konsolenausgabe
 geschrieben. Das Skript fängt Parserfehler jetzt ab und nennt nur noch das
 betroffene Feld.
 
+
+## OF-41 · Das Drei-Minuten-Fenster erkennt Rolls unzuverlässig (AP-04, Stichprobe)
+
+**Erste Durchsicht durch den Nutzer, 21.09.2026.** Die dritte
+AP-04-Abnahmeprüfung (Stichprobe, Nicht-OA-Teil) liegt beurteilt vor:
+20 Nummern, davon 12 gerollte Ketten mit mindestens einem nur erschlossenen
+Glied, 8 ausschließlich über die Order-Nummer belegte und 10 Paare der
+Gegenprobe.
+
+| Block | Urteil |
+|---|---|
+| Belegt (`exec_batch`) | **8 von 8 richtig** |
+| Heuristik (Zeitfenster) | 6 richtig, **5 falsch**, 1 ohne Urteil |
+| Gegenprobe (nicht verkettet) | 4 richtig, **4 falsch**, 2 unklar |
+
+**Der belegte Weg trägt.** Kein einziger Fehler — das deckt sich damit, dass
+Rolls üblicherweise als eine Order ausgeführt werden (Nutzer, 19.09.2026).
+
+**Das Zeitfenster trägt nicht.** Es irrt in beide Richtungen:
+
+- *Falsch verkettet:* In drei Fällen war die neue Position ein
+  **Wiedereinstieg nach einem Profit Target**, kein Roll („Trade wurde nur
+  nach einem PT als re-entry gestartet"), in einem weiteren eine schlichte
+  Neueröffnung („Kein Roll – open"). Schließen und kurz darauf neu eröffnen
+  sieht in den Brokerdaten genauso aus wie ein Roll.
+- *Roll übersehen:* Beide Paare im Abstand von 3 bis 30 Minuten waren echte
+  Rolls — das Fenster ist zu eng. Zwei der drei Fälle „alt schon
+  fortgesetzt" ebenfalls: `_rolls_verketten()` vergibt die Fortsetzung an
+  den ersten passenden Kandidaten und verbaut sich damit den richtigen.
+
+Die Mengenregel (±20 %) sieht dagegen brauchbar aus: 3 von 4 richtig, zweimal
+mit dem Hinweis „Pos gesplitted". Ein Fall der Gegenprobe zielt auf die
+Strukturbildung, nicht auf die Verkettung („Offensichtlicher Trade falsch
+gebaut") und ist gesondert zu prüfen.
+
+**Nicht entschieden (Regel 10).** Die Stichprobe ist zu klein für einen
+Schluss auf die Grundgesamtheit, und das Urteil erging ohne die Preise — ohne
+sie ist ein Roll von einem Wiedereinstieg kaum zu unterscheiden. Deshalb
+zweite Runde: `Stichprobe_Ketten_v2.xlsx` trägt Eröffnungs- und Schlusspreis
+je Glied (Nettoprämie je Kontrakt, geprüft gegen das Bruttoergebnis: 142 von
+142 stimmen exakt), übernimmt die bisherigen Urteile und vergrößert den
+Heuristik-Block auf 25 Ketten.
+
+**Was danach zu entscheiden ist:** Nach Regel 7 sind automatisch erzeugte
+Verknüpfungen ohnehin Vorschläge, keine Tatsachen. Bestätigt die zweite
+Runde das Bild, liegt es nahe, Zeitfenster-Verknüpfungen wie die
+Futures-Rolls zu behandeln — als Kandidaten zur Bestätigung statt als Kette.
+Das betrifft die Roll-Degradation unmittelbar und ist eine Planfrage, keine
+stille Korrektur.

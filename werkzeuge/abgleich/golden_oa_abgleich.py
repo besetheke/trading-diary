@@ -75,8 +75,17 @@ def main() -> None:
         print(f"Parser bricht ab, Feld: {feld.group(1) if feld else 'unbekannt'} "
               f"(Einzelheiten nur über das Messskript, nie roh)")
         raise SystemExit(2) from None
-    oa_je_trade = {t.felder["oa_trade"]: t for t in oa_inhalt.trades}
-    print(f"OA-Referenz: {len(oa_je_trade)} Trades")
+    # Trades ohne ausgeführte Legs (`CANCELED`, `RUNNING` mit geplanten
+    # DTE-Legs, OF-40) können keiner Kette entsprechen — sie haben nie eine
+    # Ausführung erzeugt. Sie gehören nicht in den Nenner, sondern eigens
+    # ausgewiesen; sonst sieht ein Export voller abgebrochener Trades wie ein
+    # Abgleichsfehler aus.
+    ohne_legs = [t for t in oa_inhalt.trades if not t.legs]
+    oa_je_trade = {t.felder["oa_trade"]: t for t in oa_inhalt.trades if t.legs}
+    print(f"OA-Referenz: {len(oa_inhalt.trades)} Trades, davon {len(ohne_legs)} ohne "
+          f"ausgeführte Legs (Status: "
+          f"{', '.join(f'{s}×{n}' for s, n in sorted(Counter(t.felder['status'] for t in ohne_legs).items()))}"
+          f") — verglichen werden {len(oa_je_trade)}")
 
     exec_rows, instruments, corporate_actions, _open = _bestandsabgleich.sammeln()
     massnahmen, _uebersprungen, _ohne_instr = _bestandsabgleich.kapitalmassnahmen_ableiten(
