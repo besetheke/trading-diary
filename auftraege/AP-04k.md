@@ -11,11 +11,10 @@ aendert_tests: ja
 Korrekturpaket nach CLAUDE.md, Regel 1a. Es ändert eine benannte
 Test-Erwartung und läuft deshalb unter `locker`.
 
-> **Vorbedingung: Der Plantext muss stehen.** Grundlage ist §6, AP-04,
-> Block B, Regel 2 in der neuen Fassung (Vorschlagstext in
-> `auftraege/AP-04-vorschlag-kettenidentitaet.md`). Solange der Plan die
-> alte Fassung trägt, darf dieses Paket nicht laufen — es würde eine
-> Test-Erwartung gegen den geltenden Plan ändern.
+**Vorbedingung erfüllt:** Der Plan trägt die neue Fassung von §6, AP-04,
+Block B, Regel 2 samt Regel 5 (Commit `3786cb7`, 21.09.2026). Der
+Vorschlagstext `auftraege/AP-04-vorschlag-kettenidentitaet.md` ist damit
+erledigt und kann gelöscht werden.
 
 ## Warum
 
@@ -42,7 +41,21 @@ Nur diese, keine weiteren.
   `erkennung == 'heuristik'`. Neu: **zwei** Ketten, und das Paar erscheint
   in der Kandidatenliste. Die Prüflogik bleibt erhalten — geprüft wird
   weiterhin, was aus demselben Fixture entsteht, nur eben das Richtige.
-- **Neue Tests** in derselben Datei für die Kandidatenliste (siehe Abnahme).
+- **Vier Tests in `tests/test_rebuild.py`**, deren Fixture den
+  Zwei-Order-Roll auf ESTX50 enthält und die deshalb mechanisch nachziehen
+  (beim Schneiden des Auftrags übersehen, nachgetragen 21.09.2026):
+  - `test_grundlauf_schreibt_die_erwarteten_zeilen` — **5 statt 4 Ketten**;
+    Legs, Strukturen und Kettenglieder bleiben unverändert, weil jede
+    Struktur weiterhin genau ein Glied hat.
+  - `test_naturschluessel_folgen_dem_vertrag` — `k:Z5|Z6` kommt hinzu.
+  - `test_zweiter_lauf_aendert_nichts` — dieselbe Zahl.
+  - `test_rollverknuepfung_traegt_ihre_erkennungsart` — **`erkennung =
+    'heuristik'` kann in `chain_links` nicht mehr vorkommen**, weil es keine
+    heuristische Verknüpfung mehr gibt. Geprüft wird stattdessen, dass der
+    ESTX50-Fall **kein** Kettenglied erzeugt und als offener Kandidat
+    gezählt wird; die belegte DAX-Verknüpfung bleibt `auto`.
+- **Neue Tests** in `tests/test_chains.py` für die Kandidatenliste und in
+  `tests/test_rebuild.py` für Ablehnungen (siehe Abnahme).
 
 **Nicht freigegeben:** Jeder andere Test. Insbesondere bleiben
 `test_options_roll_in_einer_order_ueber_gemeinsamen_exec_batch`,
@@ -75,13 +88,35 @@ Nur diese, keine weiteren.
    einen Kandidaten.
 7. **`KettenErgebnis` trägt die Kandidaten mit** (`kandidaten: tuple[...]`).
    Sie werden **nicht persistiert** — `journal rebuild` berechnet sie neu
-   und meldet nur ihre Anzahl. Bestätigt werden sie über `chain_overrides`,
-   wie bisher (kein Schemaeingriff).
-8. **Das Kandidatenfenster ist ein benannter Modulwert**, kein Literal im
-   Code, und es ist weiter als die drei Minuten der alten Regel — die
-   Stichprobe fand echte Rolls jenseits davon. Vorschlag: 30 Minuten.
-   Gemessen ergibt das 597 Kandidatenpaare über den gesamten Bestand;
-   bei 3 Minuten wären es 402, bei 60 Minuten 752.
+   und meldet nur ihre Anzahl.
+8. **Das Kandidatenfenster ist ein benannter Modulwert**, kein Literal:
+   `KANDIDATENFENSTER = timedelta(minutes=30)` (Plan §6, Block B, Regel 2).
+   Gemessen ergibt das 597 Kandidatenpaare über den gesamten Bestand.
+
+### Ablehnungen sind Benutzerdaten (Plan §6, Block B, Regel 2)
+
+9. **Eine Ablehnung wird gespeichert wie eine Bestätigung.** Ohne das
+   erscheint jeder abgelehnte Kandidat bei jedem `rebuild` erneut, und eine
+   Durchsicht von mehreren hundert Paaren wäre nicht dauerhaft.
+10. **Dafür ist eine Migration nötig** (Regel 3, bestehende bleiben
+    unangetastet). `chain_overrides` kann heute nur „gehört dazu"
+    ausdrücken: Neue Spalte `urteil`, Text, NOT NULL, Vorgabewert
+    `'bestaetigt'`, `CHECK (urteil IN ('bestaetigt', 'abgelehnt'))`.
+    Bestehende Zeilen sind damit unverändert Bestätigungen. Dazu die
+    Ergänzung in `journal/schema.py`.
+11. **Bedeutung einer Ablehnung:** `(chain_id, structure_id,
+    urteil='abgelehnt')` heißt „diese Struktur setzt jene Kette **nicht**
+    fort". `chain_id` ist die Kette der schließenden Seite des Kandidaten,
+    `structure_id` die vorgeschlagene Fortsetzung. Dieselbe Stabilität wie
+    bei Bestätigungen: Beide hängen am Naturschlüssel der eröffnenden
+    Struktur (AP-04v, Entscheidung 1).
+12. **Die Engine bleibt rein (Regel 6).** `rollkandidaten()` kennt keine
+    Urteile und liefert **alle** Kandidaten. Das Ausfiltern bereits
+    entschiedener Paare geschieht in `journal/rebuild.py`, wo die Datenbank
+    ohnehin gelesen wird.
+13. **`RebuildErgebnis`** bekommt `kandidaten_offen` — Kandidaten abzüglich
+    der bereits bestätigten und abgelehnten. `journal rebuild` gibt den Wert
+    aus.
 
 ## Abnahme
 
@@ -92,6 +127,10 @@ Nur diese, keine weiteren.
   **zwei** Kandidaten; ein Kandidat mit stark abweichender Menge wird
   angeboten, aber hinten einsortiert; die Reihenfolge ist von der
   Eingabereihenfolge unabhängig.
+- **Ablehnung überlebt den Rebuild:** Ein abgelehnter Kandidat wird nach
+  zwei `rebuild`-Läufen nicht erneut angeboten, `chain_overrides` bleibt
+  unverändert, und die Struktur hängt an keiner Kette. Ebenso bleibt die
+  Prüfung bestehen, dass eine **Bestätigung** den Rebuild überlebt.
 - Alle übrigen Tests bleiben grün, insbesondere die Pflichttests aus §6.
 - Die vier Golden-Invarianten halten weiterhin
   (`werkzeuge/abgleich/golden_ketten_invarianten.py`).

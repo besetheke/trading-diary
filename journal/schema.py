@@ -663,6 +663,15 @@ chain_overrides = Table(
     Column("structure_id", ForeignKey("structures.structure_id"), primary_key=True),
     Column("notiz", Text, nullable=True),
     Column("erstellt_am", DateTime, nullable=False),
+    # Ablehnungen sind ebenso Benutzerdaten wie Bestätigungen (Plan §6,
+    # Block B, Regel 2): Ohne sie erscheint jeder abgelehnte Rollkandidat
+    # beim nächsten `rebuild` erneut. `abgelehnt` heißt „diese Struktur
+    # setzt jene Kette NICHT fort".
+    Column("urteil", Text, nullable=False, server_default="bestaetigt"),
+    CheckConstraint(
+        "urteil IN ('bestaetigt', 'abgelehnt')",
+        name="ck_chain_overrides_urteil",
+    ),
 )
 
 campaign_overrides = Table(

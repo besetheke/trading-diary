@@ -70,7 +70,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{ergebnis.chains} Ketten, {ergebnis.chain_links} Kettenglieder, "
             f"{ergebnis.nicht_strukturiert} unstrukturiert; "
             f"Overrides: {ergebnis.overrides_angewandt} angewandt, "
-            f"{ergebnis.overrides_verwaist} verwaist"
+            f"{ergebnis.overrides_verwaist} verwaist; "
+            f"{ergebnis.kandidaten_offen} offene Rollkandidaten"
         )
         if ergebnis.overrides_verwaist > 0:
             # Vertrag 20: Verwaistes wird niemals übergangen — der Aufruf

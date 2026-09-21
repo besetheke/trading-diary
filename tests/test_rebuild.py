@@ -62,9 +62,11 @@ def test_grundlauf_schreibt_die_erwarteten_zeilen(migrated_db):
     """Der Bestand aus `fixtures_rebuild` ergibt 10 Legs, 6 Strukturen,
     4 Ketten und 6 Kettenglieder.
 
-    Von Hand abgezählt: DAX bringt zwei Strukturen in einer Kette, ESTX50
-    ebenso, die beiden Aktientranchen je eine Struktur in je eigener Kette
-    (Plan §6, Block B, Regel 4 — Aktien werden nie automatisch verkettet).
+    Von Hand abgezählt: DAX bringt zwei Strukturen in **einer** Kette — der
+    Roll lief in einer Order und ist über die Order-Nummer belegt. ESTX50
+    lief in zwei Orders und wird seit AP-04k **nicht** mehr verkettet: zwei
+    eigene Ketten und ein offener Rollkandidat (Plan §6, Block B, Regel 2).
+    Die beiden Aktientranchen bleiben je eine eigene Kette (Regel 4).
     """
     befuelle(migrated_db)
 
@@ -72,12 +74,13 @@ def test_grundlauf_schreibt_die_erwarteten_zeilen(migrated_db):
 
     assert ergebnis.legs == 10
     assert ergebnis.structures == 6
-    assert ergebnis.chains == 4
+    assert ergebnis.chains == 5
     assert ergebnis.chain_links == 6
     assert ergebnis.nicht_strukturiert == 0
+    assert ergebnis.kandidaten_offen == 1
     assert len(_zeilen(migrated_db, legs)) == 10
     assert len(_zeilen(migrated_db, structures)) == 6
-    assert len(_zeilen(migrated_db, chains)) == 4
+    assert len(_zeilen(migrated_db, chains)) == 5
     assert len(_zeilen(migrated_db, chain_links)) == 6
 
 
@@ -91,7 +94,7 @@ def test_naturschluessel_folgen_dem_vertrag(migrated_db):
         "E1|E2", "E5|E6", "Z1|Z2", "Z5|Z6", "A1", "A2",
     }
     assert set(_je_schluessel(migrated_db, chains)) == {
-        "k:E1|E2", "k:Z1|Z2", "k:A1", "k:A2",
+        "k:E1|E2", "k:Z1|Z2", "k:Z5|Z6", "k:A1", "k:A2",
     }
 
 
@@ -210,19 +213,29 @@ def test_rollverknuepfung_traegt_ihre_erkennungsart(migrated_db):
     `ChainGlied` und unterscheidet bereits belegt von erschlossen.
 
     Der DAX-Roll lief in einer Order (gemeinsamer `exec_batch`) — `auto`.
-    Der ESTX50-Roll lief in zwei Orders zwei Minuten auseinander und ist
-    nur erschlossen — `heuristik`.
+
+    Der ESTX50-Fall lief in zwei Orders zwei Minuten auseinander. Seit
+    AP-04k verkettet das nicht mehr, deshalb kann `erkennung = 'heuristik'`
+    in `chain_links` gar nicht mehr vorkommen: Eine erschlossene Nähe ist
+    ein Vorschlag, keine Verknüpfung (Plan §6, Block B, Regel 5). Geprüft
+    wird stattdessen, dass dort **kein** Roll steht und der Fall als
+    offener Kandidat gezählt wird.
     """
     befuelle(migrated_db)
-    rebuild(migrated_db)
+    ergebnis = rebuild(migrated_db)
 
     glieder = _glieder(migrated_db)
     assert glieder["E1|E2"]["sequenz"] == 1
     assert glieder["E1|E2"]["verknuepfungstyp"] == "open"
     assert glieder["E5|E6"]["verknuepfungstyp"] == "roll"
     assert glieder["E5|E6"]["erkennung"] == "auto"
-    assert glieder["Z5|Z6"]["verknuepfungstyp"] == "roll"
-    assert glieder["Z5|Z6"]["erkennung"] == "heuristik"
+
+    assert glieder["Z5|Z6"]["verknuepfungstyp"] == "open"
+    assert glieder["Z5|Z6"]["sequenz"] == 1
+    assert all(
+        zeile["erkennung"] != "heuristik" for zeile in _zeilen(migrated_db, chain_links)
+    )
+    assert ergebnis.kandidaten_offen == 1
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +258,7 @@ def test_zweiter_lauf_aendert_nichts(migrated_db):
     zweites = rebuild(migrated_db)
 
     assert zweites.structures == 6
-    assert zweites.chains == 4
+    assert zweites.chains == 5
     nachher_strukturen = _je_schluessel(migrated_db, structures)
     nachher_ketten = _je_schluessel(migrated_db, chains)
     assert {s: z["structure_id"] for s, z in nachher_strukturen.items()} == {
@@ -415,3 +428,73 @@ def test_benutzerdaten_ueberstehen_den_rebuild(migrated_db):
     rebuild(migrated_db)
 
     assert _zeilen(migrated_db, journal_entries) == vorher
+
+
+# ---------------------------------------------------------------------------
+# Ablehnungen (AP-04k, Plan §6, Block B, Regel 2)
+# ---------------------------------------------------------------------------
+
+
+def _entscheide(db_pfad, ziel_kette: str, struktur: str, urteil: str) -> None:
+    ketten = _je_schluessel(db_pfad, chains)
+    strukturen = _je_schluessel(db_pfad, structures)
+    engine = create_db_engine(db_pfad)
+    with engine.begin() as verbindung:
+        verbindung.execute(
+            insert(chain_overrides).values(
+                chain_id=ketten[ziel_kette]["chain_id"],
+                structure_id=strukturen[struktur]["structure_id"],
+                notiz=None,
+                erstellt_am=datetime(2026, 9, 21, 18, 0, 0),
+                urteil=urteil,
+            )
+        )
+
+
+def test_abgelehnter_kandidat_kommt_nicht_wieder(migrated_db):
+    """Eine Ablehnung ist ebenso ein Benutzerdatum wie eine Bestätigung
+    (Plan §6, Block B, Regel 2).
+
+    Ohne sie erschiene jeder abgelehnte Rollkandidat bei jedem `rebuild`
+    erneut, und eine Durchsicht von mehreren hundert Paaren wäre nie
+    dauerhaft. Der ESTX50-Fall ist der eine offene Kandidat des Fixtures;
+    nach der Ablehnung ist keiner mehr offen, die beiden Ketten bleiben
+    getrennt, und `chain_overrides` bleibt unverändert stehen.
+    """
+    befuelle(migrated_db)
+    assert rebuild(migrated_db).kandidaten_offen == 1
+
+    _entscheide(migrated_db, ziel_kette="k:Z1|Z2", struktur="Z5|Z6", urteil="abgelehnt")
+    vorher = _zeilen(migrated_db, chain_overrides)
+
+    ergebnis = rebuild(migrated_db)
+
+    assert ergebnis.kandidaten_offen == 0
+    assert ergebnis.overrides_angewandt == 0
+    assert ergebnis.overrides_verwaist == 0
+    assert ergebnis.chains == 5
+    assert _glieder(migrated_db)["Z5|Z6"]["verknuepfungstyp"] == "open"
+    assert _zeilen(migrated_db, chain_overrides) == vorher
+
+    # Auch ein zweiter Lauf bringt ihn nicht zurück.
+    assert rebuild(migrated_db).kandidaten_offen == 0
+
+
+def test_bestaetigter_kandidat_wird_zur_kette(migrated_db):
+    """Die Gegenrichtung: Wird derselbe Kandidat bestätigt, entsteht die
+    Kette — mit `erkennung = 'manuell'`, nie `heuristik`."""
+    befuelle(migrated_db)
+    rebuild(migrated_db)
+
+    _entscheide(migrated_db, ziel_kette="k:Z1|Z2", struktur="Z5|Z6", urteil="bestaetigt")
+
+    ergebnis = rebuild(migrated_db)
+
+    assert ergebnis.overrides_angewandt == 1
+    assert ergebnis.kandidaten_offen == 0
+    ketten = _je_schluessel(migrated_db, chains)
+    assert "k:Z5|Z6" not in ketten
+    glieder = _glieder(migrated_db)
+    assert glieder["Z5|Z6"]["chain_id"] == ketten["k:Z1|Z2"]["chain_id"]
+    assert glieder["Z5|Z6"]["erkennung"] == "manuell"
+    assert glieder["Z5|Z6"]["verknuepfungstyp"] == "roll"

@@ -7,7 +7,7 @@ Abschnitt AP-04, Schritte 2a–4; der Modul-Docstring von `engine/chains.py`
 trägt die Kurzfassung samt der dokumentierten Annahmen (OF-35).
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from engine.chains import bilde_chains
@@ -344,10 +344,16 @@ def test_options_roll_in_einer_order_ueber_gemeinsamen_exec_batch():
     assert chain.glieder[1].erkennung == "auto"
 
 
-def test_options_roll_in_zwei_orders_ueber_zeitfenster():
-    """Ohne gemeinsamen exec_batch greift Schritt 2: 3-Minuten-Fenster,
-    gleicher Basiswert, gleiche Seite, vergleichbare Menge — die Expiry
-    unterscheidet sich zwangsläufig und ist keine Bedingung."""
+def test_options_roll_in_zwei_orders_wird_kandidat_statt_kette():
+    """Ohne gemeinsamen exec_batch entsteht **keine** Kette mehr, sondern ein
+    Vorschlag (Plan §6, Block B, Regel 2; geändert durch AP-04k nach OF-41).
+
+    Früher verkettete ein 3-Minuten-Fenster diese Paare automatisch. Die
+    Durchsicht der Stichprobe zeigte, dass das in zehn von 25 Fällen falsch
+    war: Ein Wiedereinstieg nach einem Profit Target sieht im Brokerbeleg
+    genauso aus wie ein Roll. Geprüft wird deshalb jetzt, dass dasselbe
+    Fixture zwei eigenständige Ketten und **einen Kandidaten** ergibt.
+    """
     instrumente = {
         601: _instrument(601, asset_class="OPT", underlying="ESTX50", expiry=date(2026, 9, 18),
                           strike="4900", right="P"),
@@ -375,14 +381,16 @@ def test_options_roll_in_zwei_orders_ueber_zeitfenster():
 
     ergebnis = _bilde(legs, executions, instrumente)
 
-    assert len(ergebnis.chains) == 1
-    chain = ergebnis.chains[0]
-    assert chain.anzahl_rolls == 1
-    # Regel 7: Hier schließt nur zeitliche Nähe auf den Roll. Die Kette muss
-    # austragen, dass sie auf einer Heuristik beruht — sonst ist später nicht
-    # mehr unterscheidbar, welche Verknüpfung belegt und welche geschlossen ist.
-    assert chain.glieder[0].erkennung == "auto"
-    assert chain.glieder[1].erkennung == "heuristik"
+    assert len(ergebnis.chains) == 2
+    assert all(chain.anzahl_rolls == 0 for chain in ergebnis.chains)
+
+    assert len(ergebnis.kandidaten) == 1
+    kandidat = ergebnis.kandidaten[0]
+    assert kandidat.rang == 1
+    assert kandidat.abstand == timedelta(minutes=2)
+    assert kandidat.mengenverhaeltnis == Decimal("1")
+    assert {k.open_exec_id for k in kandidat.schliessende.leg_schluessel} == {"E1", "E2"}
+    assert {k.open_exec_id for k in kandidat.eroeffnende.leg_schluessel} == {"E5", "E6"}
 
 
 def test_options_roll_andere_seite_verkettet_nicht():
@@ -535,3 +543,175 @@ def test_ergebnis_ist_unabhaengig_von_der_eingabereihenfolge():
     )
 
     assert vorwaerts.chains == rueckwaerts.chains
+
+
+# ---------------------------------------------------------------------------
+# Rollkandidaten (AP-04k, Plan §6, Block B, Regel 2)
+# ---------------------------------------------------------------------------
+
+
+def _estx(conid, strike, expiry, right="P"):
+    return _instrument(conid, asset_class="OPT", underlying="ESTX50", expiry=expiry,
+                       strike=strike, right=right)
+
+
+def test_belegte_fortsetzung_erzeugt_keinen_kandidaten():
+    """Was die Order-Nummer belegt, wird nicht zur Rückfrage (Vertrag 5).
+
+    Dasselbe Bild wie beim Zeitfenster-Fall, nur mit gemeinsamem
+    `exec_batch`: eine Kette, kein Kandidat.
+    """
+    instrumente = {
+        601: _estx(601, "4900", date(2026, 9, 18)),
+        602: _estx(602, "4850", date(2026, 9, 18)),
+        701: _estx(701, "4800", date(2026, 10, 16)),
+        702: _estx(702, "4750", date(2026, 10, 16)),
+    }
+    zeit = datetime(2026, 9, 15, 15, 0, 0)
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.1"),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              exec_batch="7.1"),
+        _exec("E3", conid=601, side="BUY", handelszeit=zeit, exec_batch="7.9"),
+        _exec("E4", conid=602, side="SELL", handelszeit=zeit, exec_batch="7.9"),
+        _exec("E5", conid=701, side="SELL", handelszeit=zeit, exec_batch="7.9"),
+        _exec("E6", conid=702, side="BUY", handelszeit=zeit, exec_batch="7.9"),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=702),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert len(ergebnis.chains) == 1
+    assert ergebnis.kandidaten == ()
+
+
+def test_zwei_moegliche_fortsetzungen_werden_beide_angeboten():
+    """Mehrdeutigkeit wird angeboten, nicht aufgelöst (Vertrag 6).
+
+    Die alte Logik nahm den ersten passenden Kandidaten und verbaute damit
+    den richtigen — gemessen in der Gegenprobe der Stichprobe (OF-41). Hier
+    schließt eine Position, und zwei kommen als Fortsetzung in Frage: eine
+    nach 2, eine nach 20 Minuten. Beide erscheinen, die nähere zuerst.
+    """
+    instrumente = {
+        601: _estx(601, "4900", date(2026, 9, 18)),
+        602: _estx(602, "4850", date(2026, 9, 18)),
+        701: _estx(701, "4800", date(2026, 10, 16)),
+        702: _estx(702, "4750", date(2026, 10, 16)),
+        801: _estx(801, "4700", date(2026, 11, 20)),
+        802: _estx(802, "4650", date(2026, 11, 20)),
+    }
+    schluss = datetime(2026, 9, 15, 15, 0, 0)
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E3", conid=601, side="BUY", handelszeit=schluss),
+        _exec("E4", conid=602, side="SELL", handelszeit=schluss),
+        _exec("E5", conid=701, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+        _exec("E6", conid=702, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 2, 0)),
+        _exec("E7", conid=801, side="SELL", handelszeit=datetime(2026, 9, 15, 15, 20, 0)),
+        _exec("E8", conid=802, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 20, 0)),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=702),
+        _leg("E7", None, conid=801),
+        _leg("E8", None, conid=802),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert len(ergebnis.chains) == 3
+    assert [k.rang for k in ergebnis.kandidaten] == [1, 2]
+    assert [k.abstand for k in ergebnis.kandidaten] == [
+        timedelta(minutes=2), timedelta(minutes=20),
+    ]
+
+
+def test_abweichende_menge_wird_angeboten_aber_hinten_einsortiert():
+    """Die Menge ordnet, sie entscheidet nicht (Vertrag 3 und 4).
+
+    Ein Roll ist keine Eins-zu-eins-Nachfolge — Positionen werden geteilt
+    und erweitert. Früher verwarf eine Abweichung über 20 % den Kandidaten;
+    jetzt erscheint er, nur weiter hinten.
+
+    Von Hand: Die schließende Position hat Menge 2. Der eine Kandidat trägt
+    Menge 2 (Verhältnis 1), der andere Menge 6 (Verhältnis 3). Beide
+    öffnen zur selben Zeit — bei gleichem Abstand entscheidet das
+    Mengenverhältnis, also erst 1, dann 3.
+    """
+    instrumente = {
+        601: _estx(601, "4900", date(2026, 9, 18)),
+        602: _estx(602, "4850", date(2026, 9, 18)),
+        701: _estx(701, "4800", date(2026, 10, 16)),
+        801: _estx(801, "4700", date(2026, 11, 20)),
+    }
+    schluss = datetime(2026, 9, 15, 15, 0, 0)
+    gleichzeitig = datetime(2026, 9, 15, 15, 5, 0)
+    executions = [
+        _exec("E1", conid=601, side="SELL", menge="2",
+              handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="BUY", menge="2",
+              handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E3", conid=601, side="BUY", menge="2", handelszeit=schluss),
+        _exec("E4", conid=602, side="SELL", menge="2", handelszeit=schluss),
+        _exec("E5", conid=701, side="SELL", menge="2", handelszeit=gleichzeitig),
+        _exec("E6", conid=801, side="SELL", menge="6", handelszeit=gleichzeitig),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, menge="2", offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, menge="2", offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701, menge="2"),
+        _leg("E6", None, conid=801, menge="6"),
+    ]
+
+    ergebnis = _bilde(legs, executions, instrumente)
+
+    assert [k.mengenverhaeltnis for k in ergebnis.kandidaten] == [
+        Decimal("1"), Decimal("3"),
+    ]
+
+
+def test_kandidatenreihenfolge_haengt_nicht_an_der_eingabereihenfolge():
+    """Vertrag 4: Bei Gleichstand entscheidet der Naturschlüssel."""
+    instrumente = {
+        601: _estx(601, "4900", date(2026, 9, 18)),
+        602: _estx(602, "4850", date(2026, 9, 18)),
+        701: _estx(701, "4800", date(2026, 10, 16)),
+        801: _estx(801, "4700", date(2026, 11, 20)),
+    }
+    schluss = datetime(2026, 9, 15, 15, 0, 0)
+    gleichzeitig = datetime(2026, 9, 15, 15, 5, 0)
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E2", conid=602, side="BUY", handelszeit=datetime(2026, 9, 1, 10, 0, 0)),
+        _exec("E3", conid=601, side="BUY", handelszeit=schluss),
+        _exec("E4", conid=602, side="SELL", handelszeit=schluss),
+        _exec("E5", conid=701, side="SELL", handelszeit=gleichzeitig),
+        _exec("E6", conid=801, side="SELL", handelszeit=gleichzeitig),
+    ]
+    legs = [
+        _leg("E1", "E3", conid=601, offen_ja_nein=False, brutto_pnl="50.00"),
+        _leg("E2", "E4", conid=602, offen_ja_nein=False, brutto_pnl="-20.00"),
+        _leg("E5", None, conid=701),
+        _leg("E6", None, conid=801),
+    ]
+
+    vorwaerts = _bilde(legs, executions, instrumente)
+    rueckwaerts = _bilde(list(reversed(legs)), list(reversed(executions)), instrumente)
+
+    def _bild(ergebnis):
+        return [
+            (k.rang, tuple(sorted(x.open_exec_id for x in k.eroeffnende.leg_schluessel)))
+            for k in ergebnis.kandidaten
+        ]
+
+    assert _bild(vorwaerts) == _bild(rueckwaerts)

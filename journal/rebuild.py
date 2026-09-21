@@ -81,6 +81,9 @@ class RebuildErgebnis:
     nicht_strukturiert: int
     overrides_angewandt: int
     overrides_verwaist: int
+    # Rollkandidaten, über die noch nicht entschieden wurde (Plan §6,
+    # Block B, Regel 2). Nicht persistiert, bei jedem Lauf neu berechnet.
+    kandidaten_offen: int = 0
 
 
 def rebuild(
@@ -225,6 +228,11 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     ]
 
     overrides = [dict(z) for z in verbindung.execute(select(chain_overrides)).mappings()]
+    # Plan §6, Block B, Regel 2: Bestätigung und Ablehnung sind beide
+    # Benutzerdaten. Angewandt wird nur die Bestätigung; die Ablehnung hält
+    # einen Kandidaten dauerhaft von der Liste fern. Gesichert gegen Löschung
+    # (Regel 4) sind die Zeilen beider Urteile.
+    bestaetigungen = [o for o in overrides if o["urteil"] == "bestaetigt"]
     gesicherte_struktur_ids = {o["structure_id"] for o in overrides}
     gesicherte_ketten_ids = {o["chain_id"] for o in overrides}
 
@@ -365,7 +373,7 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     #    geschrieben oder gelöscht (Regel 4).
     angewandt, verwaiste = _overrides_anwenden(
         verbindung,
-        overrides,
+        bestaetigungen,
         glieder_je_kette,
         struktur_id_je_schluessel,
         ketten_id_je_schluessel,
@@ -376,6 +384,14 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     # -- assignment_links (Vertrag 22): nicht-manuelle Zeilen neu schreiben.
     _assignment_links_neu_schreiben(verbindung, ketten_ergebnis, exec_je_id)
 
+    offene_kandidaten = _offene_kandidaten(
+        ketten_ergebnis,
+        overrides,
+        glieder_je_kette,
+        struktur_id_je_schluessel,
+        ketten_id_je_schluessel,
+    )
+
     return RebuildErgebnis(
         legs=_anzahl(verbindung, legs),
         structures=_anzahl(verbindung, structures),
@@ -384,7 +400,42 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         nicht_strukturiert=len(struktur_ergebnis.nicht_strukturiert),
         overrides_angewandt=angewandt,
         overrides_verwaist=len(verwaiste),
+        kandidaten_offen=offene_kandidaten,
     )
+
+
+def _offene_kandidaten(
+    ketten_ergebnis,
+    overrides: list[dict],
+    glieder_je_kette: dict[str, list[list]],
+    struktur_id_je_schluessel: dict[str, int],
+    ketten_id_je_schluessel: dict[str, int],
+) -> int:
+    """Rollkandidaten abzüglich der bereits entschiedenen (Vertrag 13).
+
+    Ein Kandidat gilt als entschieden, wenn eine Zeile in
+    ``chain_overrides`` dieselbe Kombination aus Kette der schließenden
+    Seite und vorgeschlagener Struktur trägt — gleich ob bestätigt oder
+    abgelehnt. Die Engine kennt diese Urteile nicht (Regel 6); gefiltert
+    wird deshalb hier.
+    """
+    kette_je_struktur_schluessel = {
+        eintrag[0]: ketten_schluessel
+        for ketten_schluessel, eintraege in glieder_je_kette.items()
+        for eintrag in eintraege
+    }
+    entschieden = {(o["chain_id"], o["structure_id"]) for o in overrides}
+
+    offen = 0
+    for kandidat in ketten_ergebnis.kandidaten:
+        schliessende = _struktur_schluessel(kandidat.schliessende)
+        eroeffnende = _struktur_schluessel(kandidat.eroeffnende)
+        ketten_schluessel = kette_je_struktur_schluessel.get(schliessende)
+        chain_id = ketten_id_je_schluessel.get(ketten_schluessel)
+        structure_id = struktur_id_je_schluessel.get(eroeffnende)
+        if (chain_id, structure_id) not in entschieden:
+            offen += 1
+    return offen
 
 
 def _overrides_anwenden(

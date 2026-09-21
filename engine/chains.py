@@ -32,11 +32,14 @@ auf demselben Basiswert, ist das ein Roll. Dieser Weg gilt für **alle**
 Anlageklassen und ist bei Optionen ohne OA-Referenz der Regelfall, weil
 Rolls üblicherweise als eine Order ausgeführt werden.
 
-**2, Roll in zwei Orders.** Schließung und Eröffnung innerhalb von
-``ZEITFENSTER`` (3 Minuten), gleicher Basiswert, gleiche Seite (Call/Put),
-vergleichbare Menge — nur für Optionen (OPT/FOP); die Expiry unterscheidet
-sich hier zwangsläufig und ist deshalb keine Bedingung. Nur Structures, die
-nicht bereits über Schritt 1 verkettet wurden.
+**2, Roll in zwei Orders — Kandidat, keine Kette.** Schließung und
+Eröffnung innerhalb von ``KANDIDATENFENSTER`` (30 Minuten), gleicher
+Basiswert, gleiche Seite (Call/Put) — nur für Optionen (OPT/FOP); die
+Expiry unterscheidet sich hier zwangsläufig und ist deshalb keine
+Bedingung. **Diese Paare verketten nicht**, sie werden über
+``rollkandidaten()`` vorgeschlagen und erst durch eine Entscheidung des
+Nutzers zur Verknüpfung (Plan §6, Block B, Regel 2; Begründung in OF-41).
+Die Menge schließt nichts aus, sie ordnet nur.
 
 **2a, Zuteilung.** Schließt eine Structure per Zuteilung
 (``schluss_ereignistyp == 'assignment'``), und liefert ein zeitgleich per
@@ -61,17 +64,15 @@ aus Schritt 2a.
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
 from engine.structures import (
-    ZEITFENSTER,
     LegSchluessel,
     NichtStrukturiert,
     Structure,
     StrukturErgebnis,
-    mengen_vergleichbar,
     schliessung_bestimmen,
 )
 
@@ -84,6 +85,13 @@ ENDZUSTAND_JE_EREIGNIS = {
 }
 
 OPTIONS_ANLAGEKLASSEN = frozenset({"OPT", "FOP"})
+
+# Plan §6, Block B, Regel 2: Das Fenster entscheidet nur, was **angeboten**
+# wird — nicht, was verknüpft wird. Deshalb ist es weiter als die drei
+# Minuten der alten Regel: Ein nicht angebotener Roll ist unsichtbar und kann
+# nie bestätigt werden, ein überflüssiger Kandidat landet hinten in der
+# Liste. Gemessen ergeben 30 Minuten 597 Kandidatenpaare gegen 402 bei drei.
+KANDIDATENFENSTER = timedelta(minutes=30)
 
 # ---------------------------------------------------------------------------
 # Ergebnis
@@ -117,8 +125,27 @@ class Chain:
 
 
 @dataclass(frozen=True)
+class Rollkandidat:
+    """Ein Vorschlag, keine Tatsache (Plan §6, Block B, Regel 5).
+
+    ``rang`` ist die Plausibilitätsordnung innerhalb derselben schließenden
+    Struktur: 1 ist der naheliegendste Vorschlag. Er ordnet nur — er
+    entscheidet nichts.
+    """
+
+    schliessende: Structure
+    eroeffnende: Structure
+    abstand: timedelta
+    mengenverhaeltnis: Decimal
+    rang: int
+
+
+@dataclass(frozen=True)
 class KettenErgebnis:
     chains: tuple[Chain, ...]
+    # Nicht persistiert: bei jedem Lauf neu berechnet (Plan §6, Block B,
+    # Regel 2). Entschieden wird über `chain_overrides`, nicht hier.
+    kandidaten: tuple[Rollkandidat, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -250,40 +277,94 @@ def _rolls_verketten(structures: list[Structure]) -> dict[int, tuple[int, str]]:
             verbraucht.add(kandidat_index)
             break
 
-    # Schritt 2: kein gemeinsamer exec_batch — 3-Minuten-Fenster, gleicher
-    # Basiswert, gleiche Seite, vergleichbare Menge. Nur Optionen; die
-    # Expiry ist bewusst keine Bedingung (ein Roll wechselt sie gerade).
-    je_underlying: dict[str, list[int]] = {}
-    for index, s in enumerate(structures):
-        if s.asset_class in OPTIONS_ANLAGEKLASSEN:
-            je_underlying.setdefault(s.underlying, []).append(index)
-
-    for indizes in je_underlying.values():
-        indizes_sortiert = sorted(indizes, key=lambda i: structures[i].eroeffnet_am)
-        for index in indizes_sortiert:
-            if index in fortsetzung:
-                continue
-            s = structures[index]
-            if s.status != "geschlossen" or s.geschlossen_am is None:
-                continue
-            beste = None
-            for kandidat_index in indizes_sortiert:
-                if kandidat_index == index or kandidat_index in verbraucht:
-                    continue
-                kandidat = structures[kandidat_index]
-                delta = kandidat.eroeffnet_am - s.geschlossen_am
-                if delta.total_seconds() < 0 or delta > ZEITFENSTER:
-                    continue
-                if kandidat.rechte != s.rechte:
-                    continue
-                if not mengen_vergleichbar(kandidat.menge, s.menge):
-                    continue
-                if beste is None or kandidat.eroeffnet_am < structures[beste].eroeffnet_am:
-                    beste = kandidat_index
-            if beste is not None:
-                fortsetzung[index] = (beste, "heuristik")
-                verbraucht.add(beste)
     return fortsetzung
+
+
+def rollkandidaten(structures: Iterable[Structure]) -> tuple[Rollkandidat, ...]:
+    """Vorschläge für Rolls, die keine Order-Nummer belegt (Plan §6, B/2).
+
+    Bis zur Stichprobe vom 21.09.2026 verkettete ein Zeitfenster diese Fälle
+    automatisch. Das war in zehn von 25 durchgesehenen Ketten falsch: Ein
+    Wiedereinstieg nach einem Profit Target sieht im Brokerbeleg aus wie ein
+    Roll. Seither sind es Vorschläge (OF-41).
+
+    Drei Eigenschaften, die aus der Durchsicht folgen:
+
+    * **Die Menge schließt nichts aus.** Positionen werden geteilt,
+      erweitert und teilweise gerollt; eine Mengenbedingung verwirft echte
+      Rolls. Sie geht nur in den ``rang`` ein.
+    * **Mehrdeutigkeit wird angeboten, nicht aufgelöst.** Hat eine
+      Schließung mehrere mögliche Fortsetzungen, erscheinen alle. Nach der
+      ersten zu greifen hat nachweislich echte Rolls verbaut.
+    * **Was belegt ist, wird nicht gefragt.** Eine über ``exec_batch``
+      fortgesetzte Struktur erzeugt keinen Kandidaten.
+
+    Rein im Sinne von Regel 6: keine Urteile, keine Datenbank. Das
+    Ausfiltern bereits entschiedener Paare geschieht in
+    ``journal.rebuild``.
+    """
+    strukturen = list(structures)
+    fortgesetzt = {
+        von for von, (_nach, _art) in _rolls_verketten(strukturen).items()
+    }
+
+    je_underlying: dict[str, list[int]] = {}
+    for index, struktur in enumerate(strukturen):
+        if struktur.asset_class in OPTIONS_ANLAGEKLASSEN:
+            je_underlying.setdefault(struktur.underlying, []).append(index)
+
+    kandidaten: list[Rollkandidat] = []
+    for indizes in je_underlying.values():
+        for index in indizes:
+            if index in fortgesetzt:
+                continue
+            schliessende = strukturen[index]
+            if schliessende.status != "geschlossen" or schliessende.geschlossen_am is None:
+                continue
+            treffer: list[tuple[timedelta, Decimal, Structure]] = []
+            for anderer in indizes:
+                if anderer == index:
+                    continue
+                eroeffnende = strukturen[anderer]
+                abstand = eroeffnende.eroeffnet_am - schliessende.geschlossen_am
+                if abstand < timedelta(0) or abstand > KANDIDATENFENSTER:
+                    continue
+                if eroeffnende.rechte != schliessende.rechte:
+                    continue
+                verhaeltnis = (
+                    eroeffnende.menge / schliessende.menge
+                    if schliessende.menge
+                    else Decimal(0)
+                )
+                treffer.append((abstand, verhaeltnis, eroeffnende))
+            # Sortierung: erst zeitliche Nähe, dann Mengenverhältnis nahe 1.
+            # Bei Gleichstand entscheidet der Naturschlüssel, damit die
+            # Reihenfolge nicht von der Eingabereihenfolge abhängt.
+            treffer.sort(
+                key=lambda t: (
+                    t[0],
+                    abs(t[1] - 1),
+                    "|".join(sorted(k.open_exec_id for k in t[2].leg_schluessel)),
+                )
+            )
+            for rang, (abstand, verhaeltnis, eroeffnende) in enumerate(treffer, start=1):
+                kandidaten.append(
+                    Rollkandidat(
+                        schliessende=schliessende,
+                        eroeffnende=eroeffnende,
+                        abstand=abstand,
+                        mengenverhaeltnis=verhaeltnis,
+                        rang=rang,
+                    )
+                )
+    kandidaten.sort(
+        key=lambda k: (
+            k.schliessende.geschlossen_am,
+            k.rang,
+            "|".join(sorted(x.open_exec_id for x in k.eroeffnende.leg_schluessel)),
+        )
+    )
+    return tuple(kandidaten)
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +503,9 @@ def bilde_chains(
         )
 
     chains.sort(key=lambda c: (c.eroeffnet_am, c.underlying))
-    return KettenErgebnis(chains=tuple(chains))
+    return KettenErgebnis(
+        chains=tuple(chains), kandidaten=rollkandidaten(structures)
+    )
 
 
 def _seite_bestimmen(structures: list[Structure]) -> str | None:
