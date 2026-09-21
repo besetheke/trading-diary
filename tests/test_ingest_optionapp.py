@@ -278,3 +278,103 @@ def test_doppelter_import_derselben_datei_legt_nichts_neu_an(migrated_db):
     _importiere(migrated_db, "oa_standard.xlsx")
     _importiere(migrated_db, "oa_standard.xlsx")
     assert len(_trades(migrated_db)) == 4
+
+
+# ---------------------------------------------------------------------------
+# Nicht ausgeführte Trades und die zweite Exportvariante (AP-13pm, OF-40)
+# ---------------------------------------------------------------------------
+
+
+def test_abgebrochener_trade_wird_ohne_legs_gebucht(migrated_db):
+    """Vertrag 14: `CANCELED` heißt „nie eröffnet". `Strikes` trägt dann
+    einen Abbruchgrund statt einer Leg-Spezifikation und wird nicht zerlegt;
+    `Open` darf den Strich tragen.
+
+    Gemessen: alle 179 `CANCELED`-Trades der Januardatei tragen `-` in
+    `Open`, `Close` und `Close Time` und in `Strikes` einen Grund oder
+    nichts.
+    """
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    abgebrochen = trades["4001"]
+    assert abgebrochen["status"] == "CANCELED"
+    assert abgebrochen["strikes_roh"] == "Entry condition not met"
+    assert abgebrochen["offen_preis"] is None
+    assert abgebrochen["schluss_preis"] is None
+    assert abgebrochen["schluss_zeit"] is None
+    assert _legs(migrated_db, abgebrochen["id"]) == []
+
+
+def test_abgebrochener_trade_mit_leerem_strikes(migrated_db):
+    """Vertrag 14: Ein leeres `Strikes` bei `CANCELED` wird als leerer
+    Rohwert gebucht — die Spalte ist Pflicht, ihr Inhalt hier nicht."""
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    assert trades["4002"]["strikes_roh"] == ""
+    assert _legs(migrated_db, trades["4002"]["id"]) == []
+
+
+def test_laufender_trade_mit_geplanten_legs(migrated_db):
+    """Vertrag 15: `RUNNING` mit Legs in Restlaufzeitform (`-7DTE`) — geplant,
+    nicht ausgeführt, ohne Verfallsdatum. Keine Legs, Rohwert erhalten; der
+    Eröffnungspreis ist gelesen."""
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    laufend = trades["4003"]
+    assert laufend["strikes_roh"] == "-1xP5000-7DTE / 1xP4950-7DTE"
+    assert laufend["offen_preis"] == Decimal("2.1")
+    assert _legs(migrated_db, laufend["id"]) == []
+
+
+def test_profit_als_zahl_ohne_waehrung(migrated_db):
+    """Vertrag 16: In der Januarvariante steht `Profit` als Zahl in der
+    Zelle. Gelesen über `Decimal(str(wert))`; eine Währung steht nicht da
+    und wird nicht unterstellt.
+
+    Von Hand: 7.72 → `Decimal("7.72")`, `profit_waehrung` leer. Beim
+    abgebrochenen Trade steht die Zahl 0 → `Decimal("0")`.
+    """
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    assert trades["4004"]["profit"] == Decimal("7.72")
+    assert trades["4004"]["profit_waehrung"] is None
+    assert trades["4001"]["profit"] == Decimal("0")
+    assert len(_legs(migrated_db, trades["4004"]["id"])) == 2
+
+
+def test_leeres_stops_ist_keine_angabe(migrated_db):
+    """Vertrag 17: Ein leeres `Stops` ist weder `-` noch `0` — es ist keine
+    Angabe. Rohwert leer, kein Stopwert."""
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    assert trades["4004"]["stop_roh"] == ""
+    assert trades["4004"]["stop_wert"] is None
+
+
+def test_mehrere_stops_in_einer_zelle(migrated_db):
+    """Vertrag 18: Zwei Stops, zeilengetrennt — gemessen nur bei Trades mit
+    drei oder vier Legs. Der Rohwert bleibt vollständig erhalten; einen
+    einzelnen Stopwert gibt es nicht, also bleibt `stop_wert` leer."""
+    _importiere(migrated_db, "oa_nicht_ausgefuehrt.xlsx")
+    trades = _trades(migrated_db)
+    zwei = trades["4005"]
+    assert zwei["stop_roh"] == "-14.4\n-12.1"
+    assert zwei["stop_wert"] is None
+    assert len(_legs(migrated_db, zwei["id"])) == 4
+
+
+def test_freitext_bei_ausgefuehrtem_trade_bricht_weiter_ab(migrated_db):
+    """Vertrag 14, Gegenprobe: Die Lockerung gilt nur für nie eröffnete
+    Trades. Bei einem geschlossenen Trade bleibt Freitext in `Strikes` ein
+    Defekt der Quelle — über 1.114 Legs ausgeführter Trades hält die
+    Grammatik ausnahmslos."""
+    with pytest.raises(ValueError) as fehler:
+        _importiere(migrated_db, "oa_freitext_ausgefuehrt.xlsx")
+    assert "4101" in str(fehler.value)
+
+
+def test_mehrere_stops_mit_unlesbarer_zeile_brechen_ab(migrated_db):
+    """Vertrag 18, Gegenprobe: Jede Zeile muss für sich Vertrag 3 genügen."""
+    with pytest.raises(ValueError) as fehler:
+        _importiere(migrated_db, "oa_mehrstop_defekt.xlsx")
+    assert "4201" in str(fehler.value)

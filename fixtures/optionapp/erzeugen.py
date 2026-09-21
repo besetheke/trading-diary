@@ -1,6 +1,6 @@
 """Erzeugt die synthetischen OptionApp-Fixtures für AP-13.
 
-Die fünf XLSX-Dateien sind Binärdateien; dieses Skript hält nachvollziehbar
+Die acht XLSX-Dateien sind Binärdateien; dieses Skript hält nachvollziehbar
 fest, was in ihnen steht. Alle Werte sind frei erfunden — der Anhang
 `auftraege/AP-13-anhang-oa-format.md` liefert nur Struktur und Grammatik,
 keine Kontodaten.
@@ -133,6 +133,118 @@ LAUFEND = [
     ],
 ]
 
+# Nie oder noch nicht ausgeführte Trades und die zweite Exportvariante
+# (AP-13pm, OF-40). Nachgebildet nach gemessenen Formen, Werte frei erfunden:
+# - `CANCELED`: `Open`, `Close`, `Close Time`, `Stops` tragen den Strich,
+#   `Strikes` einen Abbruchgrund oder nichts, `Profit` die Zahl 0.
+# - `RUNNING`: geplante Legs mit Restlaufzeit (`-7DTE`) statt Verfallsdatum.
+# - Ausgeführter Trade der Januarvariante: `Profit` als Zahl ohne
+#   Währungszeichen, `Stops` leer.
+# - Vier-Leg-Trade mit zwei Stops in einer Zelle, zeilengetrennt.
+NICHT_AUSGEFUEHRT = [
+    [
+        "2026/01/05 10:00:00",
+        "SPX: IC",
+        "Nicht ausgeloest [4001]",
+        "Entry condition not met",
+        "1/1",
+        "-",
+        "-",
+        "-",
+        0,
+        "-",
+        "CANCELED",
+    ],
+    [
+        "2026/01/05 10:05:00",
+        "SPX: IC",
+        "Ohne Angabe [4002]",
+        None,
+        "1/1",
+        "-",
+        "-",
+        "-",
+        0,
+        "-",
+        "CANCELED",
+    ],
+    [
+        "2026/01/06 09:35:00",
+        "SPX: DD 5/7",
+        "Wartet [4003]",
+        "-1xP5000-7DTE / 1xP4950-7DTE",
+        "1/1",
+        2.1,
+        "-",
+        "-",
+        0.0,
+        "-",
+        "RUNNING",
+    ],
+    [
+        "2026/01/07 11:20:00",
+        "QQQ: DC14/28",
+        "Januarformat [4004]",
+        "-1xC520 (260220) / 1xC530 (260220)",
+        "1/1",
+        1.9,
+        0.75,
+        None,
+        7.72,
+        "2026/01/30 15:45:00",
+        "CLOSED",
+    ],
+    [
+        "2026/08/10 10:10:00",
+        "SPX: IC",
+        "Zwei Stops [4005]",
+        "-1xP5100 (260918) / 1xP5050 (260918) / -1xC5700 (260918) / 1xC5750 (260918)",
+        "1/1",
+        3.4,
+        "-",
+        "-14.4\n-12.1",
+        "-212,00 $",
+        "-",
+        "PARTIALLY STOPPED",
+    ],
+]
+
+# Ein ausgeführter Trade mit Freitext in `Strikes`: Die Lockerung gilt nur für
+# nicht ausgeführte Trades; hier bleibt es ein Defekt der Quelle.
+FREITEXT_AUSGEFUEHRT = [
+    [
+        "2026/01/07 11:20:00",
+        "QQQ: DC14/28",
+        "Freitext bei geschlossenem Trade [4101]",
+        "Entry condition not met",
+        "1/1",
+        1.9,
+        0.75,
+        "-",
+        "-100,00 $",
+        "2026/01/30 15:45:00",
+        "CLOSED",
+    ],
+]
+
+# Mehrere Stops, einer davon unlesbar: Jede Zeile muss für sich Vertrag 3
+# genügen.
+MEHRSTOP_DEFEKT = [
+    [
+        "2026/08/10 10:10:00",
+        "SPX: IC",
+        "Kaputter Zweitstop [4201]",
+        "-1xP5100 (260918) / 1xP5050 (260918) / -1xC5700 (260918) / 1xC5750 (260918)",
+        "1/1",
+        3.4,
+        "-",
+        "-14.4\nabc",
+        "-212,00 $",
+        "-",
+        "PARTIALLY STOPPED",
+    ],
+]
+
 # Eine Zelle, die der Grammatik nicht folgt: `Z` ist weder Call noch Put.
 GRAMMATIK_DEFEKT = [
     [
@@ -212,6 +324,9 @@ def schreiben(name: str, zeilen: list[list]) -> None:
 if __name__ == "__main__":
     schreiben("oa_standard.xlsx", STANDARD)
     schreiben("oa_laufend.xlsx", LAUFEND)
+    schreiben("oa_nicht_ausgefuehrt.xlsx", NICHT_AUSGEFUEHRT)
+    schreiben("oa_freitext_ausgefuehrt.xlsx", FREITEXT_AUSGEFUEHRT)
+    schreiben("oa_mehrstop_defekt.xlsx", MEHRSTOP_DEFEKT)
     schreiben("oa_grammatik_defekt.xlsx", GRAMMATIK_DEFEKT)
     schreiben("oa_ohne_klammernummer.xlsx", OHNE_NUMMER)
     schreiben("oa_doppelte_nummer.xlsx", DOPPELTE_NUMMER)

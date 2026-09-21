@@ -95,6 +95,22 @@ Nur diese, keine weiteren.
     Fingerabdruckprüfung, Übernahme von `Strategy` und `Status` in Ketten,
     Ergebnisabgleich. Alles das braucht AP-04 und bleibt beim starken Modell.
 
+**Nachtrag AP-13pm (OF-40)** — nicht ausgeführte Trades und die zweite
+Exportvariante. Begründung und Messung in `auftraege/AP-13pm.md`.
+
+14. **`CANCELED` heißt „nie eröffnet":** `Strikes` wird nicht zerlegt, der
+    Trade ohne Legs gebucht, `strikes_roh` behält den Inhalt (leer → `""`).
+    `Open` darf den Strich tragen — nur bei `CANCELED`.
+15. **`RUNNING` mit geplanten Legs** (`[-]<Menge>x<C|P><Strike>-<n>DTE`,
+    alle Ausschnitte): ohne Legs, Rohwert erhalten. Normale Grammatik wird
+    normal zerlegt; Gemischtes bricht ab.
+16. **`Profit` als Zahl:** `Decimal(str(wert))`, `profit_waehrung` leer.
+17. **`Stops` leer:** `stop_roh = ""`, `stop_wert` leer — keine Angabe.
+18. **`Stops` mehrzeilig:** jede Zeile genügt Vertrag 3, sonst Abbruch;
+    Rohwert vollständig, `stop_wert` leer.
+
+Für jeden anderen Status gilt Vertrag 5 unverändert streng.
+
 ## Abnahme
 
 - `tests/test_ingest_optionapp.py` springt still ab, solange
