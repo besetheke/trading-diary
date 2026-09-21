@@ -29,7 +29,12 @@ AP-02.
 | `golden_geldtest_vollstaendigkeit.py` | Vollständigkeitsprüfung: importierte Ausführungen (IBs `fifoPnlRealized`) gegen IBs `FIFOPerformanceSummaryInBase` je verfügbarem, modellfreiem Fenster und Anlageklasse — deckt fehlende Round Trips auf, die die Genauigkeitsprüfung nicht sehen kann |
 | `pseudonym.py` | Gemeinsamer Baustein: stabiler, gesalzener Hash je `conid` für Ausgaben, die Instrumente einzeln referenzieren müssen (Regel 2); Salz liegt bei `fixtures/golden/`, außerhalb des Repositorys |
 | `golden_ketten_invarianten.py` | AP-04: prüft `engine.chains.bilde_chains()` gegen die gesamte Golden-Historie auf vier Invarianten (keine Structure in zwei Ketten, nur das letzte Kettenglied darf offen sein, jede Rollverknüpfung bleibt auf demselben Underlying, Ketten- und Struktur-Ergebnissumme stimmen überein) — die zweite der drei AP-04-Abnahmeprüfungen |
-| `golden_oa_abgleich.py` | AP-04: vergleicht das erste Kettenglied je `oa_trade` gegen die Leg-Zusammensetzung eines echten OptionApp-Exports (`Trades_JJJJ-MM_OA.xlsx`) — die erste der drei AP-04-Abnahmeprüfungen (OF-36) |
+| `golden_oa_abgleich.py` | AP-04: vergleicht das erste Kettenglied je `oa_trade` gegen die Leg-Zusammensetzung eines echten OptionApp-Exports (`Trades_JJJJ-MM_OA.xlsx`) — die erste der drei AP-04-Abnahmeprüfungen; weist Abweichungen durch kontoweite Verrechnung eigens aus (OF-36) |
+| `golden_ketten_stichprobe.py` | AP-04: erzeugt die Prüfdatei `fixtures/golden/Stichprobe_Ketten.xlsx` für die dritte Abnahmeprüfung — gerollte DAX/ESTX50-Ketten (Heuristik, Belegt) und eine nach Grund geschichtete Gegenprobe nicht verketteter Paare. **Einzige Ausnahme vom Schreibverbot:** schreibt genau diese Datei, nur nach `fixtures/golden/`, überschreibt sie nie |
+
+**Fehlermeldungen:** Parserfehler nennen Tradenummer und Zellwert. Jedes
+Skript, das echte Exporte parst, fängt sie ab und gibt nur das betroffene
+Feld aus (Zwischenfall OF-40).
 
 Aufruf aus dem Projektverzeichnis:
 `.venv\Scripts\python.exe werkzeuge\abgleich\<skript>.py`

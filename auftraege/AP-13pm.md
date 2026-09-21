@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis erweitern - nicht ausgefuehrte Trades und Januar-Exportvariante (OF-40)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-13pl
 aendert_tests: ja
 ---
