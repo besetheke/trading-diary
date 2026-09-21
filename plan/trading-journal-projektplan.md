@@ -4,8 +4,9 @@
 Jedes Arbeitspaket ist so geschnitten, dass es isoliert bearbeitet, getestet und
 abgenommen werden kann.
 
-**Stand:** 05.09.2026 · **Version 7** — Strategien aus dem OptionApp-Export
-übernommen, Verknüpfungsverfahren festgelegt. Grundlage: zwei
+**Stand:** 21.09.2026 · **Version 8** — Zeitfenster-Rolls werden Kandidaten statt
+Kettenglieder (OF-41); eine Kette entsteht nur noch aus Belegen. Vorher:
+Strategien aus dem OptionApp-Export übernommen, Verknüpfungsverfahren festgelegt. Grundlage: zwei
 Trading-Diary-Pro-Exporte, zwei Activity-Flex-Exporte (3.971 bzw. 1.376
 Ausführungen) und zwei OptionApp-Trade-Exporte. Verknüpfungsschlüssel am Überschneidungszeitraum
 verifiziert
@@ -711,9 +712,59 @@ Roll wechselt gerade die Expiry.
    alle Anlageklassen und ist bei Optionen ohne OA-Referenz der Regelfall**, weil
    Rolls üblicherweise als eine Order ausgeführt werden. Ohne ihn gäbe es für DAX
    und ESTX50 keine Ketten und die Roll-Degradation aus §1 wäre unbeantwortbar.
-2. **Roll in zwei Orders:** Schließung und Eröffnung innerhalb von 3 Minuten,
-   gleicher Basiswert, gleiche Seite, vergleichbare Menge. Die Expiry unterscheidet
-   sich hier zwangsläufig.
+2. **Roll in zwei Orders — Kandidat, keine Kette.** Schließung und Eröffnung auf
+   demselben Basiswert und derselben Seite in zeitlicher Nähe, mit zwangsläufig
+   anderer Expiry, ergeben einen **Rollkandidaten**. Er wird vorgeschlagen und
+   wird erst durch Bestätigung zur Verknüpfung — wie bei den Futures (3).
+
+   *Begründung, gemessen (OF-41).* In der durchgesehenen Stichprobe waren von 25
+   über das Zeitfenster gebildeten Ketten **zehn falsch** und drei unklar, während
+   von acht über die Order-Nummer belegten Ketten **keine einzige** falsch war. Das
+   Zeitfenster verwechselt den Wiedereinstieg nach einem Profit Target mit einem
+   Roll — im Brokerbeleg sieht beides gleich aus — und übersieht zugleich Rolls
+   jenseits der drei Minuten. Eine Verknüpfung, die etwa so oft falsch wie richtig
+   ist, darf nicht als Tatsache in die Roll-Degradation eingehen: sie verfälscht
+   genau die Kennzahl, für die sie gedacht war.
+
+   *Umfang, gemessen.* Über den gesamten Bestand sind 2.024 Rollverknüpfungen über
+   die Order-Nummer belegt und bleiben; 189 hingen am Zeitfenster und werden
+   Kandidaten. Betroffen sind 172 von 7.009 Ketten. 91,5 % aller
+   Rollverknüpfungen sind damit belegt.
+
+   *Menge ordnet, sie entscheidet nicht.* Ein Roll ist keine Eins-zu-eins-Nachfolge.
+   Positionen werden geteilt, zusammengelegt, erweitert und teilweise gerollt; eine
+   Bedingung, die vergleichbare Menge verlangt, schließt echte Rolls aus. Zeitlicher
+   Abstand, Mengenverhältnis und ein Preisverlauf, der zum Fortführen passt,
+   **sortieren die Kandidatenliste** — sie entscheiden nicht über die Aufnahme.
+
+   *Mehrdeutigkeit wird angeboten, nicht aufgelöst.* Hat eine schließende Position
+   mehrere mögliche Fortsetzungen, werden alle angeboten. Die Engine greift nie
+   nach der ersten; genau das hat in der Gegenprobe echte Rolls verbaut.
+
+   *Kandidatenfenster 30 Minuten.* Das Fenster entscheidet nur noch, was
+   **angeboten** wird, nicht, was verknüpft wird. Damit ist der teurere Fehler ein
+   zu enges Fenster: ein nicht angebotener Roll ist unsichtbar und kann nie
+   bestätigt werden, ein überflüssiger Kandidat landet dagegen am Ende einer nach
+   Abstand sortierten Liste. Der Aufpreis ist gering — 597 Kandidatenpaare bei 30
+   Minuten gegen 402 bei drei. **Maßstab ist Vollständigkeit:** das Fenster muss
+   jeden in der Stichprobe bestätigten Roll erfassen; liegt einer jenseits davon,
+   wird es erweitert.
+
+   *Bestätigung und Ablehnung sind beide Benutzerdaten.* Eine Bestätigung ist eine
+   Zeile in `chain_overrides` mit `erkennung = 'manuell'`. **Eine Ablehnung ebenso**
+   — sonst taucht jeder abgelehnte Kandidat bei jedem `rebuild` wieder auf, und die
+   Durchsicht von mehreren hundert Paaren wäre nicht dauerhaft. Kandidaten selbst
+   werden nicht gespeichert, sondern bei jedem `rebuild` neu berechnet; getroffene
+   Entscheidungen überleben ihn (P1).
+
+   *Durchsicht über eine Datei-Rundreise, bis AP-08 steht.* Ein Kommando schreibt
+   die offenen Kandidaten als Tabelle, gruppiert nach schließender Position mit
+   allen möglichen Fortsetzungen nebeneinander; der Nutzer markiert Annahme oder
+   Ablehnung in einer Tabellenkalkulation; ein zweites Kommando liest die
+   Entscheidungen ein und schreibt sie nach `chain_overrides`. Mehrere hundert
+   Paare im Terminal wären fehleranfällig, und auf AP-08 zu warten ist unnötig. Die
+   Durchsicht ist nicht dringend: die Roll-Degradation läuft auch auf den belegten
+   Ketten allein, mit ausgewiesener Abdeckung.
 2a. **Zuteilung:** ein `assignment` und die zeitgleiche Gegenbuchung im Basiswert
    werden über `assignment_links` verbunden; die Kette setzt sich in der
    entstandenen Aktienposition fort.
@@ -724,6 +775,11 @@ Roll wechselt gerade die Expiry.
 4. **Aktien:** keine automatische Verkettung. Tranchen bleiben eigenständig und
    können manuell zu einer Campaign gebündelt werden; Aktien aus Zuteilung sind
    davon ausgenommen (2a).
+5. **Was eine Kette behauptet.** Eine Kette entsteht nur aus Belegen: gemeinsame
+   Order-Nummer (1), OptionApp-Referenz (0a) oder Zuteilung (2a). Alles andere ist
+   Vorschlag, bis der Nutzer es bestätigt (§7, Punkt 5). Der Broker zeichnet
+   Ausführungen auf, keine Absichten — was er nicht belegt, behauptet das Journal
+   nicht.
 
 **Ausgang:** Chain-Aufbau, Override-Mechanismus, `journal rebuild`-Kommando.
 **Abnahme:** Eine frühere Fassung nannte als Golden-Test „1.261 Transaktionen →
@@ -746,10 +802,19 @@ Basiswert. Die Summe der Ketten-Ergebnisse entspricht der Summe der
 Struktur-Ergebnisse. Eine abgeschlossene Kette enthält keine offene Struktur.
 
 *Stichprobe, Nicht-OA-Teil.* Für DAX und ESTX50 existiert keine externe Referenz.
-Eine Stichprobe gerollter Ketten wird einmal manuell durchgesehen, bestätigt und
-als Fixture eingefroren. Jede Chain trägt aus, ob sie über Order-ID
-oder Heuristik gebildet wurde. Manuelle Overrides überleben ein vollständiges
-`rebuild`.
+Eine Stichprobe wird durchgesehen und als Fixture eingefroren. Maßstab ist getrennt
+nach Herkunft:
+
+- **Belegte Ketten müssen fehlerfrei sein.** Ein Fehler dort ist ein
+  Abnahmehindernis. (Gemessen 21.09.2026: 8 von 8 richtig.)
+- **Kandidaten werden nicht auf Trefferquote geprüft.** Sie behaupten nichts;
+  geprüft wird, dass sie vollständig angeboten werden — kein bestätigter Roll der
+  Stichprobe fehlt in der Kandidatenliste — und dass Bestätigung wie Ablehnung ein
+  vollständiges `rebuild` überleben.
+
+Jede Kette trägt aus, woher ihre Verknüpfungen stammen. Jede Auswertung weist ihre
+**Abdeckung** aus: den Anteil belegter und bestätigter Verknüpfungen an den
+betrachteten Ketten.
 **Zusätzliche Pflichttests:** Ein Zeitstempel mit mehr als 20 Ereigniszeilen über
 mehrere Basiswerte erzeugt null Strukturen. Eine zugeteilte Option und die daraus
 entstandene Aktienposition liegen in derselben Kette. Ein Verfall schließt die
@@ -789,7 +854,9 @@ FX-Umrechnung nach P4.
 **Abnahme:** Jede Kennzahl bietet Drilldown bis auf Execution-Ebene. Jede
 Auswertung lässt sich auf Qualitätsstufe A einschränken. Die
 Roll-Degradationsauswertung reproduziert die bekannte Aussage, dass Ketten ohne
-Roll am besten abschneiden.
+Roll am besten abschneiden. Sie läuft wahlweise nur auf belegten Ketten oder auf
+belegten plus bestätigten und nennt in beiden Fällen die Abdeckung. Unbestätigte
+Kandidaten gehen nie ein.
 
 ### AP-07 · API
 **Ziel:** FastAPI-Schicht über Analytik und Benutzerdaten.
@@ -836,6 +903,11 @@ nachvollziehbare Aufbereitung.
 ### AP-11 · Absichtserfassung im Options Roller
 **Ziel:** Der Roller schreibt beim Aufsetzen einer Position die Absicht mit
 (IC-Seite, Gegenfinanzierung, Neueröffnung) und füllt `roller_link`.
+Damit ist AP-11 die einzige Quelle echter Absicht. Rückwirkend lässt sie sich nicht
+rekonstruieren — der Nutzer selbst konnte gerollte von wiedereröffneten Positionen
+im Nachhinein nicht sicher unterscheiden (OF-41). Für alles, was vor AP-11 liegt,
+bleibt die Bestätigung von Hand der einzige Weg; für alles danach entfällt das
+Raten.
 **Abnahme:** Neue Positionen erscheinen im Journal mit vorbelegter
 Kampagnenklassifikation, die der Nutzer nur noch bestätigen muss.
 
@@ -925,8 +997,11 @@ später ein, genügen Re-Import und `rebuild` — die Struktur ändert sich nich
 
 - **E1 — Options Roller:** geteilte Datenbank und geteiltes Deployment, getrennte
   Domänenmodelle, Brücke über `roller_link`. Begründung in §4.1.
-- **E2 — Roll-Definition:** primär Order-Identität, sekundär 3-Minuten-Fenster.
-  Gegenfinanzierung und IC über die Campaign-Ebene (AP-05).
+- **E2 — Roll-Definition:** eine Rollverknüpfung entsteht nur aus einem Beleg —
+  Order-Identität, OptionApp-Referenz oder Zuteilung. Das Zeitfenster erzeugt
+  Kandidaten zur Bestätigung, keine Verknüpfungen (Revision 21.09.2026, OF-41; die
+  ursprüngliche Fassung sah das 3-Minuten-Fenster als zweite Verknüpfungsquelle
+  vor). Gegenfinanzierung und IC über die Campaign-Ebene (AP-05).
 - **E3 — Datenumfang:** ein Konto, Historie ab April 2022, Vorgehen abhängig von
   AP-00. Anlageklassen: Optionen, Futures, Aktien.
 - **E4 — Betrieb:** lokal auf dem Trading-Server, Sicherung auf Netzlaufwerk,
