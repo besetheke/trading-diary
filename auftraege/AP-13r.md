@@ -1,7 +1,7 @@
 ---
 titel: Parsernachbesserung - nicht ausgefuehrte Trades und Januar-Exportvariante (OF-40)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13pm
 ---
 
