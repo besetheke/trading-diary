@@ -40,11 +40,11 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Connection
 
-from engine.chains import ENDZUSTAND_JE_EREIGNIS, bilde_chains
+from engine.chains import ENDZUSTAND_JE_EREIGNIS, KettenErgebnis, bilde_chains
 from engine.chains import Chain as Kette
-from engine.matching import bilde_legs
+from engine.matching import MatchingErgebnis, bilde_legs
 from engine.structures import Structure as Struktur
-from engine.structures import bilde_structures
+from engine.structures import StrukturErgebnis, bilde_structures
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
 from journal.schema import (
     assignment_links,
@@ -84,6 +84,86 @@ class RebuildErgebnis:
     # Rollkandidaten, über die noch nicht entschieden wurde (Plan §6,
     # Block B, Regel 2). Nicht persistiert, bei jedem Lauf neu berechnet.
     kandidaten_offen: int = 0
+
+
+@dataclass(frozen=True)
+class Bestand:
+    """Lesen und Rechnen eines Laufs über die Rohdaten (AP-04d, Vertrag 10).
+
+    Der vordere Teil von ``_rebuild_laufen()`` ohne jedes Schreiben. Die
+    Durchsicht der Rollkandidaten (``journal.durchsicht``) ruft dieselbe
+    Funktion auf — es gibt nur einen Lesepfad, zwei Kopien liefen früher
+    oder später auseinander.
+    """
+
+    ausfuehrungen: list[dict]
+    exec_je_id: dict[str, dict]
+    instrument_je_conid: dict[int, dict]
+    kapitalmassnahmen: list[dict]
+    matching: MatchingErgebnis
+    legs_als_dict: list[dict]
+    struktur_ergebnis: StrukturErgebnis
+    ketten_ergebnis: KettenErgebnis
+    # Einschließlich der synthetischen Zuteilungs-Fortsetzungen, die erst
+    # ``bilde_chains()`` anlegt — sie gehören zu ``structures``, sonst hätten
+    # ihre chain_links keinen Fremdschlüssel.
+    struktur_je_schluessel: dict[str, Struktur]
+
+
+def bestand_berechnen(verbindung: Connection) -> Bestand:
+    """Liest die Rohdaten und rechnet Legs, Strukturen und Ketten — rein, ohne
+    zu schreiben (AP-04d, Vertrag 10). Schreiben, Abgleich und Overrides sind
+    Sache von ``_rebuild_laufen()``."""
+
+    # -- Lesen (Vertrag 4): Rohdaten.
+    ausfuehrungen = [dict(z) for z in verbindung.execute(select(executions)).mappings()]
+    exec_je_id = {satz["exec_id"]: satz for satz in ausfuehrungen}
+    instrument_je_conid = {
+        satz["conid"]: satz for satz in verbindung.execute(select(instruments)).mappings()
+    }
+    # Kapitalmaßnahmen aus corporate_actions; Vorlage ist
+    # kapitalmassnahmen_ableiten() (Auftrag AP-04p): Zeilen ohne Instrument
+    # werden verworfen, wie dort.
+    massnahmen = [dict(z) for z in verbindung.execute(select(corporate_actions)).mappings()]
+    kapitalmassnahmen = [
+        satz
+        for satz in massnahmen
+        if satz["neuer_conid"] in instrument_je_conid
+        and (satz["alter_conid"] is None or satz["alter_conid"] in instrument_je_conid)
+    ]
+
+    # -- Rechnen: die reine Engine, unverändert.
+    matching = bilde_legs(ausfuehrungen, instrument_je_conid, kapitalmassnahmen)
+    legs_als_dict = [asdict(leg) for leg in matching.legs]
+    struktur_ergebnis = bilde_structures(legs_als_dict, ausfuehrungen, instrument_je_conid)
+    ketten_ergebnis = bilde_chains(
+        struktur_ergebnis, legs_als_dict, ausfuehrungen, instrument_je_conid
+    )
+
+    # Synthetische Zuteilungs-Fortsetzungen (engine.chains) stehen nur als
+    # Kettenglieder an — sie gehören ebenfalls in structures, sonst hätten
+    # ihre chain_links keinen Fremdschlüssel.
+    strukturen = list(struktur_ergebnis.structures)
+    bekannte_schluessel = {_struktur_schluessel(s) for s in strukturen}
+    for kette in ketten_ergebnis.chains:
+        for glied in kette.glieder:
+            schluessel = _struktur_schluessel(glied.structure)
+            if schluessel not in bekannte_schluessel:
+                strukturen.append(glied.structure)
+                bekannte_schluessel.add(schluessel)
+    struktur_je_schluessel = {_struktur_schluessel(s): s for s in strukturen}
+
+    return Bestand(
+        ausfuehrungen=ausfuehrungen,
+        exec_je_id=exec_je_id,
+        instrument_je_conid=instrument_je_conid,
+        kapitalmassnahmen=kapitalmassnahmen,
+        matching=matching,
+        legs_als_dict=legs_als_dict,
+        struktur_ergebnis=struktur_ergebnis,
+        ketten_ergebnis=ketten_ergebnis,
+        struktur_je_schluessel=struktur_je_schluessel,
+    )
 
 
 def rebuild(
@@ -209,24 +289,17 @@ def _anzahl(verbindung: Connection, tabelle) -> int:
 
 
 def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
-    # -- Lesen (Vertrag 4): Rohdaten, Overrides, aktueller Stand der
-    #    abgeleiteten Tabellen für den Abgleich.
-    ausfuehrungen = [dict(z) for z in verbindung.execute(select(executions)).mappings()]
-    exec_je_id = {satz["exec_id"]: satz for satz in ausfuehrungen}
-    instrumente = {
-        satz["conid"]: satz for satz in verbindung.execute(select(instruments)).mappings()
-    }
-    # Kapitalmaßnahmen aus corporate_actions; Vorlage ist
-    # kapitalmassnahmen_ableiten() (Auftrag AP-04p): Zeilen ohne Instrument
-    # werden verworfen, wie dort.
-    massnahmen = [dict(z) for z in verbindung.execute(select(corporate_actions)).mappings()]
-    kapitalmassnahmen = [
-        satz
-        for satz in massnahmen
-        if satz["neuer_conid"] in instrumente
-        and (satz["alter_conid"] is None or satz["alter_conid"] in instrumente)
-    ]
+    # -- Lesen und Rechnen über die gemeinsame Funktion (AP-04d, Vertrag 10):
+    #    kein zweiter Lesepfad neben der Durchsicht der Rollkandidaten.
+    bestand = bestand_berechnen(verbindung)
+    exec_je_id = bestand.exec_je_id
+    matching = bestand.matching
+    struktur_ergebnis = bestand.struktur_ergebnis
+    ketten_ergebnis = bestand.ketten_ergebnis
+    struktur_je_schluessel = bestand.struktur_je_schluessel
 
+    # -- Lesen (Vertrag 4): Overrides, aktueller Stand der abgeleiteten
+    #    Tabellen für den Abgleich.
     overrides = [dict(z) for z in verbindung.execute(select(chain_overrides)).mappings()]
     # Plan §6, Block B, Regel 2: Bestätigung und Ablehnung sind beide
     # Benutzerdaten. Angewandt wird nur die Bestätigung; die Ablehnung hält
@@ -248,25 +321,6 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
             select(chains.c.chain_id, chains.c.natur_schluessel)
         ).mappings()
     }
-
-    # -- Rechnen: die reine Engine, unverändert.
-    matching = bilde_legs(ausfuehrungen, instrumente, kapitalmassnahmen)
-    legs_als_dict = [asdict(leg) for leg in matching.legs]
-    struktur_ergebnis = bilde_structures(legs_als_dict, ausfuehrungen, instrumente)
-    ketten_ergebnis = bilde_chains(struktur_ergebnis, legs_als_dict, ausfuehrungen, instrumente)
-
-    # Synthetische Zuteilungs-Fortsetzungen (engine.chains) stehen nur als
-    # Kettenglieder an — sie gehören ebenfalls in structures, sonst hätten
-    # ihre chain_links keinen Fremdschlüssel.
-    strukturen = list(struktur_ergebnis.structures)
-    bekannte_schluessel = {_struktur_schluessel(s) for s in strukturen}
-    for kette in ketten_ergebnis.chains:
-        for glied in kette.glieder:
-            schluessel = _struktur_schluessel(glied.structure)
-            if schluessel not in bekannte_schluessel:
-                strukturen.append(glied.structure)
-                bekannte_schluessel.add(schluessel)
-    struktur_je_schluessel = {_struktur_schluessel(s): s for s in strukturen}
 
     # -- Schreiben (Vertrag 6). legs und chain_links sind vollständiger
     #    Austausch (Vertrag 14/15) und gehen zuerst weg — sie halten die

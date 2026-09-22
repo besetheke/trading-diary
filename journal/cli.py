@@ -1,5 +1,6 @@
 """CLI des Journals (AP-02): ``journal import <datei>`` — seit AP-04p
-zusätzlich ``journal rebuild``.
+zusätzlich ``journal rebuild``, seit AP-04d ``journal
+kandidaten-ausschreiben`` und ``journal kandidaten-einlesen``.
 
 Der Datenbankpfad kommt aus ``--db``, sonst aus der Umgebungsvariablen
 ``JOURNAL_DB``, sonst gilt ``journal.db`` (OF-06). Aufgerufen als
@@ -13,6 +14,7 @@ import pathlib
 import sys
 
 from ingest.flex import import_flex_file
+from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.rebuild import rebuild
 
 
@@ -37,6 +39,33 @@ def main(argv: list[str] | None = None) -> int:
         help="Legs, Strukturen, Ketten und Kettenglieder aus executions neu aufbauen (AP-04p)",
     )
     rebuilder.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    ausschreiber = unterbefehle.add_parser(
+        "kandidaten-ausschreiben",
+        help="Offene Rollkandidaten als XLSX ausschreiben (AP-04d)",
+    )
+    ausschreiber.add_argument(
+        "datei", type=pathlib.Path, help="Pfad zur Zieldatei (darf nicht bestehen)"
+    )
+    ausschreiber.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    einleser = unterbefehle.add_parser(
+        "kandidaten-einlesen",
+        help="Entscheidungen aus einer ausgeschriebenen Datei übernehmen (AP-04d)",
+    )
+    einleser.add_argument("datei", type=pathlib.Path, help="Pfad zur Kandidatendatei")
+    einleser.add_argument(
+        "--ueberschreiben",
+        action="store_true",
+        help="Gespeicherte Entscheidungen ändern, statt bei Widerspruch abzubrechen",
+    )
+    einleser.add_argument(
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
@@ -81,6 +110,38 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+    elif argumente.befehl == "kandidaten-ausschreiben":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = kandidaten_ausschreiben(db_pfad, argumente.datei)
+        except (FileExistsError, ValueError) as fehler:
+            # Bestehende Datei oder ungültiges Ziel: benannt abbrechen, kein
+            # Traceback — es wurde nichts geschrieben (AP-04d, Vertrag 18).
+            print(f"Ausschreiben fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"Ausgeschrieben nach {argumente.datei}: {ergebnis.gruppen} Gruppen, "
+            f"{ergebnis.kandidaten} Kandidaten"
+        )
+    elif argumente.befehl == "kandidaten-einlesen":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = urteile_einlesen(
+                db_pfad, argumente.datei, ueberschreiben=argumente.ueberschreiben
+            )
+        except ValueError as fehler:
+            # Widerspruch in der Datei oder den gespeicherten Entscheidungen:
+            # benannt abbrechen, kein Traceback — die kurze Transaktion hat
+            # nichts geschrieben (AP-04d, Vertrag 18).
+            print(f"Einlesen fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"Einlesen {argumente.datei.name}: {ergebnis.neu_bestaetigt} neu "
+            f"bestätigt, {ergebnis.neu_abgelehnt} neu abgelehnt, "
+            f"{ergebnis.unveraendert} unverändert, {ergebnis.geaendert} geändert, "
+            f"{ergebnis.unentschieden} unentschieden"
+        )
+        print("Jetzt `journal rebuild` ausführen, damit die Entscheidungen wirksam werden.")
     return 0
 
 
