@@ -171,7 +171,14 @@ Kein bestehender Test, kein bestehendes Fixture wird angefasst.
   nach dem Herauslösen der lesenden Funktion (Vertrag 10).
 - `ruff check .` sauber.
 - `git diff --stat` der Umsetzung zeigt ausschließlich
-  `journal/durchsicht.py`, `journal/rebuild.py` und `journal/cli.py`.
+  `journal/durchsicht.py`, `journal/rebuild.py`, `journal/cli.py` — **und
+  `OFFENE_FRAGEN.md`**.
+
+  > **Korrektur 22.09.2026.** Die ursprüngliche Fassung ließ
+  > `OFFENE_FRAGEN.md` weg und verbot damit genau den Eintrag, den Regel 10
+  > für dokumentierte Annahmen verlangt. AP-04d hat sich richtig verhalten
+  > und sie in den Modul-Docstring geschrieben; nachgetragen als OF-43.
+  > Jede künftige Diff-Zusage nennt `OFFENE_FRAGEN.md` mit.
 
 ## Ausdrücklich nicht Teil dieses Pakets
 

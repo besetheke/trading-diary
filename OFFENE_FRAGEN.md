@@ -1962,3 +1962,40 @@ erweitert") sind zwei getrennte Zehnerpositionen sieben Stunden auseinander.
 Die Engine rechnet beides regelkonform. Für die Anzeige heißt das: Teilfills
 und Aufstockungen müssen sichtbar bleiben, sonst wirkt eine korrekte Menge
 falsch (AP-08).
+
+## OF-43 · Zwei Annahmen der Durchsicht, und ein Fehler im Zuschnitt von AP-04dv
+
+**Nachgetragen 22.09.2026 durch das starke Modell.** Das Umsetzungspaket
+AP-04d hat zwei Annahmen dokumentiert, konnte sie aber nicht hierher
+schreiben: Die Abnahme in AP-04dv verlangte, der Diff dürfe ausschließlich
+`journal/durchsicht.py`, `journal/rebuild.py` und `journal/cli.py` zeigen.
+Damit hat **mein** Auftrag genau den Eintrag verboten, den Regel 10
+vorschreibt. Das Paket hat sich richtig verhalten und die Annahmen in den
+Modul-Docstring geschrieben; dort sucht sie später niemand.
+
+**Lehre für künftige Abnahmebasen:** Die Diff-Zusage nennt ab jetzt immer
+`OFFENE_FRAGEN.md` mit. Sie ist kein Umsetzungsartefakt, sondern die Stelle,
+an der Ungeklärtes sichtbar bleibt.
+
+### Annahme 1 · Preise je Kontrakt werden auf den Cent gerundet
+
+Die Nettoprämie je Kontrakt entsteht durch Teilung durch die Strukturmenge
+und kann nicht-terminierend sein (Menge 3 etwa). `Decimal` schnitte dann
+still auf 28 signifikante Stellen ab — eine Rundung ohne Namen, die Regel 5
+gerade verbietet. Gerundet wird deshalb ausdrücklich auf den Cent mit
+`ROUND_HALF_UP`, wie `engine.matching` es für Ergebnis und Kommission
+ebenfalls tut.
+
+**Was daran offen bleibt:** Bei sehr kleinen Prämien ist der Cent grob —
+eine Option zu 0,005 wird zu 0,01 oder 0,00. Folgenlos, solange die Spalte
+nur der Anschauung dient und nie zurückgelesen wird (so der Vertrag). Wird
+sie je Rechengrundlage, gehört die Genauigkeit vorher festgelegt.
+
+### Annahme 2 · Dieselbe Zeile zweimal in einer Datei
+
+Der Vertrag schweigt dazu, weil das Ausschreiben solche Dateien nie erzeugt
+— von Hand eingefügte Zeilen könnten es. Behandelt wird die Datei
+sequenziell: Die zweite Zeile mit demselben Urteil zählt als unverändert,
+eine widersprechende fällt unter die Widerspruchsregel (Vertrag 14) und
+bricht ohne `--ueberschreiben` ab. Das ist die vorsichtige Auslegung: keine
+stille Entscheidung darüber, welche der beiden Zeilen gilt.
