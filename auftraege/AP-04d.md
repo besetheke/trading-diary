@@ -1,7 +1,7 @@
 ---
 titel: Durchsicht der Rollkandidaten - Datei-Rundreise
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-04dv
 ---
 
