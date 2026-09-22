@@ -1,0 +1,300 @@
+/* Erscheinungsbild der Oberfläche (AP-08l). Bewusst schlicht: Lesen und
+   Nachvollziehen, kein Diagramm, kein Framework. */
+
+:root {
+  --rand: #d8d5cf;
+  --tinte: #23211d;
+  --grau: #6f6a60;
+  --grund: #faf9f7;
+  --akzent: #0f5d50;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--tinte);
+  background: var(--grund);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+}
+
+.geruest {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem;
+}
+
+header h1 {
+  margin-bottom: 0;
+}
+
+header h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+header .sicht {
+  color: var(--grau);
+  font-size: 0.9rem;
+  margin: 0.2rem 0 0;
+}
+
+h2 {
+  margin-top: 2rem;
+}
+
+a {
+  color: var(--akzent);
+}
+
+/* Zahlen tabellarisch und rechtsbündig — Geld bleibt Zeichenkette, nur die
+   Ausrichtung ist Darstellungssache. */
+.zahl {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.92rem;
+}
+
+th,
+td {
+  border: 1px solid var(--rand);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  background: #efece7;
+  position: sticky;
+  top: 0;
+}
+
+tbody tr:hover {
+  background: #f4f1ec;
+}
+
+tr.offen td {
+  background: #fdf6e8;
+}
+
+/* Filterleiste */
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: end;
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.filter label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--grau);
+}
+
+.filter input,
+.filter select {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--rand);
+  background: #fff;
+  color: var(--tinte);
+  min-width: 6rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--akzent);
+  background: var(--akzent);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button[type='button'] {
+  background: transparent;
+  color: var(--akzent);
+}
+
+.blaettern {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.blaettern p {
+  margin: 0;
+}
+
+.blaettern label {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--grau);
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.fussnote {
+  color: var(--grau);
+  font-size: 0.8rem;
+}
+
+/* Meldungen */
+.laedt {
+  color: var(--grau);
+}
+
+.hinweis,
+.fehler {
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.fehler {
+  border-color: #a33a2a;
+}
+
+.fehler h3,
+.fehler h4 {
+  color: #a33a2a;
+  margin: 0 0 0.5rem;
+}
+
+.hinweis p {
+  margin: 0.25rem 0;
+}
+
+/* Kopf der Detailansicht */
+.zurueck {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+}
+
+dl.kopf,
+dl.struktur {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem 1.25rem;
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.75rem 1.25rem;
+  margin: 1rem 0;
+}
+
+dl.struktur {
+  margin: 0.75rem 0 0;
+}
+
+dl.kopf div,
+dl.struktur div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+dt {
+  color: var(--grau);
+  font-size: 0.8rem;
+}
+
+dd {
+  margin: 0;
+}
+
+/* Verlauf als Zeitliste */
+ol.verlauf {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  position: relative;
+}
+
+ol.verlauf::before {
+  content: '';
+  position: absolute;
+  left: 0.9rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 2px;
+  background: var(--rand);
+}
+
+li.glied {
+  position: relative;
+  margin: 0 0 1rem 2.5rem;
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.6rem 1rem 0.9rem;
+}
+
+li.glied > header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+li.glied > header .marke {
+  position: absolute;
+  left: -2.55rem;
+  top: 0.5rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: var(--akzent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+li.glied > header h4 {
+  margin: 0;
+}
+
+li.glied > header .erkennung {
+  margin: 0;
+  color: var(--grau);
+  font-size: 0.8rem;
+}
+
+li.glied > header button {
+  margin-left: auto;
+}
+
+details.drilldown {
+  margin-top: 0.75rem;
+}
+
+details.drilldown summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.3rem 0;
+}

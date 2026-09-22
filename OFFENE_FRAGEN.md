@@ -2069,3 +2069,41 @@ Konsolenausgabe hinaus nur Zählwerte und Laufzeiten (Regel 2):
 **Nebenbefund, nicht dringend:** Starlette meldet beim Testclient, dass
 `httpx` zugunsten von `httpx2` veraltet ist. Betrifft nur die Tests, nicht
 die Auslieferung; beim nächsten Anfassen der Abhängigkeiten zu erledigen.
+
+## OF-45 · AP-08l: drei Entscheidungen an der Naht zwischen API und Oberfläche
+
+**Eingetragen 22.09.2026 (Regel 10).** Der Vertrag aus AP-08lv lässt drei
+Punkte offen; alle drei sind in `api/app.py` umgesetzt:
+
+1. **Wo `ui/dist` standardmäßig gesucht wird.** Vertrag 1 sagt „neben dem
+   Projektverzeichnis“ — wörtlich genommen (Modul- oder Arbeitsverzeichnis)
+   fände jeder Testlauf die einmal gebaute Oberfläche des
+   Projektverzeichnisses, und `test_ohne_gebaute_oberflaeche_bleibt_die_api_nutzbar`
+   wäre nach dem ersten `npm run build` rot: Der Normalzustand „frisch
+   geklont, ohne Build“ (Vertrag 4) wäre nicht mehr prüfbar. **Annahme:** Der
+   Standardbauort hängt an der Datenbankdatei (`ui/dist` in ihrem Verzeichnis),
+   nicht am Modul- und nicht am Arbeitsverzeichnis. Im Betrieb (Datenbank im
+   Projektverzeichnis, `uvicorn` von dort gestartet) ist dasselbe Verzeichnis
+   gemeint; liegt die Datenbank woanders, bleibt die Wurzel bei der API und
+   sagt, was fehlt.
+2. **`ui_verzeichnis` angegeben, aber nicht vorhanden.** Der Vertrag regelt
+   „angegeben und vorhanden“ und „ohne Angabe“; der Rest schweigt.
+   **Annahme:** wie fehlend behandelt (404 mit Hinweis) — kein stiller
+   Rückfall auf einen anderen Ort, der etwas Ungewolltes enthalten könnte.
+3. **Kein ASGI-Server in den Abhängigkeiten.** Die Abnahme verlangt
+   `npm run dev` gegen eine echte API auf localhost:8000, aber `pyproject.toml`
+   nennt (zu Recht, solange nur der Testclient fragt) keinen Server — und
+   steht diesem Paket nicht als Änderung zu. **Annahme:** `uvicorn` wird bei
+   Bedarf in die Umgebung installiert; seine Aufnahme in die
+   Abhängigkeiten ist eine Betriebsentscheidung für den Trading-Server (§3),
+   nicht Teil dieses Pakets.
+
+**Umsetzungshinweis (22.09.2026).** Das Projektverzeichnis liegt auf einem
+laufwerkgebundenen Cloud-Volume (Google Drive). `npm install` bricht dort
+beim Entpacken mit `EBADF`/`EPERM` ab, und das Volume verweigert auch
+Junctions auf lokale Platten. Bauen funktioniert so: Quellen nach
+`C:\td-build\ui` kopieren, dort `npm install` und `npm run build`, danach
+`ui/dist` ins Projekt zurückkopieren — `.gitignore` nimmt `ui/dist` und
+`node_modules` ohnehin nicht auf. Ein Umzug des Projekts auf ein lokales
+Laufwerk macht den Umweg überflüssig.
+

@@ -1,4 +1,5 @@
-"""Lese-API über Ketten, Strukturen und Ausführungen (AP-07l).
+"""Lese-API über Ketten, Strukturen und Ausführungen (AP-07l), seit AP-08l
+mit statischer Auslieferung der gebauten Oberfläche.
 
 Umsetzung des Vertrags 1–17 aus ``auftraege/AP-07lv.md`` (Abnahmebasis:
 ``tests/test_api_lesen.py``). Die Anwendung ist ausschließlich lesend — im
@@ -21,6 +22,10 @@ Dokumentierte Annahmen (Regel 10, OF-44):
   aufsteigend, bei gleicher ``eroeffnet_am`` in der Kettenliste die
   aufsteigende ``chain_id`` — der Vertrag verlangt Sortierung und
   Determinierismus, schweigt aber zum Gleichstand.
+- Der Standardbauort der Oberfläche ist ``ui/dist`` neben der Datenbankdatei,
+  nicht neben diesem Modul — sonst fände jeder Testlauf die einmal gebaute
+  Oberfläche des Projektverzeichnisses, und der Normalzustand ohne Build
+  (Vertrag 4) wäre nicht mehr prüfbar (OF-45).
 """
 
 import os
@@ -30,6 +35,7 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
@@ -247,9 +253,29 @@ def _ketten_zuschuesse(
 # ---------------------------------------------------------------------------
 
 
-def erzeuge_app(db_pfad: str | pathlib.Path) -> FastAPI:
-    """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1)."""
+def erzeuge_app(
+    db_pfad: str | pathlib.Path, *, ui_verzeichnis: str | pathlib.Path | None = None
+) -> FastAPI:
+    """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
+
+    ``ui_verzeichnis`` benennt das Bauverzeichnis der Oberfläche (AP-08l,
+    Vertrag 1): Ist es vorhanden, liefert die Anwendung ``index.html`` unter
+    ``/`` aus, die Dateien darunter und für unbekannte Wege den Rückfall.
+    Ohne Angabe wird ``ui/dist`` neben der Datenbankdatei gesucht (OF-45) —
+    fehlt es dort, bleibt die Anwendung reine API, und die Wurzel sagt, was
+    fehlt (Vertrag 4).
+    """
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
+
+    if ui_verzeichnis is not None:
+        ui_wurzel = pathlib.Path(ui_verzeichnis)
+    else:
+        # OF-45: Der Standardbauort hängt an der Datenbank, nicht an diesem
+        # Modul und nicht am Arbeitsverzeichnis — sonst fände jeder Testlauf
+        # die einmal gebaute Oberfläche des Projektverzeichnisses, und der
+        # Normalzustand „frisch geklont, ohne Build“ wäre nicht mehr prüfbar.
+        ui_wurzel = pathlib.Path(db_pfad).resolve().parent / "ui" / "dist"
+    hat_oberflaeche = ui_wurzel.is_dir()
 
     applikation = FastAPI(title="Trading-Journal — Lese-API (Kontosicht)")
 
@@ -427,6 +453,54 @@ def erzeuge_app(db_pfad: str | pathlib.Path) -> FastAPI:
             )
             for z in zeilen
         ]
+
+    # -----------------------------------------------------------------------
+    # Statische Auslieferung der Oberfläche (AP-08l, Vertrag 1–5)
+    #
+    # Diese Route steht absichtlich ganz am Ende: Erst die API-Routen, dann
+    # die Dateien, dann der Rückfall auf ``index.html`` (Vertrag 3). Auch
+    # FastAPIs eigene Wege — ``/openapi.json``, ``/docs`` — sind bei der
+    # Erzeugung registriert und gehen damit ebenfalls vor. Ein Aufruf wie
+    # ``/ketten/abc`` passt weiterhin auf die API-Route und bleibt 422; ein
+    # unbekannter Bezeichner bleibt die 404 aus dem API-Handler.
+    # -----------------------------------------------------------------------
+
+    @applikation.get("/{voller_pfad:path}", include_in_schema=False)
+    def oberflaeche(voller_pfad: str) -> FileResponse:
+        """Liefert die gebaute Oberfläche — Datei oder Rückfall (AP-08l)."""
+        if not hat_oberflaeche:
+            # Vertrag 4: Ohne Build bleibt die API nutzbar, und die Wurzel
+            # sagt, was fehlt — der Normalzustand auf einem frisch geklonten
+            # Rechner.
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Keine Oberfläche ausgeliefert: Das Bauverzeichnis fehlt. "
+                    "Im Verzeichnis ui bauen (npm install, npm run build) oder "
+                    "erzeuge_app(..., ui_verzeichnis=...) übergeben."
+                ),
+            )
+        wurzel = ui_wurzel.resolve()
+        # Vertrag 5: Kein Ausbruch aus dem Bauverzeichnis. Erst auflösen,
+        # dann gegen die Wurzel prüfen — ein Pfad mit „..“ oder absoluten
+        # Stücken landet außerhalb und bekommt 404, niemals eine Projektdatei.
+        kandidat = (wurzel / voller_pfad).resolve()
+        try:
+            kandidat.relative_to(wurzel)
+        except ValueError:
+            raise HTTPException(
+                status_code=404, detail="Pfad außerhalb der Oberfläche"
+            ) from None
+        if not kandidat.is_file():
+            # Vertrag 2: Eine Einzelseitenanwendung führt ihre Wege selbst —
+            # tiefe Verweise wie /positionen/17 bleiben so nach dem Neuladen
+            # brauchbar.
+            kandidat = wurzel / "index.html"
+        if not kandidat.is_file():
+            raise HTTPException(
+                status_code=404, detail="index.html fehlt im Bauverzeichnis"
+            )
+        return FileResponse(kandidat)
 
     return applikation
 
