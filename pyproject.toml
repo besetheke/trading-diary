@@ -50,6 +50,14 @@ select = [
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.ruff.lint.isort]
+# Die Projektpakete fest als eigene deklarieren. Sonst ordnet ruff ein noch
+# nicht existierendes Modul als fremd ein und verlangt nach dessen Anlage eine
+# andere Importreihenfolge — eine Abnahmebasis, die vor der Umsetzung
+# geschrieben wird, müsste dann nachträglich angefasst werden, was Regel 1
+# verbietet (so geschehen bei AP-04vk).
+known-first-party = ["engine", "ingest", "journal", "analytics", "api", "werkzeuge"]
+
 [tool.ruff.lint.per-file-ignores]
 # Alembic-Autogenerate erzeugt bewusst lange Zeilen, Docstring-Leerzeichen
 # und eine eigene Importordnung; der Inhalt ist maschinell erzeugt und wird
