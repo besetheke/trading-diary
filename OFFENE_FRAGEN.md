@@ -1687,6 +1687,36 @@ und genau die braucht die Frage „wie schneidet Strategie X ab".
    Strukturen, Ketten und Strategieauswertung aufsetzen. Folge: sauberste
    Trennung, aber das meiste Bauwerk.
 
+### Entschieden 22.09.2026: Weg 3 — zwei Sichten
+
+Der Nutzer wählt beide Sichten nebeneinander: **eine für Kontoführung und
+Steuer, eine für die Kette.** Das entspricht dem, was die OptionsApp selbst
+tut (Netto- gegen Bruttoposition) und was oben als Weg 3 stand.
+
+- **Kontosicht (netto)** — FIFO je `conid` kontoweit, wie IB. Maßgeblich
+  für Geld: Sie trägt die Abnahme aus AP-03 und speist allein die
+  steuerliche Auswertung (AP-10). **Ist gebaut.**
+- **Kettensicht (brutto)** — Zurechnung je Vorgang. Beantwortet die
+  Strategiefrage und trägt die Roll-Degradation. **Eigenes Paket, fällig
+  vor AP-06.**
+
+**Getrennt gehalten, umschaltbar gezeigt.** Die beiden Sichten sind nicht
+zwei Darstellungen derselben Zahlen, sondern zwei Zuordnungen derselben
+Ausführungen: Die Kettensicht braucht eine eigene Zuordnung innerhalb des
+Vorgangs, sonst bliebe das kontoweit ausgeglichene Bein verschwunden.
+Deshalb getrennte Speicherung, keine Vermischung, und **jede Zahl trägt,
+aus welcher Sicht sie stammt**. Eine Summe über beide Sichten gibt es nicht.
+
+**Offen für das spätere Paket, bewusst noch nicht entschieden:** Wie die
+Kettensicht mit einem Bein umgeht, das in ihrem Vorgang nie geschlossen
+wird, weil der Broker es kontoweit ausgeglichen hat. OA hat dafür eigene
+Regeln (Stop, Verfall); ob wir sie übernehmen oder solche Fälle offen und
+sichtbar lassen, ist zu klären, wenn das Paket geschnitten wird — nicht
+jetzt zu raten.
+
+Ausformuliert für den Plan in
+`auftraege/AP-07-vorschlag-zwei-sichten-und-vorziehen.md`, §5.
+
 ## OF-37 · AP-13-Parser: `Close Time = '-'` bei laufenden/abgebrochenen Trades nicht vorgesehen
 
 **Befund 19./20.09.2026, beim ersten Einlesen echter OA-Exporte.**
