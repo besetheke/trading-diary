@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer die Positionsliste (AP-08l)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-07l
 aendert_tests: ja
 ---
