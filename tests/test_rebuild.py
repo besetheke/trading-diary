@@ -15,7 +15,7 @@ erfunden. `fixtures/golden/` wird hier nicht gelesen (Regel 2).
 Implementierung übernommen — siehe `test_geldbetraege_der_dax_struktur`.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -27,6 +27,7 @@ pytest.importorskip("journal.rebuild")
 from journal.db import create_db_engine  # noqa: E402
 from journal.rebuild import rebuild  # noqa: E402
 from journal.schema import (  # noqa: E402
+    assignment_links,
     chain_links,
     chain_overrides,
     chains,
@@ -498,3 +499,57 @@ def test_bestaetigter_kandidat_wird_zur_kette(migrated_db):
     assert glieder["Z5|Z6"]["chain_id"] == ketten["k:Z1|Z2"]["chain_id"]
     assert glieder["Z5|Z6"]["erkennung"] == "manuell"
     assert glieder["Z5|Z6"]["verknuepfungstyp"] == "roll"
+
+
+# ---------------------------------------------------------------------------
+# Zuteilung mit mehreren Legs (AP-04pk, Fund am echten Bestand)
+# ---------------------------------------------------------------------------
+
+
+def test_zuteilung_mit_zwei_legs_schreibt_das_paar_einmal(migrated_db):
+    """`assignment_links` ist eine Menge von Paaren, keine Liste.
+
+    Schließt **eine** Zuteilungsausführung **zwei Legs** derselben Struktur,
+    entstand das Paar (Optionsausführung, Aktienausführung) zweimal und der
+    Rebuild brach am Primärschlüssel ab. Gefunden beim ersten Lauf über den
+    echten Bestand: 330 erzeugte Paare, 320 verschiedene, 10 doppelte — in
+    den erfundenen Beständen schloss eine Zuteilung bis dahin immer genau
+    ein Leg.
+
+    Aufbau: zwei Eröffnungen desselben Kontrakts in einer Order (gemeinsamer
+    `exec_batch`, also eine Struktur mit zwei Legs), eine Zuteilung über
+    beide, eine Aktiengegenbuchung zur selben Zeit.
+    """
+    instrumente = [
+        dict(conid=500, symbol="IDX5 260821P50", underlying="IDX5", asset_class="OPT",
+             expiry=date(2026, 8, 21), strike=Decimal("50"), right="P",
+             multiplikator=Decimal("100"), waehrung="EUR", abwicklungsart="lieferung"),
+        dict(conid=501, symbol="IDX5", underlying="IDX5", asset_class="STK",
+             expiry=None, strike=None, right=None,
+             multiplikator=Decimal("1"), waehrung="EUR"),
+    ]
+    eroeffnung = datetime(2026, 8, 1, 10, 0, 0)
+    zuteilung = datetime(2026, 8, 21, 21, 0, 0)
+    ausfuehrungen = [
+        dict(exec_id="O1", conid=500, side="SELL", preis=Decimal("2.00"),
+             handelszeit=eroeffnung, exec_batch="5.1"),
+        dict(exec_id="O2", conid=500, side="SELL", preis=Decimal("2.00"),
+             handelszeit=eroeffnung, exec_batch="5.1"),
+        dict(exec_id="A1", conid=500, side="BUY", menge=Decimal("2"),
+             preis=Decimal("0.00"), handelszeit=zuteilung, ereignistyp="assignment"),
+        dict(exec_id="S1", conid=501, side="BUY", menge=Decimal("200"),
+             preis=Decimal("50.00"), handelszeit=zuteilung, ereignistyp="assignment"),
+    ]
+    befuelle(migrated_db, ausfuehrungen=ausfuehrungen, instrumente_=instrumente)
+
+    rebuild(migrated_db)
+
+    paare = [
+        (z["option_exec_id"], z["stock_exec_id"], z["erkennung"])
+        for z in _zeilen(migrated_db, assignment_links)
+    ]
+    assert paare == [("A1", "S1", "auto")]
+
+    # Und ein zweiter Lauf bleibt dabei (Idempotenz, Vertrag 23).
+    rebuild(migrated_db)
+    assert len(_zeilen(migrated_db, assignment_links)) == 1

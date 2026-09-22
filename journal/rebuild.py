@@ -623,6 +623,7 @@ def _assignment_links_neu_schreiben(
     verbindung.execute(
         delete(assignment_links).where(assignment_links.c.erkennung != "manuell")
     )
+    paare: set[tuple[str, str]] = set()
     for kette in ketten_ergebnis.chains:
         glieder = list(kette.glieder)
         for position, glied in enumerate(glieder):
@@ -648,11 +649,20 @@ def _assignment_links_neu_schreiben(
                 if schliessung is None or schliessung["ereignistyp"] != "assignment":
                     continue
                 for fortschreibung in fortsetzung.leg_schluessel:
-                    verbindung.execute(
-                        insert(assignment_links).values(
-                            option_exec_id=leg.close_exec_id,
-                            stock_exec_id=fortschreibung.open_exec_id,
-                            erkennung="auto",
-                            bestaetigt_am=None,
-                        )
-                    )
+                    paare.add((leg.close_exec_id, fortschreibung.open_exec_id))
+
+    # AP-04pk: `assignment_links` ist eine Menge von Paaren, keine Liste.
+    # Schließt **eine** Zuteilungsausführung mehrere Legs derselben Struktur,
+    # liefert die Kombinatorik oben dasselbe Paar mehrfach — am echten
+    # Bestand 10 von 320. Verdichtet wird die erzeugte Menge; ein
+    # `INSERT OR IGNORE` wäre etwas anderes, es verschluckte auch echte
+    # Widersprüche.
+    for option_exec_id, stock_exec_id in sorted(paare):
+        verbindung.execute(
+            insert(assignment_links).values(
+                option_exec_id=option_exec_id,
+                stock_exec_id=stock_exec_id,
+                erkennung="auto",
+                bestaetigt_am=None,
+            )
+        )
