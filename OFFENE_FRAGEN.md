@@ -2029,3 +2029,21 @@ sequenziell: Die zweite Zeile mit demselben Urteil zählt als unverändert,
 eine widersprechende fällt unter die Widerspruchsregel (Vertrag 14) und
 bricht ohne `--ueberschreiben` ab. Das ist die vorsichtige Auslegung: keine
 stille Entscheidung darüber, welche der beiden Zeilen gilt.
+
+## OF-44 · AP-07l: drei kleine Annahmen an der Lese-API
+
+**Eingetragen 22.09.2026 (Regel 10).** Der Vertrag aus AP-07lv lässt drei
+Punkte offen; alle drei sind in `api/app.py` umgesetzt:
+
+1. **`limit` hat keine Untergrenze.** Vertrag 4 nennt Vorgabe 50 und
+   Höchstwert 500 und verlangt 422 für negative Werte; über `limit = 0`
+   schweigt er. **Annahme:** mindestens 1 (`Query(ge=1)`) — eine Anfrage,
+   die garantiert nichts zurückliefert, ist kein sinnvoller Grenzfall.
+2. **Gleichstand im Drilldown.** Vertrag 7 ordnet „nach `handelszeit`
+   aufsteigend"; bei gleicher Handelszeit (am Fixture Z3/Z4, beide
+   15:00:00) fehlt eine Regel. **Annahme:** zweitsortiert nach `exec_id`
+   aufsteigend — deterministisch, ohne fachliche Aussage.
+3. **Richtung des Gleichstands in der Kettenliste.** Vertrag 4 sortiert
+   `eroeffnet_am` absteigend und nennt `chain_id` als Zweitkriterium, aber
+   keine Richtung. **Annahme:** aufsteigend — die natürliche Lesart einer
+   Nummer als Sekundärkriterium.

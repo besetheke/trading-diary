@@ -1,0 +1,436 @@
+"""Lese-API über Ketten, Strukturen und Ausführungen (AP-07l).
+
+Umsetzung des Vertrags 1–17 aus ``auftraege/AP-07lv.md`` (Abnahmebasis:
+``tests/test_api_lesen.py``). Die Anwendung ist ausschließlich lesend — im
+OpenAPI-Schema kommt keine andere Methode als ``get`` vor (Vertrag 2) — und
+reicht durch, was ``journal rebuild`` geschrieben hat. Ausnahmen nur die
+genannten: ``struktur_summe_netto`` je Kette (Entscheidung 4) und nichts
+anderes gerechnet, keine Umrechnung nach Euro, keine Kennzahlen.
+
+Geld, Mengen, Strikes und Preise gehen als Zeichenketten über die Leitung
+(Entscheidung 1): JSON kennt nur Gleitkommazahlen, ein ``Decimal`` als Zahl
+wäre der stille Genauigkeitsverlust aus Regel 5. Leere Werte bleiben leer und
+werden nie zu ``"0"`` (Vertrag 13). Jede Geldangabe nennt Währung und Sicht;
+die Sicht ist hier ausnahmslos ``"konto"`` (Entscheidung 2, OF-36).
+
+Dokumentierte Annahmen (Regel 10, OF-44):
+
+- ``limit`` ist mindestens 1 — der Vertrag nennt Vorgabe und Höchstwert, aber
+  keine Untergrenze; ``limit = 0`` wäre eine Anfrage ohne Antwort.
+- Bei gleicher ``handelszeit`` entscheidet im Drilldown die ``exec_id``
+  aufsteigend, bei gleicher ``eroeffnet_am`` in der Kettenliste die
+  aufsteigende ``chain_id`` — der Vertrag verlangt Sortierung und
+  Determinierismus, schweigt aber zum Gleichstand.
+"""
+
+import os
+import pathlib
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Annotated
+
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.engine import Connection
+
+from journal.db import create_db_engine
+from journal.schema import chain_links, chains, executions, legs, structures
+
+# Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
+# Kettensicht (OF-36) ist noch nicht gebaut.
+SICHT = "konto"
+
+
+# ---------------------------------------------------------------------------
+# Antwortmodelle (Vertrag 8–14)
+# ---------------------------------------------------------------------------
+
+
+class KetteAntwort(BaseModel):
+    """Eine Kette (Vertrag 8)."""
+
+    chain_id: int
+    natur_schluessel: str
+    underlying: str
+    asset_class: str
+    seite: str | None
+    eroeffnet_am: datetime
+    beendet_am: datetime | None
+    anzahl_rolls: int
+    endzustand: str | None
+    anzahl_glieder: int
+    struktur_summe_netto: str | None
+    waehrung: str | None
+    waehrungen: list[str]
+    sicht: str
+
+
+class StrukturAntwort(BaseModel):
+    """Eine Struktur (Vertrag 10)."""
+
+    structure_id: int
+    natur_schluessel: str
+    asset_class: str
+    typ: str
+    underlying: str
+    expiry: date | None
+    short_strike: str | None
+    long_strike: str | None
+    breite: str | None
+    menge: str
+    eroeffnet_am: datetime
+    geschlossen_am: datetime | None
+    dte_bei_eroeffnung: int | None
+    status: str | None
+    erkennung: str
+    brutto_pnl: str | None
+    kommission: str | None
+    netto_pnl: str | None
+    waehrung: str
+    sicht: str
+
+
+class KettengliedAntwort(BaseModel):
+    """Ein Kettenglied mit seiner Struktur (Vertrag 9)."""
+
+    sequenz: int
+    verknuepfungstyp: str
+    erkennung: str
+    struktur: StrukturAntwort
+
+
+class KetteDetailAntwort(KetteAntwort):
+    glieder: list[KettengliedAntwort]
+
+
+class LegAntwort(BaseModel):
+    """Eine Leg (Vertrag 11)."""
+
+    leg_id: int
+    conid: int
+    open_exec_id: str
+    close_exec_id: str | None
+    menge: str
+    matching_methode: str
+    offen_ja_nein: bool
+    basis_ungeklaert: bool
+    brutto_pnl: str | None
+    kommission_gesamt: str | None
+
+
+class StrukturDetailAntwort(StrukturAntwort):
+    legs: list[LegAntwort]
+
+
+class AusfuehrungAntwort(BaseModel):
+    """Eine Ausführung des Drilldowns mit ihrer Rolle (Vertrag 7 und 12)."""
+
+    exec_id: str
+    rolle: str
+    conid: int
+    symbol: str
+    side: str
+    menge: str
+    preis: str
+    waehrung: str
+    kommission: str | None
+    handelszeit: datetime
+    ereignistyp: str
+    exec_batch: str | None
+    oa_trade: str | None
+
+
+class KettenListeAntwort(BaseModel):
+    gesamt: int
+    treffer: list[KetteAntwort]
+
+
+# ---------------------------------------------------------------------------
+# Umsetzung der Zeilen
+# ---------------------------------------------------------------------------
+
+
+def _als_text(wert: Decimal | None) -> str | None:
+    """``Decimal`` als Zeichenkette in Dezimalschreibweise (Entscheidung 1).
+
+    Leer bleibt leer — nie ``"0"``, nie ``None`` als Zahl (Vertrag 13)."""
+    return None if wert is None else str(wert)
+
+
+def _struktur_als_dict(s) -> dict:
+    """Spaltenwerte einer Strukturzeile für das Antwortmodell (Vertrag 10)."""
+    return dict(
+        structure_id=s["structure_id"],
+        natur_schluessel=s["natur_schluessel"],
+        asset_class=s["asset_class"],
+        typ=s["typ"],
+        underlying=s["underlying"],
+        expiry=s["expiry"],
+        short_strike=_als_text(s["short_strike"]),
+        long_strike=_als_text(s["long_strike"]),
+        breite=_als_text(s["breite"]),
+        menge=_als_text(s["menge"]),
+        eroeffnet_am=s["eroeffnet_am"],
+        geschlossen_am=s["geschlossen_am"],
+        dte_bei_eroeffnung=s["dte_bei_eroeffnung"],
+        status=s["status"],
+        erkennung=s["erkennung"],
+        brutto_pnl=_als_text(s["brutto_pnl"]),
+        kommission=_als_text(s["kommission"]),
+        netto_pnl=_als_text(s["netto_pnl"]),
+        waehrung=s["waehrung"],
+        sicht=SICHT,
+    )
+
+
+def _kette_als_dict(k, glieder: int, waehrungen: list[str], summe: Decimal | None) -> dict:
+    """Spaltenwerte einer Kettenzeile für das Antwortmodell (Vertrag 8)."""
+    return dict(
+        chain_id=k["chain_id"],
+        natur_schluessel=k["natur_schluessel"],
+        underlying=k["underlying"],
+        asset_class=k["asset_class"],
+        # Vertrag 8: der Wert aus der Spalte, nie neu abgeleitet — eine Kette
+        # ohne Optionen hat keine Seite, das ist kein "n.a.".
+        seite=k["seite"],
+        eroeffnet_am=k["eroeffnet_am"],
+        beendet_am=k["beendet_am"],
+        anzahl_rolls=k["anzahl_rolls"],
+        endzustand=k["endzustand"],
+        anzahl_glieder=glieder,
+        struktur_summe_netto=_als_text(summe),
+        waehrung=waehrungen[0] if len(waehrungen) == 1 else None,
+        waehrungen=waehrungen,
+        sicht=SICHT,
+    )
+
+
+def _ketten_zuschuesse(
+    verbindung: Connection, chain_ids: list[int]
+) -> dict[int, tuple[int, list[str], Decimal | None]]:
+    """Gliederzahl, Währungen und Struktursumme je Kette (Vertrag 8).
+
+    Die Summe bleibt leer, wenn die Kette mehrere Währungen enthält
+    (Entscheidung 3) oder eines ihrer Glieder noch kein Ergebnis trägt
+    (Entscheidung 4) — eine offene Struktur ist kein Nullergebnis.
+    """
+    je_kette: dict[int, dict] = {}
+    if chain_ids:
+        zeilen = verbindung.execute(
+            select(chain_links.c.chain_id, structures.c.waehrung, structures.c.netto_pnl)
+            .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+            .where(chain_links.c.chain_id.in_(chain_ids))
+        ).all()
+        for chain_id, waehrung, netto_pnl in zeilen:
+            eintrag = je_kette.setdefault(
+                chain_id, dict(glieder=0, waehrungen=set(), netto_pnls=[])
+            )
+            eintrag["glieder"] += 1
+            eintrag["waehrungen"].add(waehrung)
+            eintrag["netto_pnls"].append(netto_pnl)
+    zuschuesse: dict[int, tuple[int, list[str], Decimal | None]] = {}
+    for chain_id, eintrag in je_kette.items():
+        waehrungen = sorted(eintrag["waehrungen"])
+        # Einheitlich und vollständig: nur dann ist die Summe eine Aussage.
+        summe = (
+            sum(eintrag["netto_pnls"])
+            if len(waehrungen) == 1 and all(n is not None for n in eintrag["netto_pnls"])
+            else None
+        )
+        zuschuesse[chain_id] = (eintrag["glieder"], waehrungen, summe)
+    return zuschuesse
+
+
+# ---------------------------------------------------------------------------
+# Anwendung
+# ---------------------------------------------------------------------------
+
+
+def erzeuge_app(db_pfad: str | pathlib.Path) -> FastAPI:
+    """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1)."""
+    engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
+
+    applikation = FastAPI(title="Trading-Journal — Lese-API (Kontosicht)")
+
+    @applikation.get("/ketten", response_model=KettenListeAntwort)
+    def ketten(
+        basiswert: str | None = None,
+        anlageklasse: str | None = None,
+        seite: str | None = None,
+        endzustand: str | None = None,
+        min_rolls: Annotated[int | None, Query(ge=0)] = None,
+        max_rolls: Annotated[int | None, Query(ge=0)] = None,
+        eroeffnet_ab: date | None = None,
+        eroeffnet_bis: date | None = None,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> KettenListeAntwort:
+        """Liste der Ketten — `gesamt` zählt vor der Begrenzung (Vertrag 4)."""
+        bedingungen = []
+        if basiswert:
+            bedingungen.append(chains.c.underlying == basiswert)
+        if anlageklasse:
+            bedingungen.append(chains.c.asset_class == anlageklasse)
+        if seite:
+            bedingungen.append(chains.c.seite == seite)
+        if endzustand:
+            bedingungen.append(chains.c.endzustand == endzustand)
+        if min_rolls is not None:
+            bedingungen.append(chains.c.anzahl_rolls >= min_rolls)
+        if max_rolls is not None:
+            bedingungen.append(chains.c.anzahl_rolls <= max_rolls)
+        if eroeffnet_ab is not None:
+            bedingungen.append(chains.c.eroeffnet_am >= eroeffnet_ab)
+        if eroeffnet_bis is not None:
+            bedingungen.append(chains.c.eroeffnet_am <= eroeffnet_bis)
+        with engine.connect() as verbindung:
+            gesamt = verbindung.execute(
+                select(func.count()).select_from(chains).where(*bedingungen)
+            ).scalar_one()
+            zeilen = verbindung.execute(
+                select(chains)
+                .where(*bedingungen)
+                # Vertrag 4: das Neueste zuerst, bei Gleichstand nach
+                # chain_id aufsteigend (OF-44) — deterministisch.
+                .order_by(chains.c.eroeffnet_am.desc(), chains.c.chain_id)
+                .limit(limit)
+                .offset(offset)
+            ).mappings().all()
+            zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
+        leer = (0, [], None)
+        return KettenListeAntwort(
+            gesamt=gesamt,
+            treffer=[
+                KetteAntwort(**_kette_als_dict(z, *zuschuesse.get(z["chain_id"], leer)))
+                for z in zeilen
+            ],
+        )
+
+    @applikation.get("/ketten/{chain_id}", response_model=KetteDetailAntwort)
+    def kette_einzeln(chain_id: int) -> KetteDetailAntwort:
+        """Eine Kette samt Gliedern, nach Sequenz aufsteigend (Vertrag 5)."""
+        with engine.connect() as verbindung:
+            zeile = verbindung.execute(
+                select(chains).where(chains.c.chain_id == chain_id)
+            ).mappings().one_or_none()
+            if zeile is None:
+                raise HTTPException(status_code=404, detail="Kette nicht gefunden")
+            zuschuesse = _ketten_zuschuesse(verbindung, [chain_id])
+            glied_zeilen = verbindung.execute(
+                select(chain_links)
+                .where(chain_links.c.chain_id == chain_id)
+                .order_by(chain_links.c.sequenz)
+            ).mappings().all()
+            strukturen = {
+                s["structure_id"]: s
+                for s in verbindung.execute(
+                    select(structures).where(
+                        structures.c.structure_id.in_([g["structure_id"] for g in glied_zeilen])
+                    )
+                ).mappings().all()
+            }
+        return KetteDetailAntwort(
+            **_kette_als_dict(zeile, *zuschuesse.get(chain_id, (0, [], None))),
+            glieder=[
+                KettengliedAntwort(
+                    sequenz=g["sequenz"],
+                    verknuepfungstyp=g["verknuepfungstyp"],
+                    erkennung=g["erkennung"],
+                    struktur=StrukturAntwort(
+                        **_struktur_als_dict(strukturen[g["structure_id"]])
+                    ),
+                )
+                for g in glied_zeilen
+            ],
+        )
+
+    @applikation.get("/strukturen/{structure_id}", response_model=StrukturDetailAntwort)
+    def struktur_einzeln(structure_id: int) -> StrukturDetailAntwort:
+        """Eine Struktur samt Legs (Vertrag 6)."""
+        with engine.connect() as verbindung:
+            zeile = verbindung.execute(
+                select(structures).where(structures.c.structure_id == structure_id)
+            ).mappings().one_or_none()
+            if zeile is None:
+                raise HTTPException(status_code=404, detail="Struktur nicht gefunden")
+            leg_zeilen = verbindung.execute(
+                select(legs)
+                .where(legs.c.structure_id == structure_id)
+                .order_by(legs.c.leg_id)
+            ).mappings().all()
+        return StrukturDetailAntwort(
+            **_struktur_als_dict(zeile),
+            legs=[
+                LegAntwort(
+                    leg_id=leg["leg_id"],
+                    conid=leg["conid"],
+                    open_exec_id=leg["open_exec_id"],
+                    close_exec_id=leg["close_exec_id"],
+                    menge=_als_text(leg["menge"]),
+                    matching_methode=leg["matching_methode"],
+                    offen_ja_nein=leg["offen_ja_nein"],
+                    basis_ungeklaert=leg["basis_ungeklaert"],
+                    brutto_pnl=_als_text(leg["brutto_pnl"]),
+                    kommission_gesamt=_als_text(leg["kommission_gesamt"]),
+                )
+                for leg in leg_zeilen
+            ],
+        )
+
+    @applikation.get(
+        "/strukturen/{structure_id}/ausfuehrungen",
+        response_model=list[AusfuehrungAntwort],
+    )
+    def ausfuehrungen(structure_id: int) -> list[AusfuehrungAntwort]:
+        """Drilldown: jede Ausführung, die ein Leg dieser Struktur eröffnet
+        oder schließt, zeitlich geordnet, je mit der Rolle (Vertrag 7)."""
+        with engine.connect() as verbindung:
+            vorhanden = verbindung.execute(
+                select(structures.c.structure_id).where(
+                    structures.c.structure_id == structure_id
+                )
+            ).scalar_one_or_none()
+            if vorhanden is None:
+                raise HTTPException(status_code=404, detail="Struktur nicht gefunden")
+            rollen: dict[str, str] = {}
+            for open_exec_id, close_exec_id in verbindung.execute(
+                select(legs.c.open_exec_id, legs.c.close_exec_id).where(
+                    legs.c.structure_id == structure_id
+                )
+            ).all():
+                rollen[open_exec_id] = "eroeffnung"
+                if close_exec_id is not None:
+                    rollen[close_exec_id] = "schliessung"
+            zeilen = verbindung.execute(
+                select(executions)
+                .where(executions.c.exec_id.in_(rollen))
+                # Vertrag 7: aufsteigend nach handelszeit; Gleichstand
+                # entscheidet die exec_id aufsteigend (OF-44).
+                .order_by(executions.c.handelszeit, executions.c.exec_id)
+            ).mappings().all()
+        return [
+            AusfuehrungAntwort(
+                exec_id=z["exec_id"],
+                rolle=rollen[z["exec_id"]],
+                conid=z["conid"],
+                symbol=z["symbol"],
+                side=z["side"],
+                menge=_als_text(z["menge"]),
+                preis=_als_text(z["preis"]),
+                waehrung=z["waehrung"],
+                kommission=_als_text(z["kommission"]),
+                handelszeit=z["handelszeit"],
+                ereignistyp=z["ereignistyp"],
+                exec_batch=z["exec_batch"],
+                oa_trade=z["oa_trade"],
+            )
+            for z in zeilen
+        ]
+
+    return applikation
+
+
+# Vertrag 1: Modulobjekt mit dem Pfad wie die CLI — Umgebungsvariable
+# JOURNAL_DB, sonst journal.db (OF-06).
+app = erzeuge_app(os.environ.get("JOURNAL_DB", "journal.db"))
