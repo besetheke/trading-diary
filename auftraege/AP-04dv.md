@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer die Durchsicht der Rollkandidaten (Datei-Rundreise)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04k
 aendert_tests: ja
 ---
