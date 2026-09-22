@@ -1,7 +1,7 @@
 ---
 titel: Zuteilungspaare nur einmal schreiben (Fund am echten Bestand)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04p
 aendert_tests: ja
 ---
