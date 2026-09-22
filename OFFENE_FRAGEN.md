@@ -2047,3 +2047,25 @@ Punkte offen; alle drei sind in `api/app.py` umgesetzt:
    `eroeffnet_am` absteigend und nennt `chain_id` als Zweitkriterium, aber
    keine Richtung. **Annahme:** aufsteigend — die natürliche Lesart einer
    Nummer als Sekundärkriterium.
+
+**Abgenommen 22.09.2026 (Review durch das starke Modell).** Alle drei
+Annahmen sind übernommen — sie sind eng, begründet und ohne fachliche
+Folgen. Die Lücken lagen im Vertrag, nicht in der Umsetzung.
+
+**Geprüft am echten Bestand** (7.183 Ketten, 9.203 Strukturen), über die
+Konsolenausgabe hinaus nur Zählwerte und Laufzeiten (Regel 2):
+
+- **Kein einziger `float` im JSON.** Rekursiv über alle Antworten gesucht —
+  Entscheidung 1 hält nicht nur im Test, sondern über die Leitung.
+- **Ergebnissumme stimmig:** 7.021 Ketten tragen eine, 162 nicht — und
+  diese 162 sind **ausnahmslos** die offenen. Genau das verlangt
+  Entscheidung 4; ein Feld, das immer leer bliebe, hätte kein Test bemerkt.
+- **Jede Kette hat genau eine Währung.** Der gemischte Fall aus
+  Entscheidung 3 kommt im echten Bestand nicht vor — er entsteht erst durch
+  einen Override. Die Regel bleibt richtig, ist aber bis dahin theoretisch.
+- **Laufzeiten für eine Oberfläche brauchbar:** Liste 20–350 ms, Einzelabruf
+  und Drilldown 15–20 ms, Blättern bis Versatz 6.000 unter 100 ms.
+
+**Nebenbefund, nicht dringend:** Starlette meldet beim Testclient, dass
+`httpx` zugunsten von `httpx2` veraltet ist. Betrifft nur die Tests, nicht
+die Auslieferung; beim nächsten Anfassen der Abhängigkeiten zu erledigen.

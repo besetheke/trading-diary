@@ -1,7 +1,7 @@
 ---
 titel: Lese-API ueber Ketten, Strukturen und Ausfuehrungen
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07lv
 ---
 
