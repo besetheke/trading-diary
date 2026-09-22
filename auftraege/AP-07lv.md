@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer die Lese-API (AP-07l)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04p
 aendert_tests: ja
 ---
