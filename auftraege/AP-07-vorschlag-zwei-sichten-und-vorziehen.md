@@ -71,8 +71,14 @@ gezogen.
 > sein. Deshalb:
 >
 > - **AP-07l · Lese-API (vorgezogen, vor AP-06).** Endpunkte über das, was
->   `journal rebuild` erzeugt: Ketten mit ihren Gliedern, Strukturen mit
->   Legs, Ausführungen im Drilldown, offene Rollkandidaten. Read-only.
+>   `journal rebuild` **in die Datenbank schreibt**: Ketten mit ihren
+>   Gliedern, Strukturen mit Legs, Ausführungen im Drilldown. Read-only.
+>   **Ohne Rollkandidaten** — die sind bewusst nicht gespeichert (§6,
+>   Block B, Regel 2) und ließen sich nur durch Neuberechnung des gesamten
+>   Bestands beschaffen, was Minuten dauert. Die Durchsicht bleibt bis auf
+>   Weiteres bei der Datei-Rundreise; sie in die Oberfläche zu holen
+>   verlangt zuerst eine Entscheidung darüber, woher die Kandidaten
+>   schnell genug kommen.
 > - **AP-07 · Rest (nach AP-06).** Kennzahlen-Endpunkte, Write-Endpunkte für
 >   Journal, Tags, Overrides und Kampagnen-Klassifikation.
 >
@@ -91,9 +97,10 @@ ausgeliefert." einfügen:
 > **Zweigeteilt, parallel zu AP-07.** **AP-08l · Positionsliste und
 > Detailansicht** (vorgezogen, auf AP-07l): die Liste aller Ketten mit
 > Filtern, die Detailansicht mit Roll-Zeitstrahl und Drilldown bis zur
-> Ausführung, und die Durchsicht der Rollkandidaten — sie löst die
-> Datei-Rundreise aus §6, Block B, Regel 2 ab. **AP-08 · Rest** (nach
-> AP-06): Dashboard, Kampagnenansicht, Kalender, Journal-Editor.
+> Ausführung. **AP-08 · Rest** (nach AP-06): Dashboard, Kampagnenansicht,
+> Kalender, Journal-Editor, und die Durchsicht der Rollkandidaten, sobald
+> geklärt ist, woher sie schnell genug kommen — bis dahin bleibt es bei der
+> Datei-Rundreise aus §6, Block B, Regel 2.
 >
 > Die vorgezogene Fassung zeigt ausdrücklich **keine** Kennzahlen und keine
 > währungsübergreifenden Summen; sie nennt die Sicht, aus der ihre Zahlen
