@@ -4,8 +4,9 @@
 Jedes Arbeitspaket ist so geschnitten, dass es isoliert bearbeitet, getestet und
 abgenommen werden kann.
 
-**Stand:** 21.09.2026 · **Version 8** — Zeitfenster-Rolls werden Kandidaten statt
-Kettenglieder (OF-41); eine Kette entsteht nur noch aus Belegen. Vorher:
+**Stand:** 22.09.2026 · **Version 9** — zwei Sichten auf dieselben Ausführungen
+(OF-36); Lese-Oberfläche vor die Analytik gezogen (AP-07l, AP-08l). Vorher:
+Zeitfenster-Rolls werden Kandidaten statt Kettenglieder (OF-41);
 Strategien aus dem OptionApp-Export übernommen, Verknüpfungsverfahren festgelegt. Grundlage: zwei
 Trading-Diary-Pro-Exporte, zwei Activity-Flex-Exporte (3.971 bzw. 1.376
 Ausführungen) und zwei OptionApp-Trade-Exporte. Verknüpfungsschlüssel am Überschneidungszeitraum
@@ -232,6 +233,49 @@ niemals blockieren.
 
 ## 5. Datenmodell (Skizze)
 
+### Zwei Sichten auf dieselben Ausführungen
+
+Ein Ergebnis lässt sich auf zwei Arten zurechnen, und beide werden gebraucht:
+
+- **Kontosicht (netto).** FIFO je `conid` über das ganze Konto, mit derselben
+  Verrechnung, die IB anwendet. Halten zwei Vorgänge gegenläufige Positionen im
+  selben Kontrakt, verrechnen sie sich. **Diese Sicht ist für Geld maßgeblich:**
+  sie trägt die Abnahme aus AP-03, und nur sie speist die steuerliche Auswertung
+  (AP-10).
+- **Kettensicht (brutto).** Zurechnung je Vorgang, wie die OptionsApp sie führt:
+  ein Trade behält seine Beine, auch wenn ein anderer sie kontoweit ausgeglichen
+  hat. Sie beantwortet „wie schneidet diese Strategie ab" und trägt die
+  Roll-Degradation.
+
+**Warum beide.** Gemessen über die Historie betrifft der Unterschied 206
+Ausführungen in 184 Vorgängen, mit steigender Tendenz (OF-36). Für die Steuer wäre
+die Kettensicht falsch, für die Strategiefrage die Kontosicht unbrauchbar.
+
+**Was „wie IB" hier heißt — und was nicht.** Die Kontosicht übernimmt IBs
+*Verrechnung*, nicht IBs gesamte Rechenweise. Die Behandlung von Zuteilung und
+Ausübung weicht in **beiden** Sichten bewusst von IB ab (siehe unten): die Prämie
+wird an der Option realisiert, nicht in die Aktienbasis verrechnet. AP-10 erbt
+also IBs Verrechnung, nicht IBs Prämienmethodik.
+
+**Die Summen stimmen über die Historie, nicht je Periode.** Über einen
+abgeschlossenen Bestand ergeben beide Sichten dieselbe Gesamtsumme; was sich
+verschiebt, ist die Zurechnung zwischen zwei Vorgängen. **Innerhalb eines Jahres
+können sie abweichen**, weil ein kontoweit verrechneter Kontrakt früher realisiert
+als derselbe Vorgang in der Kettensicht. Für die Jahresabgrenzung in AP-10 ist
+deshalb allein die Kontosicht maßgeblich, und zwar auch dann, wenn die Kettensicht
+dieselbe Jahressumme zufällig trifft.
+
+**Getrennt gehalten, umschaltbar gezeigt.** Die beiden Sichten entstehen aus **zwei
+getrennten Zuordnungen** derselben Ausführungen, nicht aus zwei Darstellungen
+derselben Zahlen: die Kettensicht verlangt eine eigene Zuordnung innerhalb des
+Vorgangs, sonst bliebe das ausgeglichene Bein verschwunden. Sie werden getrennt
+gespeichert und nie vermischt. Jede abgeleitete Zeile trägt ihre `sicht`, und
+**jede angezeigte Zahl nennt sie.** Eine Summe über beide Sichten gibt es nicht.
+
+**Reihenfolge.** Die Kontosicht ist gebaut (AP-03, AP-04). Die Kettensicht ist ein
+eigenes Paket (AP-04s) und wird vor AP-06 gebraucht, nicht vorher — bis dahin zeigt
+die Oberfläche die Kontosicht und sagt das auch.
+
 **Rohdaten (nie verändert)**
 - `import_runs` — id, quelle, datei_hash, importiert_am, zeitraum_von,
   zeitraum_bis, **qualitaetsstufe** (A/B/C), **realized_pnl_verfuegbar**,
@@ -348,8 +392,10 @@ externe Kursquelle wird nicht benötigt. Basiswährung ist EUR, die EUR-Zeilen
 tragen den Kurs 1.
 
 **Abgeleitet (jederzeit neu berechenbar)**
-- `legs` — leg_id, conid, open_exec_id, close_exec_id, menge, matching_methode,
-  brutto_pnl, kommission_gesamt, offen_ja_nein
+- `legs` — leg_id, **sicht** (konto/kette), conid, open_exec_id, close_exec_id,
+  menge, matching_methode, brutto_pnl, kommission_gesamt, offen_ja_nein.
+  Dieselbe Ausführung erscheint in beiden Sichten mit eigener Zuordnung; `sicht`
+  gehört in jeden Schlüssel und jede Abfrage.
 - `structures` — structure_id, **asset_class**, **strategy_id**, typ (BCS/BPS/Vertical/Single/
   Stock/Future/Custom), underlying, expiry, short_strike, long_strike, breite,
   menge, eroeffnet_am, geschlossen_am, dte_bei_eroeffnung, status, brutto_pnl,
@@ -823,6 +869,24 @@ betroffenen Legs zu null, ohne eine Folgeposition zu erzeugen. Generische
 Order-Nummer tragen, bleiben getrennte Ketten. Eine Struktur mit drei Legs wird
 als solche erkannt und nicht auf zwei Legs zurechtgestutzt.
 
+### AP-04s · Kettensicht (zweite Zurechnung)
+**Ziel:** Die zweite der beiden Sichten aus §5 bauen — Zurechnung je Vorgang statt
+kontoweiter Verrechnung.
+
+**Einordnung:** Engine-Schicht (L2), nicht Analytik. Es entsteht ein zweiter Satz
+Leg-Zuordnungen über dieselben Ausführungen, nicht eine andere Darstellung
+derselben Zahlen. Gebraucht vor AP-06, weil die Roll-Degradation darauf aufsetzt.
+
+**Umfang:** Zuordnung innerhalb des Vorgangs; `sicht` als Pflichtfeld in allen
+abgeleiteten Tabellen; Kennzeichnung der 206 betroffenen Ausführungen.
+
+**Abnahme:** Über den abgeschlossenen Bestand stimmt die Gesamtsumme beider Sichten
+überein. Die betroffenen Ausführungen sind in der Kettensicht ihrem eigenen Vorgang
+zugerechnet und in der Kontosicht unverändert verrechnet. Keine Abfrage liefert
+Zeilen aus beiden Sichten in einer Summe. Ein Test belegt, dass sich die
+Jahresabgrenzung zwischen den Sichten unterscheiden **darf** und dass AP-10
+ausschließlich auf der Kontosicht rechnet.
+
 ### AP-05 · Campaign-Erkennung und Klassifikation
 **Ziel:** Zusammengehörige Ketten beider Marktseiten gruppieren.
 
@@ -859,14 +923,47 @@ belegten plus bestätigten und nennt in beiden Fällen die Abdeckung. Unbestäti
 Kandidaten gehen nie ein.
 
 ### AP-07 · API
-**Ziel:** FastAPI-Schicht über Analytik und Benutzerdaten.
-**Ausgang:** Read-Endpunkte für alle Ansichten; Write-Endpunkte für Journal, Tags,
-Overrides und Kampagnen-Klassifikation; OpenAPI-Schema.
-**Abnahme:** Contract-Tests gegen das OpenAPI-Schema. Kein Endpunkt liefert
-Zahlen, die nicht aus L3 stammen.
+**Ziel:** FastAPI-Schicht über die Daten des Journals.
+
+**Zweigeteilt (Entscheidung 22.09.2026).** Der Plan verkettete bisher
+AP-06 → AP-07 → AP-08, sodass die erste bedienbare Oberfläche hinter der
+vollständigen Analytik lag. Positionen, Strukturen und Ketten stehen aber seit
+AP-04 in der Datenbank und brauchen keine Kennzahl, um sichtbar zu sein.
+
+- **AP-07l · Lese-API (vorgezogen, vor AP-06).** Endpunkte über das, was
+  `journal rebuild` **in die Datenbank schreibt**: Ketten mit ihren Gliedern,
+  Strukturen mit Legs, Ausführungen im Drilldown. Read-only. **Ohne
+  Rollkandidaten** — die sind bewusst nicht gespeichert (§6, Block B, Regel 2) und
+  ließen sich nur durch Neuberechnung des gesamten Bestands beschaffen, was Minuten
+  dauert. Die Durchsicht bleibt bis auf Weiteres bei der Datei-Rundreise; sie in
+  die Oberfläche zu holen verlangt zuerst eine Entscheidung darüber, woher die
+  Kandidaten schnell genug kommen.
+- **AP-07 · Rest (nach AP-06).** Kennzahlen-Endpunkte, Write-Endpunkte für Journal,
+  Tags, Overrides und Kampagnen-Klassifikation.
+
+**Ausgang:** OpenAPI-Schema, Contract-Tests dagegen.
+**Abnahme:** Kein Endpunkt liefert Zahlen, die nicht aus der Datenbank stammen —
+die Lese-API rechnet nichts aus, sie reicht durch. **Jede Geldangabe nennt ihre
+Währung und ihre Sicht** (§5, Zwei Sichten); es gibt keine währungsübergreifende
+Summe, solange die Umrechnung nach P4 fehlt (AP-06).
+
+**Auflage an die vorgezogene Fassung:** AP-07l bildet die gespeicherten Tabellen
+ab, nicht eine vorweggenommene Analytik. Kennzahlen werden später als eigene
+Endpunkte ergänzt, nicht in die Lese-Endpunkte hineingerechnet — sonst entsteht
+genau der Vertrag, den AP-06 wieder aufbrechen müsste.
 
 ### AP-08 · UI
 **Ziel:** Bedienbares Frontend, im Betrieb statisch ausgeliefert.
+
+**Zweigeteilt, parallel zu AP-07.** **AP-08l · Positionsliste und Detailansicht**
+(vorgezogen, auf AP-07l): die Liste aller Ketten mit Filtern, die Detailansicht mit
+Roll-Zeitstrahl und Drilldown bis zur Ausführung. **AP-08 · Rest** (nach AP-06):
+Dashboard, Kampagnenansicht, Kalender, Journal-Editor, und die Durchsicht der
+Rollkandidaten, sobald geklärt ist, woher sie schnell genug kommen — bis dahin
+bleibt es bei der Datei-Rundreise aus §6, Block B, Regel 2.
+
+Die vorgezogene Fassung zeigt ausdrücklich **keine** Kennzahlen und keine
+währungsübergreifenden Summen; sie nennt die Sicht, aus der ihre Zahlen stammen.
 **Umfang:** Dashboard (Equity, Monatsübersicht, Kommissionsanteil) ·
 **Positionsliste** (alle Ketten, unabhängig von der Roll-Anzahl) mit Filtern nach
 Strategie, Anlageklasse, Basiswert, Roll-Anzahl und Qualitätsstufe ·
@@ -974,8 +1071,9 @@ Gehört in die `CLAUDE.md` des Repos.
 | M0 | AP-00 | Datenlage geklärt, Flex-Query vollständig |
 | M1 | AP-01, AP-02 | Rohdaten vollständig und reproduzierbar in der DB |
 | M2 | AP-03, AP-04 | Ketten korrekt erkannt, OA-Abgleich und Invarianten grün |
-| M3 | AP-05, AP-06 | Die drei Kernfragen aus §1 per CLI beantwortbar |
-| M4 | AP-07, AP-08 | Bedienbares Tool |
+| M2l | AP-07l, AP-08l | Bestand sichtbar und durchklickbar, noch ohne Kennzahlen |
+| M3 | AP-04s, AP-05, AP-06 | Die drei Kernfragen aus §1 per CLI beantwortbar |
+| M4 | AP-07 Rest, AP-08 Rest | Bedienbares Tool |
 | M5 | AP-10 bis AP-13 | Steuer, Absichtserfassung, OptionApp-Abgleich (AP-09 gestrichen) |
 
 **M0 ist weitgehend erledigt.** Die Auswertung des Referenzexports hat den
@@ -987,7 +1085,11 @@ Entscheidungen E12 bis E14 abhängig und können sofort beginnen. AP-00 läuft
 parallel, es ist Portalarbeit ohne Programmieranteil. Trifft `orderReference`
 später ein, genügen Re-Import und `rebuild` — die Struktur ändert sich nicht.
 
-**M2 ist der Risikopunkt.** Vor M2 lohnt keine Arbeit an der UI.
+**M2 ist der Risikopunkt.** Vor M2 lohnt keine Arbeit an der UI — danach lohnt sie
+sofort: M2l macht den Bestand sichtbar, und Fehler, die in Tabellen unsichtbar
+bleiben, fallen in einer Detailansicht auf. Der noch offene Befund OF-42 (Schnitt
+mehrterminiger Strukturen aus einer Order, 57 Fälle) wird dort greifbarer als
+heute.
 
 ---
 
@@ -1056,6 +1158,10 @@ Modellwahl aufzuhängen. Verifikation ersetzt Vertrauen.
 | AP-06 | stark | Kennzahlendefinitionen müssen stimmen |
 | AP-07, AP-08, AP-10, AP-13 Parser | günstig | Fleißarbeit gegen feste Verträge |
 | AP-11 bis AP-13 | stark | Schnittstellen zu bestehenden Systemen |
+| AP-04s | stark | zweite Zurechnung, Urteilsfrage |
+
+Das Günstig-Urteil gilt auch für die vorgezogenen Teile **AP-07l und AP-08l**:
+feste Verträge, synthetische Fixtures, kein Zugriff auf `fixtures/golden/`.
 
 Die Trennung fällt mit der Datenschutzgrenze zusammen: die Pakete beim
 Drittanbieter kommen mit synthetischen oder verfremdeten Fixtures aus. Echte
