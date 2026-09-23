@@ -1,7 +1,7 @@
 ---
 titel: Anzeigefehler der Detailansicht - Naturschluessel und Nachkommastellen
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-08l
 ---
 
