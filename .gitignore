@@ -3,6 +3,8 @@ __pycache__/
 .claude/settings-guenstig.json
 *.sqlite
 *.db
+*.db-wal
+*.db-shm
 fixtures/golden/
 files.zip
 
