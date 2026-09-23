@@ -512,6 +512,12 @@ structures = Table(
     Column("kommission", ExactDecimal, nullable=True),
     Column("netto_pnl", ExactDecimal, nullable=True),
     Column("waehrung", Text, nullable=False),
+    # Nettoprämie je Kontrakt, Verkauf positiv (AP-07p). An genau diesen
+    # beiden Zahlen erkennt man einen Vorgang wieder und unterscheidet einen
+    # Roll von einem Wiedereinstieg (OF-41). `schlusspreis` bleibt leer,
+    # solange die Struktur offen ist.
+    Column("eroeffnungspreis", ExactDecimal, nullable=True),
+    Column("schlusspreis", ExactDecimal, nullable=True),
     # Pflichtfeld (CLAUDE.md, Regel 7); Wertebereich gemäß §5:
     # order_id / heuristik / manuell.
     Column("erkennung", Text, nullable=False),

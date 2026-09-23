@@ -312,3 +312,63 @@ def test_kette_ohne_ergebnis_bleibt_ohne_summe(klient):
     assert dax["struktur_summe_netto"] is None
     assert dax["waehrung"] == "EUR"
     assert dax["waehrungen"] == ["EUR"]
+
+
+# ---------------------------------------------------------------------------
+# Prämien in der Lese-API (AP-07p)
+# ---------------------------------------------------------------------------
+
+
+def test_struktur_traegt_die_praemien(klient):
+    """Vertrag P4: Die Struktur liefert Eröffnungs- und Schlussprämie je
+    Kontrakt — als Zeichenkette wie jeder andere Betrag (Entscheidung 1).
+
+    Von Hand für die DAX-Vertikale: eröffnet zu +40,00 eingenommen,
+    geschlossen zu −20,00 gezahlt. Geschrieben mit mindestens zwei und
+    höchstens acht Nachkommastellen, überzählige Nullen entfallen
+    (Vertrag P3).
+    """
+    kette = klient.get(
+        f"/ketten/{_kette_je_schluessel(klient)['k:E1|E2']['chain_id']}"
+    ).json()
+    struktur = kette["glieder"][0]["struktur"]
+
+    assert struktur["eroeffnungspreis"] == "40.00"
+    assert struktur["schlusspreis"] == "-20.00"
+    assert isinstance(struktur["eroeffnungspreis"], str)
+
+
+def test_offene_struktur_ohne_schlusspreis(klient):
+    """Vertrag P2: Eine offene Struktur hat keinen Schlusspreis — und
+    bekommt keine Null, die wie ein Rückkauf zum Nulltarif aussähe."""
+    kette = klient.get(
+        f"/ketten/{_kette_je_schluessel(klient)['k:E1|E2']['chain_id']}"
+    ).json()
+    offen = kette["glieder"][1]["struktur"]
+
+    assert offen["eroeffnungspreis"] == "35.00"
+    assert offen["schlusspreis"] is None
+
+
+def test_kette_zeigt_eroeffnung_und_schluss(klient):
+    """Vertrag P5: Die Kette reicht die Prämie ihres **ersten** und ihres
+    **letzten** Glieds durch — das ist, woran man einen Vorgang in der
+    Positionsliste wiedererkennt, ohne ihn zu öffnen.
+
+    Von Hand: Die ESTX50-Kette besteht aus einer geschlossenen Struktur,
+    eröffnet zu +12,00 und geschlossen zu −6,00.
+    """
+    geschlossen = _kette_je_schluessel(klient)["k:Z1|Z2"]
+
+    assert geschlossen["eroeffnungspreis"] == "12.00"
+    assert geschlossen["schlusspreis"] == "-6.00"
+
+
+def test_kette_mit_offenem_schlussglied_hat_keinen_schlusspreis(klient):
+    """Vertrag P5: Endet die Kette auf einer offenen Struktur, gibt es
+    keinen Schlusspreis. Die DAX-Kette wurde gerollt; ihr letztes Glied
+    läuft noch."""
+    dax = _kette_je_schluessel(klient)["k:E1|E2"]
+
+    assert dax["eroeffnungspreis"] == "40.00"
+    assert dax["schlusspreis"] is None

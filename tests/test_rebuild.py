@@ -553,3 +553,126 @@ def test_zuteilung_mit_zwei_legs_schreibt_das_paar_einmal(migrated_db):
     # Und ein zweiter Lauf bleibt dabei (Idempotenz, Vertrag 23).
     rebuild(migrated_db)
     assert len(_zeilen(migrated_db, assignment_links)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Eröffnungs- und Schlussprämie (AP-07p)
+# ---------------------------------------------------------------------------
+
+
+def test_praemien_sind_von_hand_nachgerechnet(migrated_db):
+    """Vertrag P1–P3: Nettoprämie je Kontrakt, Verkauf positiv, Kauf negativ.
+
+    Von Hand für die DAX-Vertikale (Menge 1):
+
+    - Eröffnung: E1 verkauft 19000er Put zu 100,00 (+100), E2 kauft den
+      18900er zu 60,00 (−60) → **+40,00** eingenommen.
+    - Schließung: E3 kauft den 19000er zu 40,00 zurück (−40), E4 verkauft
+      den 18900er zu 20,00 (+20) → **−20,00** gezahlt.
+
+    Die Probe aufs Exempel steht im Test selbst: (40 − 20) × Menge 1 ×
+    Multiplikator 5 = 100,00 — und genau das ist das bereits geprüfte
+    Bruttoergebnis der Struktur. Stimmen Prämien und Brutto nicht überein,
+    ist eine der beiden Rechnungen falsch.
+    """
+    befuelle(migrated_db)
+    rebuild(migrated_db)
+
+    dax = _je_schluessel(migrated_db, structures)["E1|E2"]
+
+    assert dax["eroeffnungspreis"] == Decimal("40")
+    assert dax["schlusspreis"] == Decimal("-20")
+    summe = dax["eroeffnungspreis"] + dax["schlusspreis"]
+    assert summe * dax["menge"] * Decimal("5") == dax["brutto_pnl"]
+
+
+def test_offene_struktur_hat_keinen_schlusspreis(migrated_db):
+    """Vertrag P2: Was nicht geschlossen ist, hat keinen Schlusspreis — und
+    bekommt auch keine Null, die wie ein Rückkauf zum Nulltarif aussähe.
+
+    Von Hand: E5 verkauft zu 90,00 (+90), E6 kauft zu 55,00 (−55) → +35,00.
+    """
+    befuelle(migrated_db)
+    rebuild(migrated_db)
+
+    offen = _je_schluessel(migrated_db, structures)["E5|E6"]
+
+    assert offen["status"] == "offen"
+    assert offen["eroeffnungspreis"] == Decimal("35")
+    assert offen["schlusspreis"] is None
+
+
+def test_praemie_der_estx50_struktur(migrated_db):
+    """Gegenprobe mit anderem Multiplikator (10).
+
+    Von Hand: Eröffnung Z1 +30,00 und Z2 −18,00 → **+12,00**; Schließung
+    Z3 −12,00 und Z4 +6,00 → **−6,00**. Probe: (12 − 6) × 1 × 10 = 60,00 =
+    Bruttoergebnis.
+    """
+    befuelle(migrated_db)
+    rebuild(migrated_db)
+
+    estx = _je_schluessel(migrated_db, structures)["Z1|Z2"]
+
+    assert estx["eroeffnungspreis"] == Decimal("12")
+    assert estx["schlusspreis"] == Decimal("-6")
+    assert (estx["eroeffnungspreis"] + estx["schlusspreis"]) * Decimal("10") == estx[
+        "brutto_pnl"
+    ]
+
+
+def test_praemie_wird_je_kontrakt_gerechnet(migrated_db):
+    """Vertrag P1: geteilt durch die Menge der Struktur — sonst wäre der
+    Preis nicht vergleichbar zwischen einer Einer- und einer Zehnerposition.
+
+    Von Hand, Menge 2: verkauft 2× zu 100,00, gekauft 2× zu 60,00. Die
+    Summe über die Legs ist 2×100 − 2×60 = 80,00; je Kontrakt sind das
+    **40,00** — derselbe Preis wie bei der Einerposition oben.
+    """
+    instrumente = [satz for satz in INSTRUMENTE if satz["conid"] in (601, 602)]
+    ausfuehrungen = [
+        dict(exec_id="M1", conid=601, side="SELL", menge=Decimal("2"),
+             preis=Decimal("100.00"), handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+             exec_batch="8.1"),
+        dict(exec_id="M2", conid=602, side="BUY", menge=Decimal("2"),
+             preis=Decimal("60.00"), handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+             exec_batch="8.1"),
+    ]
+    befuelle(migrated_db, ausfuehrungen=ausfuehrungen, instrumente_=instrumente)
+    rebuild(migrated_db)
+
+    struktur = _je_schluessel(migrated_db, structures)["M1|M2"]
+
+    assert struktur["menge"] == Decimal("2")
+    assert struktur["eroeffnungspreis"] == Decimal("40")
+
+
+def test_nicht_aufgehende_division_wird_auf_acht_stellen_gekuerzt(migrated_db):
+    """Vertrag P3: Geht die Division nicht auf, wird ausdrücklich auf acht
+    Nachkommastellen gekürzt — nicht still bei 28, wie `Decimal` es täte
+    (Regel 5).
+
+    Dafür braucht es **ungleiche** Beinmengen: Sind alle gleich, kürzt sich
+    die Menge heraus und die Division geht immer auf. Hier verkauft ein Bein
+    3 Kontrakte zu 10,00 (+30,00), das andere kauft 4 zu 1,00 (−4,00) — in
+    Summe 26,00.
+
+    Die Größe der Struktur ist die kleinste verdichtete Beinmenge, also 3
+    (`engine.structures`, Regel 10). 26 geteilt durch 3 ist 8,666…; auf acht
+    Stellen kaufmännisch gerundet **8,66666667**.
+    """
+    instrumente = [satz for satz in INSTRUMENTE if satz["conid"] in (601, 602)]
+    zeit = datetime(2026, 9, 1, 10, 0, 0)
+    ausfuehrungen = [
+        dict(exec_id="D1", conid=601, side="SELL", menge=Decimal("3"),
+             preis=Decimal("10.00"), handelszeit=zeit, exec_batch="9.7"),
+        dict(exec_id="D2", conid=602, side="BUY", menge=Decimal("4"),
+             preis=Decimal("1.00"), handelszeit=zeit, exec_batch="9.7"),
+    ]
+    befuelle(migrated_db, ausfuehrungen=ausfuehrungen, instrumente_=instrumente)
+    rebuild(migrated_db)
+
+    struktur = _je_schluessel(migrated_db, structures)["D1|D2"]
+
+    assert struktur["menge"] == Decimal("3")
+    assert struktur["eroeffnungspreis"] == Decimal("8.66666667")
