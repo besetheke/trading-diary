@@ -2107,3 +2107,18 @@ Junctions auf lokale Platten. Bauen funktioniert so: Quellen nach
 `node_modules` ohnehin nicht auf. Ein Umzug des Projekts auf ein lokales
 Laufwerk macht den Umweg überflüssig.
 
+
+## OF-46 · `uvicorn` war nicht deklariert (Fund im Review von AP-08l)
+
+**Befund 22.09.2026.** `uvicorn` steckte im virtuellen Umfeld, stand aber in
+keiner Abhängigkeitsliste. Auf einem frisch geklonten Rechner wäre die
+Anwendung nach `pip install -e .` nicht startbar gewesen — FastAPI bringt
+keinen Server mit.
+
+Die Lücke lag in den Abnahmebasen AP-07lv und AP-08lv: Sie nannten `fastapi`
+und `httpx`, aber nicht den Server, der beides ausliefert. Nachgetragen als
+Laufzeitabhängigkeit.
+
+**Lehre, dieselbe wie bei OF-43:** Eine Abnahmebasis muss nicht nur sagen,
+was der Code tun soll, sondern auch, was nötig ist, damit er läuft. Beides
+ist Vertrag.

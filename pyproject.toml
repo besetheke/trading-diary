@@ -12,6 +12,9 @@ dependencies = [
     "openpyxl>=3.1",
     # AP-07l: Lese-API über die Daten, die `journal rebuild` schreibt.
     "fastapi>=0.115",
+    # AP-08l: Ohne Server ist die API nicht startbar. FastAPI bringt keinen
+    # mit; im Betrieb liefert er zugleich das gebaute Frontend aus (§3).
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
