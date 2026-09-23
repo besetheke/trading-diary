@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer die Praemien an Struktur und Kette (AP-07p)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-07l
 aendert_tests: ja
 ---
