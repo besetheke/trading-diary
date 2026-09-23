@@ -15,6 +15,11 @@ eine, Verschwundenes wird entfernt — außer ``chain_overrides`` verweist darau
 **Ohne FX kein Euro-Betrag** (AP-04v, Entscheidung 2): ``netto_pnl_eur`` bleibt
 leer; die Umrechnung nach P4 ist AP-06.
 
+**Prämien an der Struktur** (AP-07p): ``_struktur_zeile()`` füllt seit diesem
+Paket auch ``eroeffnungspreis`` und ``schlusspreis`` — berechnet einmal in
+``journal.preise`` (Vertrag P1–P8 aus ``auftraege/AP-07pv.md``). Offen heißt
+ohne Schlusspreis (P2), niemals Null.
+
 Dokumentierte Annahmen (Regel 10) — hier nur im Code festgehalten, weil die
 Abnahme Änderungen ausschließlich in ``journal/rebuild.py`` und
 ``journal/cli.py`` zulässt; für den Review notieren:
@@ -46,6 +51,7 @@ from engine.matching import MatchingErgebnis, bilde_legs
 from engine.structures import Structure as Struktur
 from engine.structures import StrukturErgebnis, bilde_structures
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
+from journal.preise import nettopraemie
 from journal.schema import (
     assignment_links,
     chain_links,
@@ -226,9 +232,10 @@ def _struktur_waehrung(
 
 
 def _struktur_zeile(
-    struktur: Struktur, schluessel: str, exec_je_id: Mapping[str, Mapping]
+    struktur: Struktur, schluessel: str, bestand: Bestand, leg_je_schluessel
 ) -> dict:
-    """Spaltenwerte einer Structure für ``structures`` (Vertrag 10–12)."""
+    """Spaltenwerte einer Structure für ``structures`` (Vertrag 10–12) — seit
+    AP-07p samt der Prämien je Kontrakt (AP-07pv, P1/P2)."""
     erkennung = ERKENNUNG_JE_METHODE.get(struktur.methode)
     if erkennung is None:
         raise ValueError(
@@ -241,6 +248,26 @@ def _struktur_zeile(
         None
         if struktur.brutto_pnl is None
         else struktur.brutto_pnl + struktur.kommission_gesamt
+    )
+    # AP-07pv, P1: je Leg die Leg-Menge × den Preis der zugehörigen
+    # Ausführung, je Kontrakt geteilt durch die Strukturmenge. P2: Nur eine
+    # geschlossene Struktur bekommt einen Schlusspreis — offen bleibt leer,
+    # keine Null, die wie ein Rückkauf zum Nulltarif aus sähe.
+    eroeffnungspreis = nettopraemie(
+        struktur,
+        schliessung=False,
+        bestand=bestand,
+        leg_je_schluessel=leg_je_schluessel,
+    )
+    schlusspreis = (
+        None
+        if struktur.status != "geschlossen"
+        else nettopraemie(
+            struktur,
+            schliessung=True,
+            bestand=bestand,
+            leg_je_schluessel=leg_je_schluessel,
+        )
     )
     return dict(
         asset_class=struktur.asset_class,
@@ -255,10 +282,12 @@ def _struktur_zeile(
         geschlossen_am=struktur.geschlossen_am,
         dte_bei_eroeffnung=struktur.dte_bei_eroeffnung,
         status=struktur.status,
+        eroeffnungspreis=eroeffnungspreis,
+        schlusspreis=schlusspreis,
         brutto_pnl=struktur.brutto_pnl,
         kommission=struktur.kommission_gesamt,
         netto_pnl=netto_pnl,
-        waehrung=_struktur_waehrung(struktur, schluessel, exec_je_id),
+        waehrung=_struktur_waehrung(struktur, schluessel, bestand.exec_je_id),
         erkennung=erkennung,
         strategy_id=None,
     )
@@ -294,6 +323,11 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     bestand = bestand_berechnen(verbindung)
     exec_je_id = bestand.exec_je_id
     matching = bestand.matching
+    # Beine über ihr (open_exec_id, close_exec_id)-Paar — dasselbe Lookup wie
+    # in der Durchsicht (journal.durchsicht); offene Legs tragen None als Schluss.
+    leg_je_schluessel = {
+        (leg.open_exec_id, leg.close_exec_id): leg for leg in matching.legs
+    }
     struktur_ergebnis = bestand.struktur_ergebnis
     ketten_ergebnis = bestand.ketten_ergebnis
     struktur_je_schluessel = bestand.struktur_je_schluessel
@@ -331,7 +365,9 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     # structures: Abgleich über den Naturschlüssel (Vertrag 9).
     struktur_id_je_schluessel: dict[str, int] = {}
     for schluessel in sorted(struktur_je_schluessel):
-        werte = _struktur_zeile(struktur_je_schluessel[schluessel], schluessel, exec_je_id)
+        werte = _struktur_zeile(
+            struktur_je_schluessel[schluessel], schluessel, bestand, leg_je_schluessel
+        )
         structure_id = alte_struktur_ids.get(schluessel)
         if structure_id is None:
             structure_id = verbindung.execute(

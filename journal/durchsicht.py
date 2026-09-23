@@ -17,10 +17,11 @@ nicht neu erfunden: Lesen und Rechnen kommen aus ``bestand_berechnen()`` in
 Dokumentierte Annahmen (Regel 10 — das Abnahmekriterium zur ``git diff``
 lässt neben den drei Modulen keine Änderung an ``OFFENE_FRAGEN.md`` zu):
 
-- **Preise je Kontrakt werden auf den Cent gerundet** (``ROUND_HALF_UP``,
-  wie die Engine in ``engine.matching``): Die Teilung durch die
-  Strukturmenge kann nicht-terminierend sein, und ein stiller Schnitt auf
-  28 signifikante Stellen wäre eine Rundung ohne Namen (Regel 5).
+- **Die Nettoprämie steht in ``journal.preise``** (AP-07p, P5): Seitdem
+  rechnet dieses Modul sie nicht mehr selbst, sondern ruft ``nettopraemie``.
+  Gerundet wird dort ausdrücklich auf acht Nachkommastellen (P3 in
+  ``auftraege/AP-07pv.md``), nicht mehr auf den Cent — ein stiller Schnitt
+  auf 28 signifikante Stellen wäre eine Rundung ohne Namen (Regel 5).
 - **Dieselbe Zeile zweimal in einer Datei** wird wie eine sequenzielle
   Folge behandelt: gleiche Entscheidung zählt unverändert, eine andere
   folgt der Widerspruchs-Regel (Vertrag 14). Der Vertrag schweigt dazu;
@@ -30,13 +31,13 @@ lässt neben den drei Modulen keine Änderung an ``OFFENE_FRAGEN.md`` zu):
 import pathlib
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import ROUND_HALF_UP, Decimal
 
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import insert, select, update
 
 from engine.chains import _seite_bestimmen
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
+from journal.preise import nettopraemie
 from journal.rebuild import (
     _kette_schluessel,
     _struktur_schluessel,
@@ -63,8 +64,6 @@ KOPF = [
 # andere — auch Wahrheitswerte und Zahlen — ist Abbruch.
 BESTAETIGT_TEXT = frozenset({"ja", "j"})
 ABGELEHNT_TEXT = frozenset({"nein", "n"})
-
-CENT = Decimal("0.01")
 
 
 @dataclass(frozen=True)
@@ -203,12 +202,12 @@ def _zeile_bilden(
         "Seite": _seite_bestimmen([schliessende]),
         "Alt: Legs": _legs_als_text(schliessende, bestand, leg_je_schluessel),
         "Alt: geschlossen": schliessende.geschlossen_am,
-        "Alt: Preis zu": _nettopraemie(schliessende, schliessung=True, bestand=bestand,
-                                       leg_je_schluessel=leg_je_schluessel),
+        "Alt: Preis zu": nettopraemie(schliessende, schliessung=True, bestand=bestand,
+                                      leg_je_schluessel=leg_je_schluessel),
         "Neu: Legs": _legs_als_text(eroeffnende, bestand, leg_je_schluessel),
         "Neu: eröffnet": eroeffnende.eroeffnet_am,
-        "Neu: Preis auf": _nettopraemie(eroeffnende, schliessung=False, bestand=bestand,
-                                        leg_je_schluessel=leg_je_schluessel),
+        "Neu: Preis auf": nettopraemie(eroeffnende, schliessung=False, bestand=bestand,
+                                       leg_je_schluessel=leg_je_schluessel),
         "Abstand Minuten": round(kandidat.abstand.total_seconds() / 60),
         "Mengenverhältnis": kandidat.mengenverhaeltnis,
         "Entscheidung": None,
@@ -233,34 +232,6 @@ def _legs_als_text(struktur, bestand, leg_je_schluessel) -> str:
             f"{instrument.get('expiry') or '?'}"
         )
     return "; ".join(teile)
-
-
-def _nettopraemie(struktur, *, schliessung: bool, bestand, leg_je_schluessel) -> Decimal:
-    """Nettoprämie je Kontrakt (Vertrag 6): je Leg Menge der Leg × Preis der
-    Ausführung, Verkauf positiv, Kauf negativ; Summe geteilt durch die Menge
-    der Struktur. ``schliessung=True`` nimmt die schließenden Ausführungen
-    („Preis zu“), sonst die eröffnenden („Preis auf“)."""
-    summe = Decimal(0)
-    for schluessel in struktur.leg_schluessel:
-        leg = leg_je_schluessel[(schluessel.open_exec_id, schluessel.close_exec_id)]
-        exec_id = schluessel.close_exec_id if schliessung else schluessel.open_exec_id
-        if exec_id is None:
-            raise ValueError(
-                f"Struktur {_struktur_schluessel(struktur)} hat ein Leg ohne "
-                f"{'Schließung' if schliessung else 'Eröffnung'} — keine "
-                "Nettoprämie berechenbar (Vertrag 6)"
-            )
-        ausfuehrung = bestand.exec_je_id[exec_id]
-        vorzeichen = 1 if ausfuehrung["side"] == "SELL" else -1
-        summe += vorzeichen * leg.menge * ausfuehrung["preis"]
-    if not struktur.menge:
-        raise ValueError(
-            f"Struktur {_struktur_schluessel(struktur)} hat Menge 0 — die "
-            "Nettoprämie je Kontrakt wäre nicht teilbar (Vertrag 6)"
-        )
-    # Annahme aus dem Modul-Docstring: auf den Cent, ROUND_HALF_UP wie die
-    # Engine, statt still auf 28 Stellen.
-    return (summe / struktur.menge).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def _mappe_schreiben(ziel: pathlib.Path, gruppen: dict[str, list[dict]]) -> None:

@@ -2122,3 +2122,22 @@ Laufzeitabhängigkeit.
 **Lehre, dieselbe wie bei OF-43:** Eine Abnahmebasis muss nicht nur sagen,
 was der Code tun soll, sondern auch, was nötig ist, damit er läuft. Beides
 ist Vertrag.
+
+
+## OF-47 · AP-07p: Prämie der Kette bei gleicher `sequenz` zweier Glieder
+
+**Befund.** Vertrag P8 (AP-07pv) füllt `eroeffnungspreis` und
+`schlusspreis` der Kette aus dem **ersten** und **letzten** Glied, sagt aber
+nicht, welches Glied bei gleicher `sequenz` in `chain_links` meint. Das
+Schema erzwingt keine Eindeutigkeit — der Primärschlüssel ist
+(chain_id, structure_id), nicht (chain_id, sequenz).
+
+**Annahme:** Aufsteigend nach `(sequenz, structure_id)`: Das erste Glied
+ist die kleinste, das letzte die größte Paarung. Die Engine vergibt
+Sequenzen je Kette fortlaufend, Gleichstand ist nicht beobachtet; die Regel
+folgt dem Determinismus-Muster von OF-44 (Gleichstand entscheidet eine
+aufsteigende Nummer). Ort: `api/app.py`, `_ketten_zuschuesse()`.
+
+**Offen:** Ob die Engine Sequenzen je Kette jemals doppelt vergibt — falls
+ja, wäre eine garantiert eindeutige Vergabe in `engine.chains` das bessere
+Mittel als eine Verregelung des Gleichstands.

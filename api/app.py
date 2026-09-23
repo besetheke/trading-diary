@@ -22,6 +22,9 @@ Dokumentierte Annahmen (Regel 10, OF-44):
   aufsteigend, bei gleicher ``eroeffnet_am`` in der Kettenliste die
   aufsteigende ``chain_id`` — der Vertrag verlangt Sortierung und
   Determinierismus, schweigt aber zum Gleichstand.
+- Bei gleicher ``sequenz`` zweier Kettenglieder entscheidet die aufsteigende
+  ``structure_id``, welches das erste bzw. letzte Glied ist (AP-07p, P8,
+  OF-47) — derselbe Gleichstand, dieselbe Antwort.
 - Der Standardbauort der Oberfläche ist ``ui/dist`` neben der Datenbankdatei,
   nicht neben diesem Modul — sonst fände jeder Testlauf die einmal gebaute
   Oberfläche des Projektverzeichnisses, und der Normalzustand ohne Build
@@ -41,6 +44,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
 from journal.db import create_db_engine
+from journal.preise import praemie_als_text
 from journal.schema import chain_links, chains, executions, legs, structures
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
@@ -66,6 +70,9 @@ class KetteAntwort(BaseModel):
     anzahl_rolls: int
     endzustand: str | None
     anzahl_glieder: int
+    # AP-07pv, P8: Prämie des ersten bzw. letzten Glieds, Durchreichen.
+    eroeffnungspreis: str | None
+    schlusspreis: str | None
     struktur_summe_netto: str | None
     waehrung: str | None
     waehrungen: list[str]
@@ -90,6 +97,9 @@ class StrukturAntwort(BaseModel):
     dte_bei_eroeffnung: int | None
     status: str | None
     erkennung: str
+    # AP-07pv, P7: Prämien je Kontrakt; offen heißt ohne Schlusspreis.
+    eroeffnungspreis: str | None
+    schlusspreis: str | None
     brutto_pnl: str | None
     kommission: str | None
     netto_pnl: str | None
@@ -182,6 +192,9 @@ def _struktur_als_dict(s) -> dict:
         dte_bei_eroeffnung=s["dte_bei_eroeffnung"],
         status=s["status"],
         erkennung=s["erkennung"],
+        # P7 (AP-07pv): Zeichenkette nach P3; offen heißt ohne Schlusspreis.
+        eroeffnungspreis=praemie_als_text(s["eroeffnungspreis"]),
+        schlusspreis=praemie_als_text(s["schlusspreis"]),
         brutto_pnl=_als_text(s["brutto_pnl"]),
         kommission=_als_text(s["kommission"]),
         netto_pnl=_als_text(s["netto_pnl"]),
@@ -190,7 +203,14 @@ def _struktur_als_dict(s) -> dict:
     )
 
 
-def _kette_als_dict(k, glieder: int, waehrungen: list[str], summe: Decimal | None) -> dict:
+def _kette_als_dict(
+    k,
+    glieder: int,
+    waehrungen: list[str],
+    summe: Decimal | None,
+    eroeffnungspreis: Decimal | None,
+    schlusspreis: Decimal | None,
+) -> dict:
     """Spaltenwerte einer Kettenzeile für das Antwortmodell (Vertrag 8)."""
     return dict(
         chain_id=k["chain_id"],
@@ -205,6 +225,10 @@ def _kette_als_dict(k, glieder: int, waehrungen: list[str], summe: Decimal | Non
         anzahl_rolls=k["anzahl_rolls"],
         endzustand=k["endzustand"],
         anzahl_glieder=glieder,
+        # P8 (AP-07pv): Prämien aus erstem und letztem Glied — nur
+        # Durchreichen, kein Rechnen.
+        eroeffnungspreis=praemie_als_text(eroeffnungspreis),
+        schlusspreis=praemie_als_text(schlusspreis),
         struktur_summe_netto=_als_text(summe),
         waehrung=waehrungen[0] if len(waehrungen) == 1 else None,
         waehrungen=waehrungen,
@@ -214,28 +238,71 @@ def _kette_als_dict(k, glieder: int, waehrungen: list[str], summe: Decimal | Non
 
 def _ketten_zuschuesse(
     verbindung: Connection, chain_ids: list[int]
-) -> dict[int, tuple[int, list[str], Decimal | None]]:
-    """Gliederzahl, Währungen und Struktursumme je Kette (Vertrag 8).
+) -> dict[
+    int, tuple[int, list[str], Decimal | None, Decimal | None, Decimal | None]
+]:
+    """Gliederzahl, Währungen, Struktursumme und die Prämien aus erstem und
+    letztem Glied je Kette (Vertrag 8; AP-07pv, P8).
 
     Die Summe bleibt leer, wenn die Kette mehrere Währungen enthält
     (Entscheidung 3) oder eines ihrer Glieder noch kein Ergebnis trägt
     (Entscheidung 4) — eine offene Struktur ist kein Nullergebnis.
+
+    Erstes und letztes Glied nach ``sequenz``; bei gleicher Sequenz
+    entscheidet die aufsteigende ``structure_id`` (OF-47) — derselbe
+    Determinismus wie bei OF-44.
     """
     je_kette: dict[int, dict] = {}
     if chain_ids:
         zeilen = verbindung.execute(
-            select(chain_links.c.chain_id, structures.c.waehrung, structures.c.netto_pnl)
+            select(
+                chain_links.c.chain_id,
+                chain_links.c.sequenz,
+                chain_links.c.structure_id,
+                structures.c.waehrung,
+                structures.c.netto_pnl,
+                structures.c.eroeffnungspreis,
+                structures.c.schlusspreis,
+            )
             .join(structures, structures.c.structure_id == chain_links.c.structure_id)
             .where(chain_links.c.chain_id.in_(chain_ids))
         ).all()
-        for chain_id, waehrung, netto_pnl in zeilen:
+        for (
+            chain_id,
+            sequenz,
+            structure_id,
+            waehrung,
+            netto_pnl,
+            eroeffnungspreis,
+            schlusspreis,
+        ) in zeilen:
             eintrag = je_kette.setdefault(
-                chain_id, dict(glieder=0, waehrungen=set(), netto_pnls=[])
+                chain_id,
+                dict(
+                    glieder=0,
+                    waehrungen=set(),
+                    netto_pnls=[],
+                    erste=None,
+                    letzte=None,
+                    eroeffnungspreis=None,
+                    schlusspreis=None,
+                ),
             )
             eintrag["glieder"] += 1
             eintrag["waehrungen"].add(waehrung)
             eintrag["netto_pnls"].append(netto_pnl)
-    zuschuesse: dict[int, tuple[int, list[str], Decimal | None]] = {}
+            # P8: Prämie aus dem ersten bzw. letzten Glied — nur
+            # Durchreichen, kein Rechnen.
+            stelle = (sequenz, structure_id)
+            if eintrag["erste"] is None or stelle < eintrag["erste"]:
+                eintrag["erste"] = stelle
+                eintrag["eroeffnungspreis"] = eroeffnungspreis
+            if eintrag["letzte"] is None or stelle > eintrag["letzte"]:
+                eintrag["letzte"] = stelle
+                eintrag["schlusspreis"] = schlusspreis
+    zuschuesse: dict[
+        int, tuple[int, list[str], Decimal | None, Decimal | None, Decimal | None]
+    ] = {}
     for chain_id, eintrag in je_kette.items():
         waehrungen = sorted(eintrag["waehrungen"])
         # Einheitlich und vollständig: nur dann ist die Summe eine Aussage.
@@ -244,7 +311,13 @@ def _ketten_zuschuesse(
             if len(waehrungen) == 1 and all(n is not None for n in eintrag["netto_pnls"])
             else None
         )
-        zuschuesse[chain_id] = (eintrag["glieder"], waehrungen, summe)
+        zuschuesse[chain_id] = (
+            eintrag["glieder"],
+            waehrungen,
+            summe,
+            eintrag["eroeffnungspreis"],
+            eintrag["schlusspreis"],
+        )
     return zuschuesse
 
 
@@ -324,7 +397,7 @@ def erzeuge_app(
                 .offset(offset)
             ).mappings().all()
             zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
-        leer = (0, [], None)
+        leer = (0, [], None, None, None)
         return KettenListeAntwort(
             gesamt=gesamt,
             treffer=[
@@ -357,7 +430,7 @@ def erzeuge_app(
                 ).mappings().all()
             }
         return KetteDetailAntwort(
-            **_kette_als_dict(zeile, *zuschuesse.get(chain_id, (0, [], None))),
+            **_kette_als_dict(zeile, *zuschuesse.get(chain_id, (0, [], None, None, None))),
             glieder=[
                 KettengliedAntwort(
                     sequenz=g["sequenz"],
