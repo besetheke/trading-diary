@@ -35,18 +35,17 @@ Sieh dir bei der Gelegenheit die übrigen Definitionslisten beider Ansichten
 auf denselben Fehler an; lange Werte gibt es auch bei `Basiswert` und
 `Endzustand` nicht, aber die Spaltenbreiten sind dieselbe Bauart.
 
-## 2 · Fünf Nachkommastellen in der Positionsliste (nur nach Freigabe)
+## 2 · Fünf Nachkommastellen in der Positionsliste (freigegeben)
 
-> **Diesen Punkt erst umsetzen, wenn der Nutzer ihn ausdrücklich freigibt.**
-> Steht die Freigabe nicht im Auftragskopf oder in der Aufgabenstellung,
-> bleibt Punkt 2 unangetastet.
+> **Freigegeben durch den Nutzer am 22.09.2026** („kürzen ja"). Punkt 2 ist
+> damit Teil des Auftrags.
 
 Die Spalte `Ergebnis netto` zeigt Werte wie `-149.52224`. Das ist **kein
 Fehler**: Die Kommissionen von IB tragen mehr als zwei Nachkommastellen
 (OF-18), und die Oberfläche reicht die Zeichenkette unverändert durch, wie
 Vertrag 8 es verlangt. In einer Liste ist es trotzdem Lärm.
 
-**Falls freigegeben:** In der **Positionsliste** auf zwei Nachkommastellen
+In der **Positionsliste** auf zwei Nachkommastellen
 anzeigen, den vollständigen Wert im `title` der Zelle. In der
 **Detailansicht** bleibt der volle Wert stehen — dort ist die Genauigkeit
 der Zweck.
