@@ -1,7 +1,7 @@
 ---
 titel: Positionsliste und Detailansicht (schmale erste Fassung)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-08lv
 ---
 
