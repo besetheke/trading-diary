@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fehlerText, holeKetten } from './api'
 import type { KettenListe } from './api'
-import { zeit } from './format'
+import { zeit, aufZweiNachkommastellen } from './format'
 
 const LIMITS = [10, 25, 50, 100]
 
@@ -203,27 +203,37 @@ export default function Positionen(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {liste.treffer.map((kette) => (
-                <tr key={kette.chain_id}>
-                  <td>
-                    <Link to={`/positionen/${kette.chain_id}`}>{kette.underlying}</Link>
-                  </td>
-                  <td>{kette.asset_class}</td>
-                  <td>{kette.seite ?? '—'}</td>
-                  <td>{zeit(kette.eroeffnet_am)}</td>
-                  <td>{kette.beendet_am ? zeit(kette.beendet_am) : '—'}</td>
-                  <td className="zahl">{kette.anzahl_rolls}</td>
-                  <td>{kette.endzustand ?? '—'}</td>
-                  <td className="zahl">{kette.struktur_summe_netto ?? '—'}</td>
-                  <td>
-                    {kette.waehrung ?? (
-                      <span title="Kette enthält mehrere Währungen — keine Summe möglich">
-                        {kette.waehrungen.join(' / ')}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {liste.treffer.map((kette) => {
+                // AP-08lk, Punkt 2 (vom Nutzer freigegeben): Die Liste zeigt
+                // zwei Nachkommastellen — reine Zeichenarbeit (Vertrag 8),
+                // der vollständige Wert steht im title der Zelle. Die
+                // Detailansicht bleibt unverändert genau.
+                const netto = kette.struktur_summe_netto
+                const kurz = netto === null ? null : aufZweiNachkommastellen(netto)
+                return (
+                  <tr key={kette.chain_id}>
+                    <td>
+                      <Link to={`/positionen/${kette.chain_id}`}>{kette.underlying}</Link>
+                    </td>
+                    <td>{kette.asset_class}</td>
+                    <td>{kette.seite ?? '—'}</td>
+                    <td>{zeit(kette.eroeffnet_am)}</td>
+                    <td>{kette.beendet_am ? zeit(kette.beendet_am) : '—'}</td>
+                    <td className="zahl">{kette.anzahl_rolls}</td>
+                    <td>{kette.endzustand ?? '—'}</td>
+                    <td className="zahl" title={netto !== null && kurz !== netto ? netto : undefined}>
+                      {kurz ?? '—'}
+                    </td>
+                    <td>
+                      {kette.waehrung ?? (
+                        <span title="Kette enthält mehrere Währungen — keine Summe möglich">
+                          {kette.waehrungen.join(' / ')}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
           <footer className="blaettern">
@@ -253,8 +263,9 @@ export default function Positionen(): JSX.Element {
             </label>
           </footer>
           <p className="sicht fussnote">
-            ¹ Kontosicht, Summe der Strukturergebnisse — unverändert wie geliefert,
-            keine Umrechnung.
+            ¹ Kontosicht, Summe der Strukturergebnisse — in der Liste auf zwei
+            Nachkommastellen gekürzt; die Zellenüberschrift zeigt den vollen
+            Wert. Keine Umrechnung, nichts gerechnet.
           </p>
         </>
       )}

@@ -215,6 +215,10 @@ dl.struktur div {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
+  /* AP-08lk: Rasterelemente dürfen schrumpfen. Ohne min-width: 0 setzt ein
+     unaufbrechbarer Wert (Naturschlüssel) seine Mindestbreite gegen das
+     Raster durch und läuft über die Nachbarzelle. */
+  min-width: 0;
 }
 
 dt {
@@ -224,6 +228,25 @@ dt {
 
 dd {
   margin: 0;
+  min-width: 0;
+  /* AP-08lk: Auch künftig darf kein Wert das Raster sprengen — lange
+     Zeichenketten brechen notfalls an jeder Stelle um, statt zu überlappen. */
+  overflow-wrap: anywhere;
+}
+
+/* AP-08lk, Punkt 1: Der Naturschlüssel — je Leg eine zehnstellige IB-Nummer,
+   durch | getrennt — erhält eine eigene Zeile über die volle Breite, die
+   Beschriftung darüber. Feste Laufweite macht die Nummern lesbar; der volle
+   Wert steht im Element und im title. */
+dl.struktur div.voll {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+dl.struktur dd.schluessel {
+  font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
 }
 
 /* Verlauf als Zeitliste */

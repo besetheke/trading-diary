@@ -192,9 +192,17 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
       </header>
 
       <dl className="struktur">
-        <div>
+        {/* AP-08lk, Punkt 1: Der Naturschlüssel (zehnstellige IB-Nummern,
+            durch | getrennt — je Leg eine) läuft aus einer gewöhnlichen
+            Rasterzelle heraus und verdeckt die Nachbarbeschriftung. Er
+            bekommt eine eigene Zeile über die volle Breite; der vollständige
+            Wert bleibt im Text und zusätzlich im title — kopierbar für die
+            Durchsicht (`journal kandidaten-einlesen`). */}
+        <div className="voll">
           <dt>Struktur</dt>
-          <dd>{struktur.natur_schluessel}</dd>
+          <dd className="schluessel" title={struktur.natur_schluessel}>
+            {struktur.natur_schluessel}
+          </dd>
         </div>
         <div>
           <dt>Basiswert</dt>
