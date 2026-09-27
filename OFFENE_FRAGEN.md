@@ -2177,3 +2177,34 @@ Anfang an so vorgehen sollen wie die Abgleichsskripte unter
 `werkzeuge/abgleich/`: nur Zählwerte, Kategorien und Verhältnisse, nie
 Rohwerte. Für künftige Diagnosen an `journal.db` gilt dieselbe Disziplin
 wie für `fixtures/golden/`.
+
+## OF-49 · Financing-Kandidat: 24-Stunden-Fenster als Annahme, nicht gemessen bestätigt
+
+**Annahme, dokumentiert 27.09.2026 beim Zuschnitt von AP-05v (Regel 10).**
+Der Plan nennt für den Financing-Kandidaten „im zeitlichen Umfeld eines
+Rolls", ohne Zahl. Gemessen am echten Bestand (nur Zählwerte, Regel 2):
+
+| Fenster | Kandidatenpaare |
+|---|---|
+| 1 Stunde | 161 |
+| 6 Stunden | 351 |
+| 24 Stunden | 518 |
+| 72 Stunden | 1.029 |
+| 1 Woche | 2.193 |
+
+Kein natürlicher Sprung, der eine Grenze nahelegt — die Zahl wächst
+durchgehend mit der Fensterbreite. Gewählt: **24 Stunden** (ein
+Handelstag), als plausibelste Lesart von „im Umfeld", benannt als
+`FINANCING_FENSTER` in `engine/campaigns.py`.
+
+**Unterschied zum Rollkandidatenfenster (OF-41):** Dort bestätigte eine
+Nutzer-Stichprobe die gewählten 30 Minuten nachträglich. Für das
+Financing-Fenster gibt es diese Bestätigung noch nicht — die 24 Stunden
+sind eine Annahme, keine gemessene Tatsache. Da Financing-Kandidaten
+laut Plan ohnehin nur Vorschläge sind, über die der Nutzer entscheidet
+(„Vorschläge werden nie automatisch übernommen"), ist das Risiko einer zu
+groben Schätzung begrenzt: ein zu enges Fenster verbirgt echte Kandidaten,
+ein zu weites erzeugt zusätzliche, die der Nutzer verwirft. Sobald ein
+Klassifikationsdialog existiert und Entscheidungen vorliegen, sollte das
+Fenster anhand dieser Entscheidungen überprüft werden — analog zur
+Stichprobe, die das Rollkandidatenfenster bestätigt hat.
