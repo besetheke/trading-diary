@@ -2237,20 +2237,42 @@ Kandidaten. Nicht, weil er außerhalb des Zeitfensters läge oder die
 Mengenregel griffe, sondern weil die Struktur als „schon erledigt" gilt,
 sobald irgendeine belegte Fortsetzung existiert.
 
-**Das ist eine echte Lücke, kein Messfehler der Kreuzprobe.** Die
-Diagnose lief für alle drei Fälle sauber durch dieselbe, einzige
-Ausschlussregel — keiner blieb unerklärt.
+**Der Ausschlussmechanismus ist eindeutig identifiziert — ob er auch die
+Ursache ist, ist nach genauerer Betrachtung offener, als der erste
+Befund nahelegte.** Nutzerangabe (27.09.2026): „Im Normalfall rolle ich
+in einer Order" — ein Teil-Roll über zwei Orders wäre demnach die
+Ausnahme, nicht die Regel. Die drei Fälle einzeln angesehen (nur
+Struktur-Merkmale, keine Rohwerte):
 
-**Nicht behoben.** Die Vertragsannahme in `rollkandidaten()` — eine
-Struktur setzt sich höchstens einmal fort — ist ein Modellierungsentscheid
-aus AP-04k, der Teil-Rolls über mehrere Orders nicht vorsah. Eine Korrektur
-verlangt eine bewusste Entscheidung, keine schnelle Änderung: Soll eine
-bereits belegt fortgesetzte Struktur *zusätzlich* Kandidat für eine
-zweite, unbelegte Fortsetzung sein können? Das würde
-`tests/test_chains.py::test_belegte_fortsetzung_erzeugt_keinen_kandidaten`
-nicht widersprechen (dessen Szenario hat keine zweite Struktur in der
-Nähe), bräuchte aber eine erweiterte Abnahmebasis mit einem Szenario genau
-für den Teil-Roll-Fall — ein eigenes Korrekturpaket.
+- **Fall 1:** Das belegte Ziel von `alt` trägt dieselbe Expiry wie der
+  bestätigte Kandidat, aber der Kandidat hat die doppelte Menge und ein
+  Bein mehr. Summe aus belegtem Ziel und Kandidat ergibt nicht `alt`s
+  Menge. Passt zu einer Größenveränderung beim Rollen — plausibel ein
+  echter, nur ungewöhnlich strukturierter Fall.
+- **Fall 2:** Belegtes Ziel und Kandidat sind bezüglich Expiry, Menge und
+  Beinzahl **identisch** — bei `alt`s Menge von 1 kann aber nur eines von
+  beiden die echte Fortsetzung sein. Sieht eher nach einer zufällig
+  zeitnahen, unabhängigen Neuposition aus als nach einem echten Zweit-Roll.
+- **Fall 3:** Das belegte Ziel trägt eine **andere** Expiry als der
+  Kandidat, der zeitliche Abstand liegt bei 29:47 Minuten — praktisch am
+  Rand des 30-Minuten-Kandidatenfensters. Spricht eher für eine
+  unabhängige Position als für einen zusammengehörigen Roll.
+
+Nur Fall 1 passt sauber zum Bild „eine Position, über zwei Orders
+gerollt". Fall 2 und 3 könnten ebenso gut Grenzfälle der Beurteilung in
+der Stichprobe sein — zufällig zeitnahe, aber inhaltlich unabhängige
+Positionen, die als „übersehener Roll" durchgingen, weil die Stichprobe
+zum Zeitpunkt der Beurteilung keine Preise und keine
+Struktur-Detailmerkmale wie hier zeigte.
+
+**Nicht behoben, und vorerst auch kein Korrekturpaket geplant.** Der
+Ausschluss „was belegt ist, wird nicht gefragt" bleibt vorerst wie er ist.
+Eine Änderung an `rollkandidaten()` (ob eine bereits belegt fortgesetzte
+Struktur zusätzlich Kandidat für eine zweite, unbelegte Fortsetzung sein
+kann) wird erst angegangen, wenn Fall 1 — oder ein vergleichbarer,
+eindeutigerer Fall — bestätigt einen echten Teil-Roll zeigt. Bis dahin
+wäre eine Korrektur eine Lösung für ein Problem, das möglicherweise gar
+keines ist.
 
 **Zur Messgrenze der Kreuzprobe:** 6 der 22 in den beiden Stichproben als
 „richtig" markierten Nummern ließen sich nicht eindeutig auf heutige
@@ -2261,7 +2283,10 @@ ausschließlich die Zuordnung der alten Stichprobenzeilen zu heutigen
 Structures, nicht die Kandidatenbildung selbst.
 
 **Für die AP-04-Abnahme:** Die dritte Prüfung („kein bestätigter Roll der
-Stichprobe fehlt in der Kandidatenliste") ist damit **noch nicht
-vollständig erfüllt** — 3 von 10 geprüften, eindeutig zugeordneten Fällen
-fehlen, mit bekannter, einheitlicher Ursache. Siehe `auftraege/AP-04.md`
-für den aktualisierten Abnahmestand.
+Stichprobe fehlt in der Kandidatenliste") gilt formal **noch nicht als
+bestanden** — 3 von 10 geprüften, eindeutig zugeordneten Fällen fehlen.
+Ob das an einer Lücke der Engine liegt oder an drei Grenzfällen der
+ursprünglichen Beurteilung, ist offen und braucht die Bestätigung des
+Nutzers anhand der drei konkreten Fälle (er hat Zugriff auf die
+Rohdaten der Stichprobendatei), bevor hier weitergearbeitet wird. Siehe
+`auftraege/AP-04.md` für den aktualisierten Abnahmestand.
