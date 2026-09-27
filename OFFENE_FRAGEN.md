@@ -2208,3 +2208,60 @@ ein zu weites erzeugt zusätzliche, die der Nutzer verwirft. Sobald ein
 Klassifikationsdialog existiert und Entscheidungen vorliegen, sollte das
 Fenster anhand dieser Entscheidungen überprüft werden — analog zur
 Stichprobe, die das Rollkandidatenfenster bestätigt hat.
+
+## OF-50 · Rollkandidaten: eine bereits belegte Struktur bekommt nie einen zweiten Kandidaten
+
+**Befund 27.09.2026, bei der Kreuzprobe der Stichprobe gegen die heutige
+Kandidatenliste** (`werkzeuge/abgleich/golden_stichprobe_kreuzprobe.py`,
+Nachweis für die dritte AP-04-Abnahmeprüfung). Die Prüfung nimmt jeden vom
+Nutzer bestätigten Roll aus den beiden Stichprobenrunden und sucht ihn in
+der heutigen Kandidatenliste. Ergebnis:
+
+| | Anzahl |
+|---|---|
+| bestätigte Rolls geprüft | 10 |
+| davon als Kandidat gefunden | 7 |
+| davon **fehlt** als Kandidat | **3** |
+| nicht eindeutig auf Structures rückführbar (Messgrenze, siehe unten) | 6 |
+
+Alle drei fehlenden Fälle haben **dieselbe Ursache**: Die schließende
+Struktur war zum Zeitpunkt der Schließung bereits per `exec_batch` (belegte
+Order-Fortsetzung) mit einer *anderen* Struktur verknüpft.
+`rollkandidaten()` schließt eine Struktur, die schon belegt fortgesetzt
+ist, vollständig von der Kandidatenliste aus (`engine/chains.py`, Vertrag 5
+aus AP-04k: „Was belegt ist, wird nicht gefragt"). Bestätigt der Nutzer
+aber einen **zweiten**, unbelegten Roll **derselben** Struktur — ein
+Teil-Roll über zwei Orders, bei dem ein Teil der Position in einer
+Combo-Order und der Rest separat rollt —, gibt es dafür heute **keinen**
+Kandidaten. Nicht, weil er außerhalb des Zeitfensters läge oder die
+Mengenregel griffe, sondern weil die Struktur als „schon erledigt" gilt,
+sobald irgendeine belegte Fortsetzung existiert.
+
+**Das ist eine echte Lücke, kein Messfehler der Kreuzprobe.** Die
+Diagnose lief für alle drei Fälle sauber durch dieselbe, einzige
+Ausschlussregel — keiner blieb unerklärt.
+
+**Nicht behoben.** Die Vertragsannahme in `rollkandidaten()` — eine
+Struktur setzt sich höchstens einmal fort — ist ein Modellierungsentscheid
+aus AP-04k, der Teil-Rolls über mehrere Orders nicht vorsah. Eine Korrektur
+verlangt eine bewusste Entscheidung, keine schnelle Änderung: Soll eine
+bereits belegt fortgesetzte Struktur *zusätzlich* Kandidat für eine
+zweite, unbelegte Fortsetzung sein können? Das würde
+`tests/test_chains.py::test_belegte_fortsetzung_erzeugt_keinen_kandidaten`
+nicht widersprechen (dessen Szenario hat keine zweite Struktur in der
+Nähe), bräuchte aber eine erweiterte Abnahmebasis mit einem Szenario genau
+für den Teil-Roll-Fall — ein eigenes Korrekturpaket.
+
+**Zur Messgrenze der Kreuzprobe:** 6 der 22 in den beiden Stichproben als
+„richtig" markierten Nummern ließen sich nicht eindeutig auf heutige
+Structures zurückführen (Auflösung über Basiswert + exakten
+Eröffnungszeitpunkt; mehrdeutig oder ohne Treffer). Das ist eine Grenze der
+Rückführungsmethode, keine Aussage über die Engine — sie betrifft
+ausschließlich die Zuordnung der alten Stichprobenzeilen zu heutigen
+Structures, nicht die Kandidatenbildung selbst.
+
+**Für die AP-04-Abnahme:** Die dritte Prüfung („kein bestätigter Roll der
+Stichprobe fehlt in der Kandidatenliste") ist damit **noch nicht
+vollständig erfüllt** — 3 von 10 geprüften, eindeutig zugeordneten Fällen
+fehlen, mit bekannter, einheitlicher Ursache. Siehe `auftraege/AP-04.md`
+für den aktualisierten Abnahmestand.
