@@ -1,7 +1,7 @@
 ---
 titel: Praemien an Struktur und Kette, eine Rechnung statt drei
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07pv
 ---
 

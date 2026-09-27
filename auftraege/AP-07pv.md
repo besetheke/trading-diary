@@ -75,10 +75,28 @@ Nur diese, keine weiteren.
   (`ROUND_HALF_UP`), danach überzählige Nullen entfernt, **mindestens
   zwei** Nachkommastellen bleiben stehen. Aus 40 wird `40.00`, aus −20
   `-20.00`, aus 26/3 `8.66666667`.
-- **P4 · Probe.** Für eine geschlossene Struktur gilt
+- **P4 · Probe, mit Einschränkung (korrigiert im Review, 27.09.2026).**
+  Für eine geschlossene Struktur, deren Legs **ausnahmslos per `trade`
+  geschlossen** wurden, gilt
   `(eroeffnungspreis + schlusspreis) × menge × multiplikator = brutto_pnl`.
-  Die Tests prüfen das; stimmt es nicht, ist eine der beiden Rechnungen
-  falsch.
+  Die Tests prüfen das für genau diesen Fall.
+
+  **Die Gleichheit gilt nicht allgemein**, und das ist kein Fehler der
+  Umsetzung, sondern eine Eigenschaft der Engine: Bei Zuteilung, Ausübung
+  oder Verfall bewertet `brutto_pnl` über die Barausgleichsregel
+  (AP-03vb/OF-25), während `eroeffnungspreis`/`schlusspreis` nach P1
+  konsequent den rohen Ausführungspreis abbilden — zwei verschiedene
+  Grundlagen für dieselbe Struktur. Gemessen am echten Bestand: 406 von
+  9.041 geschlossenen Strukturen (4,5 %) weichen von der Gleichheit ab; bei
+  355 davon sind sogar die Beinmengen gleich, ein Ratio-Effekt scheidet als
+  Haupterklärung also aus. Die Mehrheit der Abweichungen (400 von 406)
+  betrifft Optionen, deren schließende Beine mehrheitlich per Zuteilung,
+  Ausübung oder Verfall endeten.
+
+  Die ursprüngliche, uneingeschränkte Fassung dieses Punkts war mein
+  Fehler: Eine Stichprobe von 200 Strukturen fand nur einen solchen Fall
+  und benannte den Mechanismus richtig, aber die Formulierung im Vertrag
+  blieb allgemein und hätte einen künftigen Leser in die Irre geführt.
 
 ### Wo sie steht
 

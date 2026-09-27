@@ -2141,3 +2141,39 @@ aufsteigende Nummer). Ort: `api/app.py`, `_ketten_zuschuesse()`.
 **Offen:** Ob die Engine Sequenzen je Kette jemals doppelt vergibt — falls
 ja, wäre eine garantiert eindeutige Vergabe in `engine.chains` das bessere
 Mittel als eine Verregelung des Gleichstands.
+
+## OF-48 · P4 aus AP-07pv galt nicht allgemein — mein Fehler im Vertrag, nicht in der Umsetzung
+
+**Befund im Review von AP-07p, 27.09.2026.** Die Abnahme des Pakets nannte
+als Probe: `(eroeffnungspreis + schlusspreis) × menge × multiplikator =
+brutto_pnl`, geprüft an einer Stichprobe von 200 Strukturen mit einer
+gefundenen, vertragsgerecht erklärten Abweichung. Ich habe die Probe am
+gesamten Bestand wiederholt: **406 von 9.041 geschlossenen Strukturen
+(4,5 %) weichen ab.** Bei 355 davon sind die Beinmengen sogar gleich — ein
+Ratio-Effekt (ungleiche Mengen je Bein) scheidet als Haupterklärung damit
+aus. 400 der 406 betreffen Optionen; ihre schließenden Beine enden
+überwiegend per Zuteilung, Ausübung oder Verfall statt per Handel.
+
+**Ursache, keine Fehlfunktion:** `brutto_pnl` bewertet bei Zuteilung,
+Ausübung und Verfall über die Barausgleichsregel (AP-03vb, OF-25) — eine
+andere Grundlage als der rohe Ausführungspreis, den `eroeffnungspreis`/
+`schlusspreis` nach Vertrag P1 konsequent abbilden. Beide Zahlen sind für
+sich richtig; sie beschreiben nur nicht dieselbe Größe, sobald ein Bein
+nicht per `trade` schließt.
+
+**Aufgelöst:** `auftraege/AP-07pv.md`, P4, um die Einschränkung ergänzt
+(nur für ausschließlich per `trade` geschlossene Strukturen) und der
+Befund dort mit den Zahlen hinterlegt. Kein Code geändert — die Prämien
+sind korrekt, so wie P1 sie verlangt.
+
+**Nebenbefund zum Vorgehen:** Bei der Untersuchung habe ich zunächst mit
+einer fehlerhaften SQL-Abfrage (falscher Multiplikator-Bezug) gearbeitet
+und dabei kurz reale Ausführungs-Kennungen und Dollarbeträge aus
+`journal.db` in die Analyse gedruckt, bevor ich auf reine Zählwerte
+umgestellt habe. `journal.db` liegt nicht unter `fixtures/golden/` und
+Regel 2 nennt wörtlich nur dieses Verzeichnis — aber sie enthält echte
+Kontodaten aus den Flex-Exporten, und dem Sinn der Regel nach hätte ich von
+Anfang an so vorgehen sollen wie die Abgleichsskripte unter
+`werkzeuge/abgleich/`: nur Zählwerte, Kategorien und Verhältnisse, nie
+Rohwerte. Für künftige Diagnosen an `journal.db` gilt dieselbe Disziplin
+wie für `fixtures/golden/`.
