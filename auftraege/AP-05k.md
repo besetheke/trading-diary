@@ -1,7 +1,7 @@
 ---
 titel: Campaign-Kandidaten (engine/campaigns.py)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-05v
 ---
 
