@@ -14,6 +14,10 @@ export interface Kette {
   anzahl_rolls: number
   endzustand: string | null
   anzahl_glieder: number
+  // AP-07pv, P8 / AP-08fp: Prämie des ersten bzw. letzten Glieds, wie die API
+  // liefert — Zeichenkette oder leer; offen heißt ohne Schlusspreis.
+  eroeffnungspreis: string | null
+  schlusspreis: string | null
   struktur_summe_netto: string | null
   waehrung: string | null
   waehrungen: string[]
@@ -36,6 +40,9 @@ export interface Struktur {
   dte_bei_eroeffnung: number | null
   status: string | null
   erkennung: string
+  // AP-07pv, P7 / AP-08fp: Prämien je Kontrakt; offen heißt ohne Schlusspreis.
+  eroeffnungspreis: string | null
+  schlusspreis: string | null
   brutto_pnl: string | null
   kommission: string | null
   netto_pnl: string | null

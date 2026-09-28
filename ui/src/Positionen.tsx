@@ -198,6 +198,8 @@ export default function Positionen(): JSX.Element {
                 <th>Ende</th>
                 <th className="zahl">Rolls</th>
                 <th>Endzustand</th>
+                <th className="zahl">Preis auf</th>
+                <th className="zahl">Preis zu</th>
                 <th className="zahl">Ergebnis netto¹</th>
                 <th>Währung</th>
               </tr>
@@ -207,9 +209,15 @@ export default function Positionen(): JSX.Element {
                 // AP-08lk, Punkt 2 (vom Nutzer freigegeben): Die Liste zeigt
                 // zwei Nachkommastellen — reine Zeichenarbeit (Vertrag 8),
                 // der vollständige Wert steht im title der Zelle. Die
-                // Detailansicht bleibt unverändert genau.
+                // Detailansicht bleibt unverändert genau. AP-08fp, Vertrag 4:
+                // Dieselbe Kürzung gilt für die beiden Preisspalten.
                 const netto = kette.struktur_summe_netto
                 const kurz = netto === null ? null : aufZweiNachkommastellen(netto)
+                const preisAuf = kette.eroeffnungspreis
+                const preisAufKurz =
+                  preisAuf === null ? null : aufZweiNachkommastellen(preisAuf)
+                const preisZu = kette.schlusspreis
+                const preisZuKurz = preisZu === null ? null : aufZweiNachkommastellen(preisZu)
                 return (
                   <tr key={kette.chain_id}>
                     <td>
@@ -221,6 +229,20 @@ export default function Positionen(): JSX.Element {
                     <td>{kette.beendet_am ? zeit(kette.beendet_am) : '—'}</td>
                     <td className="zahl">{kette.anzahl_rolls}</td>
                     <td>{kette.endzustand ?? '—'}</td>
+                    <td
+                      className="zahl"
+                      title={
+                        preisAuf !== null && preisAufKurz !== preisAuf ? preisAuf : undefined
+                      }
+                    >
+                      {preisAufKurz ?? '—'}
+                    </td>
+                    <td
+                      className="zahl"
+                      title={preisZu !== null && preisZuKurz !== preisZu ? preisZu : undefined}
+                    >
+                      {preisZuKurz ?? '—'}
+                    </td>
                     <td className="zahl" title={netto !== null && kurz !== netto ? netto : undefined}>
                       {kurz ?? '—'}
                     </td>

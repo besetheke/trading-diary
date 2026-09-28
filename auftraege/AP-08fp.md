@@ -1,7 +1,7 @@
 ---
 titel: Preise in Positionsliste und Detailansicht
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07p
 ---
 

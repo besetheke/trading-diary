@@ -248,6 +248,18 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
           <dt>Geschlossen</dt>
           <dd>{zeit(struktur.geschlossen_am)}</dd>
         </div>
+        {/* AP-08fp, Vertrag 3 und 4: Der Eröffnungs- und Schlusspreis gehören
+            fachlich neben das Ergebnis — hier in der Detailansicht unverändert
+            genau, ohne Kürzung (die gilt nur in der Liste). Leer bleibt leer:
+            eine offene Struktur hat keinen Schlusspreis und zeigt —. */}
+        <div>
+          <dt>Preis auf</dt>
+          <dd className="zahl">{geld(struktur.eroeffnungspreis, struktur.waehrung)}</dd>
+        </div>
+        <div>
+          <dt>Preis zu</dt>
+          <dd className="zahl">{geld(struktur.schlusspreis, struktur.waehrung)}</dd>
+        </div>
         <div>
           <dt>Brutto</dt>
           <dd className="zahl">{geld(struktur.brutto_pnl, struktur.waehrung)}</dd>
