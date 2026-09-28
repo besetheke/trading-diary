@@ -2346,3 +2346,59 @@ empfohlen; sie hält die Isolierung bei, die der IC-Block vorlebt.
 `ruff`-sauber; alle übrigen Tests laufen grün. Die Datei bleibt
 uncommittet und das Paket offen, bis die Basis korrigiert ist — danach
 kann die Umsetzung mit Testlauf und Commit in einem Zug fertigstellen.
+
+## OF-52 · AP-04s: Wie behandelt die Kettensicht ein Bein, dessen Schließung eigentlich einem anderen Vorgang gehört (Nutzerentscheidung)
+
+Beim Zuschnitt von AP-04s (Kettensicht) zeigte sich eine Stelle, die der
+Plan offenlässt: Bei den 206 Ausführungen aus OF-36 eröffnet eine
+Ausführung offiziell einen neuen OA-Vorgang (B), wurde aber von der
+kontoweiten FIFO-Verrechnung tatsächlich zur Schließung eines anderen,
+älteren Vorgangs (A) auf demselben Conid verwendet. Für die Kettensicht
+sollte B sein eigenes eröffnetes Bein bekommen — aber dann fehlt A eine
+Schließung, obwohl real längst realisiert.
+
+**Zwei Wege standen zur Wahl:**
+
+1. Kettensicht folgt strikt den OA-Trade-Tags — A bleibt ohne Schließung
+   „offen“, kein Ergebnis für dieses Bein.
+2. Dieselbe Ausführung zählt doppelt: sie schließt A **und** eröffnet B
+   gleichzeitig — beide Rollen sind für dasselbe reale Ereignis wahr.
+
+**Entscheidung des Nutzers (28.09.2026): Weg 2 — Ausführung zählt
+doppelt.** Jeder Vorgang bekommt ein vollständiges Ergebnis; das
+entspricht der ursprünglichen Planformulierung „sonst bliebe das Bein
+verschwunden“.
+
+**Konsequenz für den Zuschnitt von AP-04s:** Die Kettensicht braucht eine
+eigene, vorgangsbezogene FIFO-Zuordnung zusätzlich zur bestehenden
+kontoweiten (Kontosicht). Eine Ausführung kann in dieser Zuordnung
+gleichzeitig als Schließung eines Beins in Vorgang A und als Eröffnung
+eines Beins in Vorgang B auftreten — pro Sicht ein eigener, in sich
+vollständiger Satz von Legs/Strukturen/Ketten, `sicht` als Pflichtfeld,
+nie in einer Abfrage gemischt (CLAUDE.md-Anschlussregel aus der
+Zwei-Sichten-Entscheidung, siehe `auftraege/AP-07-vorschlag-zwei-sichten-und-vorziehen.md`).
+Die konkrete Abnahmebasis (Vertrag, Tests, Fixtures) schreibt AP-04s
+selbst; hier ist nur die Grundsatzentscheidung festgehalten.
+
+## OF-53 · AP-13v: Der Fingerabdruck des OA-Abgleichs verzichtet auf die Entry Time
+
+Plan §6.1 beschreibt die Absicherung der Verknüpfung als „Entry Time
+sekundengenau plus die vollständige Leg-Spezifikation". `auftraege/AP-13-
+anhang-oa-format.md`, Punkt 4 (bereits committet, aus einem früheren
+AP-13p-Paket) widerspricht dem scheinbar: „Zeitstempel nicht zum Abgleich
+verwenden. Das Format ist ein drittes neben TDP und Flex, und die Zeitzone
+ist ungeprüft. Die Verknüpfung stiftet ausschließlich die Klammernummer."
+`journal/schema.py` hält an `optionapp_trades.entry_zeit` dieselbe Warnung
+fest.
+
+**Auflegung, keine Annahme wider den Plan:** Beide Aussagen sind
+vereinbar, wenn man den Fingerabdruck aus §6.1 auf seinen zweiten
+Bestandteil reduziert — die vollständige Leg-Spezifikation (Richtung,
+Menge, Typ, Strike, Expiry je Leg) — und die Entry Time weglässt, weil sie
+laut der bereits getroffenen, committeten Entscheidung des AP-13p-Pakets
+nicht vergleichbar ist. `engine/oa_abgleich.py` (AP-13v/AP-13k) vergleicht
+deshalb nur die Leg-Signaturen als Menge, nicht die Zeit. Die Nummer bleibt
+der alleinige Primärschlüssel (§6.1, „Entschieden"); der Fingerabdruck ist
+weiterhin nur Absicherung — eine Abweichung verwirft die Zuordnung nicht,
+sondern markiert sie als `erkennung="heuristik"` statt `"auto"` (Regel 7).
+**Annahme:** `engine/oa_abgleich.py`, Modul-Docstring.
