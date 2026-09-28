@@ -199,12 +199,17 @@ def test_ic_kandidat_keine_ueberlappung_kein_kandidat():
 def test_financing_kandidat_erkannt():
     """Vertrag 5: Eine gerollte Put-Kette und eine neue Call-Kette, deren
     Eröffnung 2 Stunden nach dem Roll liegt — innerhalb der 24-Stunden-Annahme
-    (Entscheidung 3)."""
+    (Entscheidung 3).
+
+    Die Call-Kette trägt bewusst eine andere Expiry als das Roll-Ziel der
+    Put-Kette (2026-10-16) — sonst wäre das Paar zugleich ein
+    IC-Kandidat (Vertrag 4) und der Test prüfte nicht mehr isoliert die
+    Financing-Regel (AP-05vk, OF-51)."""
     roll_zeit = datetime(2026, 9, 15, 15, 0, 0)
     put = _gerollte_kette("P", underlying="DAX", right="P",
                            eroeffnet=datetime(2026, 9, 1, 10, 0, 0), roll_zeit=roll_zeit,
                            conid_alt_a=601, conid_alt_b=602, conid_neu_a=605, conid_neu_b=606)
-    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 10, 16),
+    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 11, 20),
                              conid_short=611, conid_long=612,
                              eroeffnet=roll_zeit + timedelta(hours=2))
 
@@ -218,12 +223,17 @@ def test_financing_kandidat_erkannt():
 
 def test_financing_kandidat_ausserhalb_fenster_kein_kandidat():
     """Entscheidung 3: 30 Stunden nach dem Roll liegt außerhalb der
-    24-Stunden-Annahme — kein Kandidat."""
+    24-Stunden-Annahme — kein Kandidat.
+
+    Andere Expiry als das Roll-Ziel, aus demselben Grund wie in
+    `test_financing_kandidat_erkannt` (AP-05vk, OF-51): sonst würde die
+    Intervallüberlappung der offenen Ketten unabhängig vom Zeitfenster
+    einen IC-Kandidaten erzeugen, und `== ()` wäre nie erfüllbar."""
     roll_zeit = datetime(2026, 9, 15, 15, 0, 0)
     put = _gerollte_kette("P", underlying="DAX", right="P",
                            eroeffnet=datetime(2026, 9, 1, 10, 0, 0), roll_zeit=roll_zeit,
                            conid_alt_a=601, conid_alt_b=602, conid_neu_a=605, conid_neu_b=606)
-    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 10, 16),
+    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 11, 20),
                              conid_short=611, conid_long=612,
                              eroeffnet=roll_zeit + timedelta(hours=30))
 
@@ -234,11 +244,16 @@ def test_financing_kandidat_ohne_roll_kein_kandidat():
     """Vertrag 5: Ohne Roll in der Bestandskette gibt es keinen
     Rollzeitpunkt, an dem sich eine Gegenfinanzierung festmachen ließe —
     zwei ungerollte Ketten sind nie ein Financing-Kandidat, auch wenn sie
-    zeitlich nah beieinander liegen."""
+    zeitlich nah beieinander liegen.
+
+    Unterschiedliche Expiry zwischen `put` und `call` (AP-05vk, OF-51):
+    mit gleicher Expiry wären zwei offene, gegenläufige, zeitlich
+    überlappende Ketten genau der IC-Kandidat aus Entscheidung 1, und
+    `== ()` widerspräche dem eigenen Vertrag."""
     t0 = datetime(2026, 9, 1, 10, 0, 0)
     put = _vertikale_kette("P", underlying="DAX", right="P", expiry=date(2026, 9, 18),
                             conid_short=601, conid_long=602, eroeffnet=t0)
-    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 9, 18),
+    call = _vertikale_kette("C", underlying="DAX", right="C", expiry=date(2026, 11, 20),
                              conid_short=611, conid_long=612,
                              eroeffnet=t0 + timedelta(hours=1))
 
