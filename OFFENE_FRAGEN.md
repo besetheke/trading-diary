@@ -2237,56 +2237,112 @@ Kandidaten. Nicht, weil er außerhalb des Zeitfensters läge oder die
 Mengenregel griffe, sondern weil die Struktur als „schon erledigt" gilt,
 sobald irgendeine belegte Fortsetzung existiert.
 
-**Der Ausschlussmechanismus ist eindeutig identifiziert — ob er auch die
-Ursache ist, ist nach genauerer Betrachtung offener, als der erste
-Befund nahelegte.** Nutzerangabe (27.09.2026): „Im Normalfall rolle ich
-in einer Order" — ein Teil-Roll über zwei Orders wäre demnach die
-Ausnahme, nicht die Regel. Die drei Fälle einzeln angesehen (nur
-Struktur-Merkmale, keine Rohwerte):
+**Aufgelöst 27.09.2026, durch direkte Klärung mit dem Nutzer anhand seiner
+Brokerhistorie.** Die drei Fälle einzeln geprüft:
 
-- **Fall 1:** Das belegte Ziel von `alt` trägt dieselbe Expiry wie der
-  bestätigte Kandidat, aber der Kandidat hat die doppelte Menge und ein
-  Bein mehr. Summe aus belegtem Ziel und Kandidat ergibt nicht `alt`s
-  Menge. Passt zu einer Größenveränderung beim Rollen — plausibel ein
-  echter, nur ungewöhnlich strukturierter Fall.
-- **Fall 2:** Belegtes Ziel und Kandidat sind bezüglich Expiry, Menge und
-  Beinzahl **identisch** — bei `alt`s Menge von 1 kann aber nur eines von
-  beiden die echte Fortsetzung sein. Sieht eher nach einer zufällig
-  zeitnahen, unabhängigen Neuposition aus als nach einem echten Zweit-Roll.
-- **Fall 3:** Das belegte Ziel trägt eine **andere** Expiry als der
-  Kandidat, der zeitliche Abstand liegt bei 29:47 Minuten — praktisch am
-  Rand des 30-Minuten-Kandidatenfensters. Spricht eher für eine
-  unabhängige Position als für einen zusammengehörigen Roll.
+- **Nr. 40** (Fall 1, Größenveränderung): Vom Nutzer bestätigt als **kein**
+  Roll — „neue Position unabhängig von der ersten". Die tatsächliche
+  Fortsetzung von `alt` ist die bereits belegte (gleiche Menge, gleicher
+  Zeitstempel); der Gegenprobe-Kandidat war eine andere, 71 Sekunden
+  später eröffnete, unabhängige Position.
+- **Nr. 42:** Vom Nutzer bestätigt als **kein** Roll — ebenfalls „neue
+  Position unabhängig von der ersten" (andere Strikes).
+- **Nr. 43:** Erinnerung des Nutzers („Anzahl beim Rollen erhöht") passt
+  nicht zu den Struktur-Daten — belegtes Ziel und Kandidat tragen beide
+  dieselbe Menge, keine Erhöhung feststellbar. Weder bestätigt noch
+  widerlegt; auf **„Unklar"** gesetzt.
 
-Nur Fall 1 passt sauber zum Bild „eine Position, über zwei Orders
-gerollt". Fall 2 und 3 könnten ebenso gut Grenzfälle der Beurteilung in
-der Stichprobe sein — zufällig zeitnahe, aber inhaltlich unabhängige
-Positionen, die als „übersehener Roll" durchgingen, weil die Stichprobe
-zum Zeitpunkt der Beurteilung keine Preise und keine
-Struktur-Detailmerkmale wie hier zeigte.
+**Wichtiger Grundsatz vom Nutzer für künftige Fälle:** „Wenn ein Trade zur
+gleichen Sekunde eröffnet wird, wenn ein anderer geschlossen wird, dann ist
+das sehr wahrscheinlich ein Rollvorgang." Genau das ist der Fall, den
+`exec_batch` (Block B, Regel 1) erfasst — die drei hier untersuchten
+„fehlenden" Kandidaten lagen alle **nicht** bei Abstand null, sondern
+71 Sekunden bis 30 Minuten danach, und stellten sich als unabhängige
+Positionen heraus, nicht als zweite Rollziele.
 
-**Nicht behoben, und vorerst auch kein Korrekturpaket geplant.** Der
-Ausschluss „was belegt ist, wird nicht gefragt" bleibt vorerst wie er ist.
-Eine Änderung an `rollkandidaten()` (ob eine bereits belegt fortgesetzte
-Struktur zusätzlich Kandidat für eine zweite, unbelegte Fortsetzung sein
-kann) wird erst angegangen, wenn Fall 1 — oder ein vergleichbarer,
-eindeutigerer Fall — bestätigt einen echten Teil-Roll zeigt. Bis dahin
-wäre eine Korrektur eine Lösung für ein Problem, das möglicherweise gar
-keines ist.
+**Urteile in `Stichprobe_Ketten_v2.xlsx` nachgetragen** (Nr. 40, 42 auf
+„Richtig" — korrekterweise kein Roll; Nr. 43 auf „Unklar"), mit Bemerkung
+und Datum. Die Kreuzprobe erneut gelaufen:
+
+| | Anzahl |
+|---|---|
+| bestätigte Rolls geprüft | 7 |
+| davon als Kandidat gefunden | **7** |
+| davon fehlt als Kandidat | 0 |
+
+**Kein Korrekturbedarf an `rollkandidaten()`.** Der Ausschluss „was belegt
+ist, wird nicht gefragt" (AP-04k, Vertrag 5) hat sich in allen drei
+untersuchten Fällen als korrekt erwiesen — es gab keinen echten zweiten
+Roll, den er übersehen hätte. Die ursprüngliche Vermutung „echte Lücke,
+Teil-Roll über zwei Orders" hat sich unter genauerer Prüfung nicht
+bestätigt.
 
 **Zur Messgrenze der Kreuzprobe:** 6 der 22 in den beiden Stichproben als
 „richtig" markierten Nummern ließen sich nicht eindeutig auf heutige
 Structures zurückführen (Auflösung über Basiswert + exakten
 Eröffnungszeitpunkt; mehrdeutig oder ohne Treffer). Das ist eine Grenze der
-Rückführungsmethode, keine Aussage über die Engine — sie betrifft
-ausschließlich die Zuordnung der alten Stichprobenzeilen zu heutigen
-Structures, nicht die Kandidatenbildung selbst.
+Rückführungsmethode, keine Aussage über die Engine.
 
 **Für die AP-04-Abnahme:** Die dritte Prüfung („kein bestätigter Roll der
-Stichprobe fehlt in der Kandidatenliste") gilt formal **noch nicht als
-bestanden** — 3 von 10 geprüften, eindeutig zugeordneten Fällen fehlen.
-Ob das an einer Lücke der Engine liegt oder an drei Grenzfällen der
-ursprünglichen Beurteilung, ist offen und braucht die Bestätigung des
-Nutzers anhand der drei konkreten Fälle (er hat Zugriff auf die
-Rohdaten der Stichprobendatei), bevor hier weitergearbeitet wird. Siehe
-`auftraege/AP-04.md` für den aktualisierten Abnahmestand.
+Stichprobe fehlt in der Kandidatenliste") gilt damit als **bestanden**.
+Siehe `auftraege/AP-04.md` für den aktualisierten Abnahmestand.
+
+## OF-51 · AP-05v widerspricht sich: Die Financing-Fixtures sind zugleich IC-Kandidaten, die Tests bestreiten das
+
+**Befund 27.09.2026 bei der Umsetzung AP-05k.** Die vertragstreue
+Implementierung von `engine/campaigns.py` scheitert an genau drei der
+neun Tests in `tests/test_campaigns.py` — den drei Financing-Tests mit
+Leer- bzw. Genau-eins-Erwartung. Nachrechnung der vier Vertrag-4-
+Bedingungen von Hand (absichtlich nicht mit der Prädikatfunktion der
+Implementierung) zeigt: **Alle drei Paare erfüllen alle Bedingungen des
+IC-Kandidaten** — gleicher Basiswert, gegenläufige Seiten, am letzten
+Glied gesetzte und identische Expiry, überlappende Intervalle nach
+Entscheidung 1.
+
+| Test | Paar (Kurzfassung) | IC nach Vertrag 4 | Test erwartet |
+|---|---|---|---|
+| `test_financing_kandidat_erkannt` | gerollte DAX-Put-Kette (letztes Glied: Expiry 16.10.) + Call-Vertikale Expiry 16.10., 2 h nach dem Roll eröffnet | ja | genau 1 Kandidat: `financing` |
+| `test_financing_kandidat_ausserhalb_fenster_kein_kandidat` | dasselbe Paar, 30 h Abstand → financing nein | ja | `()` |
+| `test_financing_kandidat_ohne_roll_kein_kandidat` | zwei ungerollte, offene DAX-Vertikalen, beide Expiry 18.09., Put 10:00 / Call 11:00 | ja | `()` |
+
+Der dritte Fall ist der Lehrbuch-IC nach Entscheidung 1: zwei offene,
+gegenläufige Ketten gleicher Expiry mit versetzten Eröffnungen — genau
+die „rückwirkende Klassifikation", für die der Intervallvergleich
+gewählt wurde. `assert ... == ()` ist mit Vertrag 4 nicht gleichzeitig
+erfüllbar. Auffällig ist das Muster im IC-Block: Der einzige
+IC-positive Test (`test_ic_kandidat_erkannt`) öffnet beide Ketten zum
+identischen Zeitpunkt; alle IC-negativen Tests sperren je genau eine
+Bedingung.
+
+**Zwei Regeln würden die Suite grün machen — beide sind vertragsfremd:**
+(a) IC nur bei identischem `eroeffnet_am` — widerspricht Entscheidung 1
+ausdrücklich („zeitliche Überlappung, nicht ‚beide jetzt offen'"), und
+fachlich werden Condor-Flügel praktisch nie im selben Moment eröffnet;
+(b) IC nur bei Eröffnungsabstand innerhalb eines Fensters — ein solches
+Fenster steht in keinem Vertrag. Eine Umsetzung, die eine davon
+einbaut, wäre grün und trotzdem falsch. Deshalb Abbruch statt Trick
+(CLAUDE.md Regel 1, 1a, 10).
+
+**Vermutliche Ursache:** Die Financing-Fixtures wurden mit der Expiry
+des letzten Roll-Glieds (16.10.) gebaut, damit der Roll-Kontext stimmt
+— dabei übersehen, dass die Gegenkette dieselbe Expiry trägt und damit
+die IC-Bedingung miterfüllt. Im IC-Block ist das Vergleichsmuster sauber
+gesetzt (jeder Test sperrt genau eine Bedingung), im Financing-Block
+fehlt diese Isolierung.
+
+**Vorgeschlagene Auflösung — Korrekturpaket** (`aendert_tests: ja`,
+`modell: stark`, nach Regel 1a): In den drei Financing-Tests die Expiry
+der Gegenkette von der Expiry des letzten Glieds der Bestandskette
+abweichen lassen. Dann prüft jeder Test weiterhin genau die
+Financing-Regel, und alle Erwartungen stimmen, ohne dass am Vertrag
+etwas zu ändern wäre. Alternative: die Erwartungen erweitern (`erkannt`:
+2 Kandidaten, `financing` vor `ic`; die beiden Leerfälle: je 1 `ic`) und
+dokumentieren, dass IC und Financing sich pro Paar nicht ausschließen —
+das änderte aber Testnamen und Aussageabsicht. Erstere Variante ist
+empfohlen; sie hält die Isolierung bei, die der IC-Block vorlebt.
+
+**Stand:** `engine/campaigns.py` liegt vor, ist vertragstreu (Vertrag
+1–7 aus `auftraege/AP-05v.md` Punkt für Punkt geprüft) und
+`ruff`-sauber; alle übrigen Tests laufen grün. Die Datei bleibt
+uncommittet und das Paket offen, bis die Basis korrigiert ist — danach
+kann die Umsetzung mit Testlauf und Commit in einem Zug fertigstellen.
