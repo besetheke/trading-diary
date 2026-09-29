@@ -518,6 +518,13 @@ structures = Table(
     # solange die Struktur offen ist.
     Column("eroeffnungspreis", ExactDecimal, nullable=True),
     Column("schlusspreis", ExactDecimal, nullable=True),
+    # AP-13w: roh aus dem OA-Export, je Kette auf ihre Strukturen gespiegelt
+    # (OA kennt keine feinere Ebene). `oa_status` überschreibt nie `status`
+    # (Brokertatsache), sondern ergänzt ihn (§6, AP-13). `oa_erkennung` ist
+    # das Pflichtfeld für die automatisch erzeugte Verknüpfung (Regel 7).
+    Column("oa_strategie", Text, nullable=True),
+    Column("oa_status", Text, nullable=True),
+    Column("oa_erkennung", Text, nullable=True),
     # Pflichtfeld (CLAUDE.md, Regel 7); Wertebereich gemäß §5:
     # order_id / heuristik / manuell.
     Column("erkennung", Text, nullable=False),
@@ -530,6 +537,10 @@ structures = Table(
     CheckConstraint(
         "erkennung IN ('order_id', 'heuristik', 'manuell')",
         name="ck_structures_erkennung",
+    ),
+    CheckConstraint(
+        "oa_erkennung IN ('auto', 'heuristik')",
+        name="ck_structures_oa_erkennung",
     ),
 )
 
@@ -554,6 +565,15 @@ chains = Table(
     # `k:` davor. Rolls hängen hinten an, der Kettenanfang bleibt derselbe —
     # deshalb überlebt die `chain_id` einen Rebuild (AP-04v).
     Column("natur_schluessel", Text, nullable=False, unique=True),
+    # AP-13w: wie an `structures` — roh aus dem OA-Export, `oa_erkennung`
+    # ist das Pflichtfeld der automatisch erzeugten Verknüpfung (Regel 7).
+    Column("oa_strategie", Text, nullable=True),
+    Column("oa_status", Text, nullable=True),
+    Column("oa_erkennung", Text, nullable=True),
+    CheckConstraint(
+        "oa_erkennung IN ('auto', 'heuristik')",
+        name="ck_chains_oa_erkennung",
+    ),
 )
 
 chain_links = Table(
