@@ -1,7 +1,7 @@
 ---
 titel: Persistenz des OA-Abgleichs (journal/oa_persistenz.py)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13w
 ---
 

@@ -20,6 +20,13 @@ Paket auch ``eroeffnungspreis`` und ``schlusspreis`` — berechnet einmal in
 ``journal.preise`` (Vertrag P1–P8 aus ``auftraege/AP-07pv.md``). Offen heißt
 ohne Schlusspreis (P2), niemals Null.
 
+**OA-Werte an Kette und Struktur** (AP-13wk): ``_struktur_zeile()`` und
+``_kette_zeile()`` setzen ``oa_strategie``/``oa_status``/``oa_erkennung``
+bei jedem Lauf zuerst auf ``None``; ``oa_werte_schreiben()``
+(``journal.oa_persistenz``) überschreibt sie gezielt. Ohne die Baseline
+bliebe eine Zuordnung bestehen, deren OA-Trade nicht mehr importiert ist
+(``tests/test_rebuild_oa.py``, „zweiter Lauf entfernt …").
+
 Dokumentierte Annahmen (Regel 10) — hier nur im Code festgehalten, weil die
 Abnahme Änderungen ausschließlich in ``journal/rebuild.py`` und
 ``journal/cli.py`` zulässt; für den Review notieren:
@@ -51,6 +58,7 @@ from engine.matching import MatchingErgebnis, bilde_legs
 from engine.structures import Structure as Struktur
 from engine.structures import StrukturErgebnis, bilde_structures
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
+from journal.oa_persistenz import oa_werte_schreiben
 from journal.preise import nettopraemie
 from journal.schema import (
     assignment_links,
@@ -90,6 +98,10 @@ class RebuildErgebnis:
     # Rollkandidaten, über die noch nicht entschieden wurde (Plan §6,
     # Block B, Regel 2). Nicht persistiert, bei jedem Lauf neu berechnet.
     kandidaten_offen: int = 0
+    # OA-Abgleich (AP-13wk): zugeordnete OA-Trades und solche ohne
+    # eindeutige Kette. Ebenfalls nicht persistiert, jeder Lauf neu.
+    oa_zugeordnet: int = 0
+    oa_fehler: int = 0
 
 
 @dataclass(frozen=True)
@@ -290,6 +302,10 @@ def _struktur_zeile(
         waehrung=_struktur_waehrung(struktur, schluessel, bestand.exec_je_id),
         erkennung=erkennung,
         strategy_id=None,
+        # AP-13wk: Baseline None — oa_werte_schreiben() überschreibt gezielt.
+        oa_strategie=None,
+        oa_status=None,
+        oa_erkennung=None,
     )
 
 
@@ -305,6 +321,10 @@ def _kette_zeile(kette: Kette) -> dict:
         anzahl_rolls=kette.anzahl_rolls,
         endzustand=kette.endzustand,
         netto_pnl_eur=None,
+        # AP-13wk: Baseline None — oa_werte_schreiben() überschreibt gezielt.
+        oa_strategie=None,
+        oa_status=None,
+        oa_erkennung=None,
     )
 
 
@@ -474,6 +494,20 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     # -- assignment_links (Vertrag 22): nicht-manuelle Zeilen neu schreiben.
     _assignment_links_neu_schreiben(verbindung, ketten_ergebnis, exec_je_id)
 
+    # -- OA-Abgleich (AP-13wk): Baseline steht seit _struktur_zeile()/
+    #    _kette_zeile() auf None, hier gezielt überschreiben. Nach den
+    #    Overrides, damit Ketten, die diese löschen (Vertrag 19), nicht mehr
+    #    beschrieben werden.
+    oa_zugeordnet, oa_fehler = oa_werte_schreiben(
+        verbindung,
+        kette_je_schluessel,
+        struktur_je_schluessel,
+        struktur_id_je_schluessel,
+        ketten_id_je_schluessel,
+        exec_je_id,
+        bestand.instrument_je_conid,
+    )
+
     offene_kandidaten = _offene_kandidaten(
         ketten_ergebnis,
         overrides,
@@ -491,6 +525,8 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         overrides_angewandt=angewandt,
         overrides_verwaist=len(verwaiste),
         kandidaten_offen=offene_kandidaten,
+        oa_zugeordnet=oa_zugeordnet,
+        oa_fehler=oa_fehler,
     )
 
 
