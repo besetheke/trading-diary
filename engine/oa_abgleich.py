@@ -8,13 +8,16 @@ ist. Die Zuordnung ist ein Nachweis/eine Auswertung, keine Schreiboperation
 — nichts davon wird persistiert; die Übernahme von ``Strategy``/``Status``
 in die Persistenz ist ein eigenes, noch nicht geschriebenes Paket.
 
-Der Fingerabdruck vergleicht **nur** die Leg-Spezifikation (Right/Strike/
-Expiry/Richtung als Menge), nicht die Entry Time: Das OA-Format ist ein
-drittes neben TDP und Flex, seine Zeitzone ist ungeprüft (Anhang zum
-OA-Format, Punkt 4). Die Klammernummer bleibt der alleinige Primärschlüssel
-(§6.1, „Entschieden"); der Fingerabdruck ist nur Absicherung — eine
-Abweichung verwirft die Zuordnung nicht, sondern markiert sie als
-``erkennung="heuristik"`` statt ``"auto"`` (CLAUDE.md Regel 7; OF-53).
+Der Fingerabdruck vergleicht die vollständige Leg-Spezifikation aus §6.1
+(Right, Strike, Expiry, Richtung, Menge je Leg) als Menge/Set von Tupeln,
+nicht die Entry Time: Das OA-Format ist ein drittes neben TDP und Flex,
+seine Zeitzone ist ungeprüft (Anhang zum OA-Format, Punkt 4). Die
+Klammernummer bleibt der alleinige Primärschlüssel (§6.1, „Entschieden");
+der Fingerabdruck ist nur Absicherung — eine Abweichung verwirft die
+Zuordnung nicht, sondern markiert sie als ``erkennung="heuristik"`` statt
+``"auto"`` (CLAUDE.md Regel 7; OF-53). Die Menge wurde erst in AP-13vk
+ergänzt — ohne sie hätte ein Ratio-Spread mit falscher Stückzahl je Leg
+fälschlich als Treffer gegolten.
 
 Rein im Sinne von CLAUDE.md Regel 6: keine Datenbank, keine Uhrzeit, kein
 Zufall. ``zuordnungen`` und ``fehler`` sind deterministisch nach
@@ -37,10 +40,13 @@ from engine.structures import Structure
 # Zuordnung still zu verwerfen (Regel 7).
 RICHTUNG = {"BUY": 1, "SELL": -1}
 
-# Mengen-Signatur eines Legs: (right, strike, expiry, richtung). None-Werte
-# sind möglich, wenn Ausführung oder Instrument fehlen — sie machen den
-# Vergleich unleidlich, aber nicht falsch (Regel 7: markieren, nicht werfen).
-_LegSignatur = tuple[str | None, Decimal | None, date | None, int | None]
+# Mengen-Signatur eines Legs: (right, strike, expiry, richtung, menge).
+# None-Werte sind möglich, wenn Ausführung oder Instrument fehlen — sie
+# machen den Vergleich unleidlich, aber nicht falsch (Regel 7: markieren,
+# nicht werfen). „Menge" gehört zur vollständigen Leg-Spezifikation nach
+# §6.1 (AP-13vk) — ohne sie könnte ein Ratio-Spread fälschlich als
+# fingerabdruck-echt gelten.
+_LegSignatur = tuple[str | None, Decimal | None, date | None, int | None, Decimal | None]
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,7 @@ class OALegSignatur:
     strike: Decimal
     expiry: date
     richtung: int  # +1 long, -1 short (wie optionapp_legs.richtung)
+    menge: Decimal
 
 
 @dataclass(frozen=True)
@@ -131,6 +138,7 @@ def _eigene_legs(
                 instrument.get("strike"),
                 instrument.get("expiry"),
                 RICHTUNG.get(oeffnung["side"]),
+                oeffnung.get("menge"),
             )
         )
     return sig
@@ -179,8 +187,8 @@ def oa_abgleich(
         # der Export zeigt keine Roll-Historie), Leg-Spezifikation als
         # Menge, ohne Entry Time (OF-53).
         eigene = _eigene_legs(chain.glieder[0].structure, executions, instruments)
-        referenz: set[tuple[str, Decimal, date, int]] = {
-            (leg.right, leg.strike, leg.expiry, leg.richtung) for leg in trade.legs
+        referenz: set[tuple[str, Decimal, date, int, Decimal]] = {
+            (leg.right, leg.strike, leg.expiry, leg.richtung, leg.menge) for leg in trade.legs
         }
         treffer_fp = eigene == referenz
 

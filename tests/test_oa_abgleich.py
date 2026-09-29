@@ -80,8 +80,9 @@ def _chains(legs, executions, instrumente):
     return bilde_chains(struktur, legs, executions, instrumente).chains
 
 
-def _oa_leg(*, right, strike, expiry, richtung) -> OALegSignatur:
-    return OALegSignatur(right=right, strike=Decimal(strike), expiry=expiry, richtung=richtung)
+def _oa_leg(*, right, strike, expiry, richtung, menge="1") -> OALegSignatur:
+    return OALegSignatur(right=right, strike=Decimal(strike), expiry=expiry, richtung=richtung,
+                          menge=Decimal(menge))
 
 
 def _oa_trade(oa_trade, legs, *, profit, strategie="SPX: IC", status="CLOSED") -> OATradeEintrag:
@@ -158,6 +159,27 @@ def test_abweichender_fingerabdruck_bleibt_zugeordnet_aber_heuristik():
     assert z.erkennung == "heuristik"
     # Der Ergebnisabgleich ist vom Fingerabdruck unabhängig.
     assert z.abweichung == Decimal("-4.50")
+
+
+def test_abweichende_menge_bleibt_zugeordnet_aber_heuristik():
+    # AP-13vk: Die Menge gehört zur vollständigen Leg-Spezifikation (§6.1) —
+    # zwei Kontrakte im Export gegen einen in der Kette darf nicht als
+    # Fingerabdruck-Treffer durchgehen, auch wenn Right/Strike/Expiry/
+    # Richtung übereinstimmen (z. B. bei einem Ratio-Spread).
+    chains = _spx_chain()
+    trade = _oa_trade(
+        "10",
+        [_oa_leg(right="P", strike="5000", expiry=date(2026, 9, 18), richtung=-1, menge="2")],
+        profit="115.50",
+    )
+
+    ergebnis = oa_abgleich([trade], chains, {e["exec_id"]: e for e in EXECUTIONS_SPX},
+                            INSTRUMENTE_SPX)
+
+    assert len(ergebnis.zuordnungen) == 1
+    z = ergebnis.zuordnungen[0]
+    assert z.fingerabdruck_treffer is False
+    assert z.erkennung == "heuristik"
 
 
 def test_keine_kette_gefunden_landet_in_der_fehlerliste():
