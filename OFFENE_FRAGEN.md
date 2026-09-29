@@ -2402,3 +2402,32 @@ der alleinige Primärschlüssel (§6.1, „Entschieden"); der Fingerabdruck ist
 weiterhin nur Absicherung — eine Abweichung verwirft die Zuordnung nicht,
 sondern markiert sie als `erkennung="heuristik"` statt `"auto"` (Regel 7).
 **Annahme:** `engine/oa_abgleich.py`, Modul-Docstring.
+
+## OF-54 · AP-05: Wie persistiert eine abgelehnte Campaign-Kandidatur?
+
+Für einen **bestätigten** IC- oder Financing-Kandidaten ist der Weg klar:
+`campaigns`-Zeile anlegen (oder eine bestehende erweitern), dann für jede
+der beiden Ketten eine `campaign_links`-Zeile mit `beziehungstyp`,
+`erkennung = 'manuell'`, `bestaetigt_am`.
+
+Unklar ist die **Ablehnung** — der Nutzer sieht einen Kandidaten
+(z. B. zwei Ketten, die zufällig wie ein IC aussehen, aber inhaltlich
+nichts miteinander zu tun haben) und will das dauerhaft festhalten, wie
+bei Rollkandidaten `chain_overrides.urteil = 'abgelehnt'` es tut — sonst
+taucht derselbe Kandidat bei jedem `journal rebuild` erneut als „offen"
+auf. `campaign_links.beziehungstyp` kennt zwar den Wert `'independent'`,
+aber die Zeile verlangt einen `campaign_id` (Primärschlüssel-Teil,
+Fremdschlüssel auf `campaigns`) — für eine abgelehnte **Paarung** zweier
+Ketten ist unklar, ob das heißt: (a) beide Ketten bekommen je eine eigene
+Singleton-Kampagne mit `beziehungstyp = 'independent'`, oder (b) es
+braucht eine eigene Tabelle nach dem Muster von `chain_overrides` — mit
+den zwei Ketten-IDs und dem Kandidatentyp als Schlüssel, ohne
+`campaign_id` — analog zur Rollkandidaten-Ablehnung.
+
+**Nicht geraten**, weil beide Lösungen das Datenmodell auf Dauer
+unterschiedlich prägen (Singleton-Kampagnen tauchen in jeder
+Kampagnenliste auf; eine eigene Ablehnungstabelle nicht). Vorerst gebaut:
+nur die **Sichtbarkeit** offener Kandidaten (`AP-05s`) — reine Lesefunktion,
+ohne Schreiben, betrifft diese Frage nicht. Die Persistenz von
+Bestätigung/Ablehnung ist ein eigenes, noch nicht begonnenes Paket, das
+diese Frage vorher klären muss.
