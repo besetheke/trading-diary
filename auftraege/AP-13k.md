@@ -1,7 +1,7 @@
 ---
 titel: OA-Abgleich (engine/oa_abgleich.py)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13v
 ---
 
