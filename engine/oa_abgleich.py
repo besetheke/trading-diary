@@ -3,10 +3,14 @@
 
 Verknüpft jeden OA-Trade über seine Klammernummer (``oa_trade``) mit den
 Ketten aus ``engine.chains.bilde_chains()`` und gleicht das Ergebnis ab:
-OA-``profit`` gegen ``chain.brutto_pnl``, nur solange die Kette geschlossen
-ist. Die Zuordnung ist ein Nachweis/eine Auswertung, keine Schreiboperation
-— nichts davon wird persistiert; die Übernahme von ``Strategy``/``Status``
-in die Persistenz ist ein eigenes, noch nicht geschriebenes Paket.
+OA-``profit`` gegen das **Netto**-Ergebnis der Kette
+(``chain.brutto_pnl + chain.kommission_gesamt``), nur solange die Kette
+geschlossen ist — nicht gegen ``brutto_pnl`` allein: OAs ``Profit`` ist ein
+bereits kommissionsbereinigtes Ergebnis wie jedes Trading-Journal es
+zeigt (AP-13vk2, OF-56). Die Zuordnung ist ein Nachweis/eine Auswertung,
+keine Schreiboperation — nichts davon wird persistiert; die Übernahme von
+``Strategy``/``Status`` in die Persistenz ist ein eigenes, noch nicht
+geschriebenes Paket.
 
 Der Fingerabdruck vergleicht die vollständige Leg-Spezifikation aus §6.1
 (Right, Strike, Expiry, Richtung, Menge je Leg) als Menge/Set von Tupeln,
@@ -17,7 +21,12 @@ der Fingerabdruck ist nur Absicherung — eine Abweichung verwirft die
 Zuordnung nicht, sondern markiert sie als ``erkennung="heuristik"`` statt
 ``"auto"`` (CLAUDE.md Regel 7; OF-53). Die Menge wurde erst in AP-13vk
 ergänzt — ohne sie hätte ein Ratio-Spread mit falscher Stückzahl je Leg
-fälschlich als Treffer gegolten.
+fälschlich als Treffer gegolten. Verglichen wird der **Betrag** der
+Menge: ``executions.menge`` trägt das Vorzeichen von IBs Flex-``quantity``
+unverändert (negativ bei Sell), OA meldet in ``Strikes`` nur die Stückzahl
+— die Richtung steht separat im führenden Minus des Leg-Tokens. Ohne
+``abs()`` verglich die erste Fassung Vorzeichen gegen Betrag und verfehlte
+am echten Bestand jeden Treffer (AP-13vk2, OF-55).
 
 Rein im Sinne von CLAUDE.md Regel 6: keine Datenbank, keine Uhrzeit, kein
 Zufall. ``zuordnungen`` und ``fehler`` sind deterministisch nach
@@ -80,8 +89,9 @@ class OAZuordnung:
     ``erkennung`` ist ``"auto"``, wenn der Fingerabdruck bestätigt hat, und
     ``"heuristik"``, wenn er abweicht (Regel 7: die Nummer bleibt
     Primärschlüssel, die Zuordnung bleibt bestehen). ``ergebnis_eigen`` ist
-    ``chain.brutto_pnl`` — ``None``, solange die Kette offen ist; dann ist
-    auch ``abweichung`` ``None``.
+    das Netto-Ergebnis der Kette (``brutto_pnl + kommission_gesamt``,
+    AP-13vk2/OF-56) — ``None``, solange die Kette offen ist; dann ist auch
+    ``abweichung`` ``None``.
     """
 
     oa_trade: str
@@ -138,7 +148,13 @@ def _eigene_legs(
                 instrument.get("strike"),
                 instrument.get("expiry"),
                 RICHTUNG.get(oeffnung["side"]),
-                oeffnung.get("menge"),
+                # AP-13vk2: executions.menge trägt das Vorzeichen von IBs
+                # Flex-`quantity` unverändert (negativ bei Sell, ingest/flex.py);
+                # OA meldet in `Strikes` nur den Betrag, die Richtung steht
+                # separat im führenden Minus. Ohne `abs()` verglich diese
+                # Signatur Vorzeichen gegen Betrag und verfehlte am echten
+                # Bestand 66 von 66 Treffern (OF-55).
+                abs(oeffnung["menge"]) if oeffnung.get("menge") is not None else None,
             )
         )
     return sig
@@ -192,8 +208,13 @@ def oa_abgleich(
         }
         treffer_fp = eigene == referenz
 
-        # 5: Ergebnisabgleich, nur wenn die Kette geschlossen ist.
-        ergebnis_eigen = chain.brutto_pnl
+        # 5: Ergebnisabgleich, nur wenn die Kette geschlossen ist. Netto,
+        # nicht brutto (AP-13vk2, OF-56): OAs `Profit` ist ein bereits
+        # kommissionsbereinigtes Ergebnis wie jedes Trading-Journal es
+        # zeigt, nicht der Bruttoerlös vor Kosten.
+        ergebnis_eigen = (
+            chain.brutto_pnl + chain.kommission_gesamt if chain.brutto_pnl is not None else None
+        )
         abweichung = (
             trade.profit - ergebnis_eigen if ergebnis_eigen is not None else None
         )

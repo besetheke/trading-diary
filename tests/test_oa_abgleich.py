@@ -161,6 +161,68 @@ def test_abweichender_fingerabdruck_bleibt_zugeordnet_aber_heuristik():
     assert z.abweichung == Decimal("-4.50")
 
 
+def test_ergebnisabgleich_vergleicht_netto_nicht_brutto():
+    # AP-13vk2 (OF-56): OAs profit ist bereits kommissionsbereinigt. Bei
+    # brutto_pnl=120.00 und kommission_gesamt=-3.00 ist das eigene
+    # Netto-Ergebnis 117.00 (Vertrag 10a: netto = brutto + kommission,
+    # ADDIERT — die Kommission trägt IBs Vorzeichen). OA meldet exakt
+    # 117.00 -> Handrechnung: 117.00 - 117.00 = 0.00, keine Abweichung.
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="P"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="SELL", handelszeit=datetime(2026, 9, 1, 10, 0, 0),
+              oa_trade="12", oa_order="1"),
+        _exec("E2", conid=601, side="BUY", handelszeit=datetime(2026, 9, 15, 15, 0, 0),
+              oa_trade="12", oa_order="1"),
+    ]
+    legs = [
+        _leg("E1", "E2", conid=601, offen_ja_nein=False, brutto_pnl="120.00",
+             kommission_gesamt="-3.00"),
+    ]
+    chains = _chains(legs, executions, instrumente)
+    trade = _oa_trade(
+        "12", [_oa_leg(right="P", strike="5000", expiry=date(2026, 9, 18), richtung=-1)],
+        profit="117.00",
+    )
+
+    ergebnis = oa_abgleich([trade], chains, {e["exec_id"]: e for e in executions}, instrumente)
+
+    z = ergebnis.zuordnungen[0]
+    assert z.ergebnis_eigen == Decimal("117.00")
+    assert z.abweichung == Decimal("0.00")
+
+
+def test_signierte_ausfuehrungsmenge_zaehlt_trotzdem_als_treffer():
+    # AP-13vk2 (OF-55): executions.menge trägt bei IB-Sell ein Vorzeichen
+    # (Flex-quantity unverändert übernommen, ingest/flex.py), OA meldet in
+    # Strikes nur den Betrag. Ohne abs() verfehlte das jeden echten Treffer.
+    instrumente = {
+        601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
+                          strike="5000", right="P"),
+    }
+    executions = [
+        _exec("E1", conid=601, side="SELL", menge="-1",
+              handelszeit=datetime(2026, 9, 1, 10, 0, 0), oa_trade="10", oa_order="1"),
+        _exec("E2", conid=601, side="BUY", menge="1",
+              handelszeit=datetime(2026, 9, 15, 15, 0, 0), oa_trade="10", oa_order="1"),
+    ]
+    legs = [_leg("E1", "E2", conid=601, offen_ja_nein=False, brutto_pnl="120.00")]
+    chains = _chains(legs, executions, instrumente)
+    trade = _oa_trade(
+        "10", [_oa_leg(right="P", strike="5000", expiry=date(2026, 9, 18), richtung=-1,
+                        menge="1")],
+        profit="115.50",
+    )
+
+    ergebnis = oa_abgleich([trade], chains, {e["exec_id"]: e for e in executions}, instrumente)
+
+    z = ergebnis.zuordnungen[0]
+    assert z.fingerabdruck_treffer is True
+    assert z.erkennung == "auto"
+
+
 def test_abweichende_menge_bleibt_zugeordnet_aber_heuristik():
     # AP-13vk: Die Menge gehört zur vollständigen Leg-Spezifikation (§6.1) —
     # zwei Kontrakte im Export gegen einen in der Kette darf nicht als

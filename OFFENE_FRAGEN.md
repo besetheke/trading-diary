@@ -2431,3 +2431,69 @@ nur die **Sichtbarkeit** offener Kandidaten (`AP-05s`) — reine Lesefunktion,
 ohne Schreiben, betrifft diese Frage nicht. Die Persistenz von
 Bestätigung/Ablehnung ist ein eigenes, noch nicht begonnenes Paket, das
 diese Frage vorher klären muss.
+
+## OF-55 · AP-13vk2: Fingerabdruck verglich Vorzeichen gegen Betrag (Menge) — behoben
+
+Beim Nachweis der AP-13-Abnahme (`werkzeuge/abgleich/
+golden_oa_abgleich_verknuepfung.py` gegen `fixtures/golden/
+Trades_2026-02_OA.xlsx`) fand sich, dass `engine.oa_abgleich`s Fingerabdruck
+(seit AP-13vk, Menge als Teil der Leg-Spezifikation) am echten Bestand
+**0 von 66** statt der erwarteten ~61 von 66 Treffer erzielte — eine
+Regression, die die rein erfundenen Tests von AP-13vk nicht zeigen
+konnten.
+
+**Ursache:** `executions.menge` trägt bei IBs Flex-Import das Vorzeichen
+von `quantity` unverändert (negativ bei Sell, `ingest/flex.py`); OAs
+`Strikes`-Spalte meldet je Leg nur den **Betrag** — die Richtung steht
+separat im führenden Minus des Leg-Tokens (`_legs_zerlegen()`). Der
+Fingerabdruck verglich also faktisch Vorzeichen gegen Betrag. Die
+AP-13vk-Testfixtures hatten das nicht aufgedeckt, weil sie
+`executions.menge` immer positiv konstruiert haben, unabhängig von
+`side` — anders als die echten Daten.
+
+**Behoben:** `engine/oa_abgleich.py`, `_eigene_legs()` vergleicht jetzt
+`abs(menge)`. Neuer Test `test_signierte_ausfuehrungsmenge_zaehlt_
+trotzdem_als_treffer` (`tests/test_oa_abgleich.py`) mit einer signierten
+Ausführungsmenge, Regel 1a (Korrekturpaket, nur diese eine Erweiterung).
+Nachgemessen: wieder 61 von 66 auto, 5 von 66 heuristik — deckungsgleich
+mit dem unabhängigen `golden_oa_abgleich.py` (92,4 % exakt ohne Menge,
+vor AP-13vk).
+
+## OF-56 · AP-13vk2: Ergebnisabgleich verglich OA-Profit gegen Brutto statt Netto — behoben
+
+Bei derselben Golden-Messung war die zweite Abnahmegröße auffällig: der
+Ergebnisabgleich (`ergebnis_eigen = chain.brutto_pnl`) traf bei nur 1 von
+66 Trades auch nur näherungsweise (± kleines Toleranzband). Eine Messung
+gegen das **Netto**-Ergebnis (`chain.brutto_pnl + chain.kommission_
+gesamt`) traf dagegen bei 36 von 66 (11 exakt, 25 im Ein-Dollar-Band) —
+OAs `Profit`-Spalte ist erkennbar bereits kommissionsbereinigt, wie in
+jedem Trading-Journal üblich, nicht der Bruttoerlös vor Kosten.
+
+**Behoben:** `engine/oa_abgleich.py`, `oa_abgleich()` — `ergebnis_eigen`
+jetzt `chain.brutto_pnl + chain.kommission_gesamt`. Neuer Test
+`test_ergebnisabgleich_vergleicht_netto_nicht_brutto` mit von Hand
+gerechnetem Beispiel (Regel 8: 120,00 + (−3,00) = 117,00).
+
+**Nicht vollständig gelöst — siehe OF-57:** Auch gegen Netto bleiben 29
+von 66 (44 %) ohne Erklärung im Toleranzband. Die AP-13-Abnahme („Abweichungen
+... sind erklärbar") ist damit **noch nicht erfüllt** — `auftraege/
+AP-13.md` bleibt deshalb bewusst `offen`, trotz 100 % Abdeckung und leerer
+Fehlerliste.
+
+## OF-57 · AP-13: 29 von 66 Ergebnisabweichungen (Netto) bleiben nach OF-56 unerklärt
+
+Nach der Netto-Korrektur (OF-56) bleibt eine erhebliche unerklärte
+Restmenge. Eine erste, grobe Auffälligkeit (gemessen, nicht verifiziert):
+Ketten mit Endzustand **Verfall** sind unter den unerklärten Fällen
+deutlich überrepräsentiert (19 von 33 Verfall-Fällen unerklärt, aber nur
+6 von 25 „Geschlossen"-Fällen) — kein sauberer Auslöser (auch „Geschlossen"
+hat unerklärte Fälle, auch „Verfall" hat erklärte), aber ein Hinweis, der
+an OF-25/OF-48 erinnert (Barausgleichsregel: die Engine bewertet manche
+Schließungsarten wirtschaftlich anders als die rohe Ausführung/Prämie).
+
+**Nicht geraten, nicht weiterverfolgt** — das bräuchte eine eigene,
+sorgfältige Untersuchung wie OF-48, keinen Schnellschuss innerhalb eines
+Vorbereitungspakets. Bis dahin bleibt AP-13s dritte Abnahmegröße
+(„Abweichungen erklärbar") offen; die ersten beiden (Abdeckung ≥ 95 %,
+Fehlerliste) sind mit OF-55/OF-56 klar erfüllt (100 % Abdeckung, 0
+Fehler, gemessen an `Trades_2026-02_OA.xlsx`).
