@@ -102,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             f"{ergebnis.overrides_verwaist} verwaist; "
             f"{ergebnis.kandidaten_offen} offene Rollkandidaten; "
             f"OA-Abgleich: {ergebnis.oa_zugeordnet} zugeordnet, "
-            f"{ergebnis.oa_fehler} ohne eindeutige Kette"
+            f"{ergebnis.oa_fehler} ohne eindeutige Kette; "
+            f"{ergebnis.campaign_kandidaten_offen} offene Campaign-Kandidaten"
         )
         if ergebnis.overrides_verwaist > 0:
             # Vertrag 20: Verwaistes wird niemals übergangen — der Aufruf

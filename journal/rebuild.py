@@ -27,6 +27,11 @@ bei jedem Lauf zuerst auf ``None``; ``oa_werte_schreiben()``
 bliebe eine Zuordnung bestehen, deren OA-Trade nicht mehr importiert ist
 (``tests/test_rebuild_oa.py``, „zweiter Lauf entfernt …").
 
+**Offene Campaign-Kandidaten** (AP-05sk): nach jedem Lauf gezählt über
+``campaign_kandidaten()`` (``engine.campaigns``) und ``campaign_links``
+(``journal.campaigns_sicht``) — reine Anzeige: nichts wird klassifiziert,
+geschrieben oder still als ``independent`` einsortiert.
+
 Dokumentierte Annahmen (Regel 10) — hier nur im Code festgehalten, weil die
 Abnahme Änderungen ausschließlich in ``journal/rebuild.py`` und
 ``journal/cli.py`` zulässt; für den Review notieren:
@@ -52,16 +57,19 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Connection
 
+from engine.campaigns import campaign_kandidaten
 from engine.chains import ENDZUSTAND_JE_EREIGNIS, KettenErgebnis, bilde_chains
 from engine.chains import Chain as Kette
 from engine.matching import MatchingErgebnis, bilde_legs
 from engine.structures import Structure as Struktur
 from engine.structures import StrukturErgebnis, bilde_structures
+from journal.campaigns_sicht import offene_kandidaten_zaehlen
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
 from journal.oa_persistenz import oa_werte_schreiben
 from journal.preise import nettopraemie
 from journal.schema import (
     assignment_links,
+    campaign_links,
     chain_links,
     chain_overrides,
     chains,
@@ -102,6 +110,9 @@ class RebuildErgebnis:
     # eindeutige Kette. Ebenfalls nicht persistiert, jeder Lauf neu.
     oa_zugeordnet: int = 0
     oa_fehler: int = 0
+    # Campaign-Kandidaten ohne gemeinsame Kampagne (AP-05sk). Wie oben:
+    # nicht persistiert, jeder Lauf neu berechnet.
+    campaign_kandidaten_offen: int = 0
 
 
 @dataclass(frozen=True)
@@ -516,6 +527,25 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         ketten_id_je_schluessel,
     )
 
+    # -- Campaign-Kandidaten (AP-05sk): wie viele noch keine gemeinsame
+    #    Kampagne haben — reine Anzeige, kein Schreiben. Ein Kandidat gilt
+    #    als entschieden, wenn beide Ketten bereits derselben campaign_id
+    #    zugeordnet sind (unabhängig vom beziehungstyp).
+    kampagnen_je_chain_id: dict[int, set[int]] = {}
+    for zeile in verbindung.execute(select(campaign_links)).mappings():
+        kampagnen_je_chain_id.setdefault(zeile["chain_id"], set()).add(
+            zeile["campaign_id"]
+        )
+    chain_id_je_objekt = {
+        id(kette): ketten_id_je_schluessel[schluessel]
+        for schluessel, kette in kette_je_schluessel.items()
+    }
+    campaign_kandidaten_offen = offene_kandidaten_zaehlen(
+        campaign_kandidaten(kette_je_schluessel.values()),
+        kampagnen_je_chain_id,
+        chain_id_je_objekt,
+    )
+
     return RebuildErgebnis(
         legs=_anzahl(verbindung, legs),
         structures=_anzahl(verbindung, structures),
@@ -527,6 +557,7 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         kandidaten_offen=offene_kandidaten,
         oa_zugeordnet=oa_zugeordnet,
         oa_fehler=oa_fehler,
+        campaign_kandidaten_offen=campaign_kandidaten_offen,
     )
 
 

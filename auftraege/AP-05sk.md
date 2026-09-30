@@ -1,7 +1,7 @@
 ---
 titel: Sichtbarkeit offener Campaign-Kandidaten (journal/campaigns_sicht.py)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-05s
 ---
 
