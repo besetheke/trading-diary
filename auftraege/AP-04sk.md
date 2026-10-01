@@ -1,7 +1,7 @@
 ---
 titel: Kettensicht-Zuordnung (engine/kettensicht.py)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-04s
 ---
 
