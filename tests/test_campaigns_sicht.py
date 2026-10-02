@@ -79,9 +79,16 @@ AUSFUEHRUNGEN_IC = [
 
 
 def _chain_ids(db_pfad) -> list[int]:
+    # AP-04sw: natur_schluessel ist seither nur noch je sicht eindeutig;
+    # dieser Test kennt nur die Kontosicht.
     engine = create_db_engine(db_pfad)
     with engine.begin() as verbindung:
-        return [z["chain_id"] for z in verbindung.execute(select(chains)).mappings()]
+        return [
+            z["chain_id"]
+            for z in verbindung.execute(
+                select(chains).where(chains.c.sicht == "konto")
+            ).mappings()
+        ]
 
 
 def test_ic_kandidat_ohne_klassifikation_ist_offen(migrated_db):

@@ -39,9 +39,16 @@ from journal.schema import (  # noqa: E402
 
 
 def _zeilen(db_pfad, tabelle) -> list[dict]:
+    # AP-04sw: natur_schluessel ist seither nur noch je sicht eindeutig.
+    # Alle Tests hier kennen nur die Kontosicht — automatisch gefiltert,
+    # sonst müsste jeder der rund 35 Aufrufer einzeln angepasst werden,
+    # ohne dass sich an einer einzigen Erwartung etwas ändert.
+    stmt = select(tabelle)
+    if "sicht" in tabelle.c:
+        stmt = stmt.where(tabelle.c.sicht == "konto")
     engine = create_db_engine(db_pfad)
     with engine.connect() as verbindung:
-        return [dict(z) for z in verbindung.execute(select(tabelle)).mappings().all()]
+        return [dict(z) for z in verbindung.execute(stmt).mappings().all()]
 
 
 def _je_schluessel(db_pfad, tabelle) -> dict:

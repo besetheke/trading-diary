@@ -407,7 +407,9 @@ def test_rundreise_ende_zu_ende(migrated_db, tmp_path):
     with engine.connect() as verbindung:
         glieder = {
             strukturen[z["structure_id"]]: (ketten[z["chain_id"]], z["erkennung"])
-            for z in verbindung.execute(select(chain_links)).mappings()
+            for z in verbindung.execute(
+                select(chain_links).where(chain_links.c.sicht == "konto")
+            ).mappings()
         }
     assert glieder["Z5|Z6"] == ("k:Z1|Z2", "manuell")
 

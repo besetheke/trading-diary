@@ -366,7 +366,10 @@ def erzeuge_app(
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> KettenListeAntwort:
         """Liste der Ketten — `gesamt` zählt vor der Begrenzung (Vertrag 4)."""
-        bedingungen = []
+        # AP-04sw, Plan §5: „Keine Abfrage liefert Zeilen aus beiden Sichten
+        # in einer Summe." Die Lese-API zeigt ausschließlich die Kontosicht
+        # — die Kettensicht hat noch keine eigene Oberfläche/Route.
+        bedingungen = [chains.c.sicht == "konto"]
         if basiswert:
             bedingungen.append(chains.c.underlying == basiswert)
         if anlageklasse:

@@ -60,6 +60,7 @@ from sqlalchemy.engine import Connection
 from engine.campaigns import campaign_kandidaten
 from engine.chains import ENDZUSTAND_JE_EREIGNIS, KettenErgebnis, bilde_chains
 from engine.chains import Chain as Kette
+from engine.kettensicht import kettensicht_legs
 from engine.matching import MatchingErgebnis, bilde_legs
 from engine.structures import Structure as Struktur
 from engine.structures import StrukturErgebnis, bilde_structures
@@ -113,6 +114,12 @@ class RebuildErgebnis:
     # Campaign-Kandidaten ohne gemeinsame Kampagne (AP-05sk). Wie oben:
     # nicht persistiert, jeder Lauf neu berechnet.
     campaign_kandidaten_offen: int = 0
+    # AP-04sw: Kettensicht-Zählwerte, parallel zu den obigen (Kontosicht-)
+    # Feldern, deren Bedeutung unverändert bleibt.
+    structures_kette: int = 0
+    chains_kette: int = 0
+    legs_kette: int = 0
+    chain_links_kette: int = 0
 
 
 @dataclass(frozen=True)
@@ -137,6 +144,21 @@ class Bestand:
     # ``bilde_chains()`` anlegt — sie gehören zu ``structures``, sonst hätten
     # ihre chain_links keinen Fremdschlüssel.
     struktur_je_schluessel: dict[str, Struktur]
+
+
+@dataclass(frozen=True)
+class _SichtErgebnis:
+    """Rückgabe von ``_sicht_schreiben()`` (AP-04sw) — alles, was der
+    Aufrufer braucht, um auf dieser Sicht weiterzuarbeiten (Overrides,
+    OA-Abgleich, Campaign-Sichtbarkeit — allesamt nur für ``sicht='konto'``
+    aufgerufen, siehe Grenzen)."""
+
+    struktur_id_je_schluessel: dict[str, int]
+    ketten_id_je_schluessel: dict[str, int]
+    struktur_je_schluessel: dict[str, Struktur]
+    kette_je_schluessel: dict[str, Kette]
+    glieder_je_kette: dict[str, list[list]]
+    ketten_ergebnis: KettenErgebnis
 
 
 def bestand_berechnen(verbindung: Connection) -> Bestand:
@@ -169,18 +191,9 @@ def bestand_berechnen(verbindung: Connection) -> Bestand:
         struktur_ergebnis, legs_als_dict, ausfuehrungen, instrument_je_conid
     )
 
-    # Synthetische Zuteilungs-Fortsetzungen (engine.chains) stehen nur als
-    # Kettenglieder an — sie gehören ebenfalls in structures, sonst hätten
-    # ihre chain_links keinen Fremdschlüssel.
-    strukturen = list(struktur_ergebnis.structures)
-    bekannte_schluessel = {_struktur_schluessel(s) for s in strukturen}
-    for kette in ketten_ergebnis.chains:
-        for glied in kette.glieder:
-            schluessel = _struktur_schluessel(glied.structure)
-            if schluessel not in bekannte_schluessel:
-                strukturen.append(glied.structure)
-                bekannte_schluessel.add(schluessel)
-    struktur_je_schluessel = {_struktur_schluessel(s): s for s in strukturen}
+    struktur_je_schluessel = _struktur_je_schluessel_mit_synthetischen(
+        struktur_ergebnis, ketten_ergebnis
+    )
 
     return Bestand(
         ausfuehrungen=ausfuehrungen,
@@ -231,6 +244,24 @@ def _kette_schluessel(kette: Kette) -> str:
     return "k:" + _struktur_schluessel(kette.glieder[0].structure)
 
 
+def _struktur_je_schluessel_mit_synthetischen(
+    struktur_ergebnis: StrukturErgebnis, ketten_ergebnis: KettenErgebnis
+) -> dict[str, Struktur]:
+    """Synthetische Zuteilungs-Fortsetzungen (engine.chains) stehen nur als
+    Kettenglieder an — sie gehören ebenfalls in structures, sonst hätten
+    ihre chain_links keinen Fremdschlüssel. Gemeinsam genutzt von
+    ``bestand_berechnen()`` und ``_sicht_schreiben()`` (AP-04sw)."""
+    strukturen = list(struktur_ergebnis.structures)
+    bekannte_schluessel = {_struktur_schluessel(s) for s in strukturen}
+    for kette in ketten_ergebnis.chains:
+        for glied in kette.glieder:
+            schluessel = _struktur_schluessel(glied.structure)
+            if schluessel not in bekannte_schluessel:
+                strukturen.append(glied.structure)
+                bekannte_schluessel.add(schluessel)
+    return {_struktur_schluessel(s): s for s in strukturen}
+
+
 def _struktur_waehrung(
     struktur: Struktur, schluessel: str, exec_je_id: Mapping[str, Mapping]
 ) -> str:
@@ -255,7 +286,7 @@ def _struktur_waehrung(
 
 
 def _struktur_zeile(
-    struktur: Struktur, schluessel: str, bestand: Bestand, leg_je_schluessel
+    struktur: Struktur, schluessel: str, bestand: Bestand, leg_je_schluessel, sicht: str
 ) -> dict:
     """Spaltenwerte einer Structure für ``structures`` (Vertrag 10–12) — seit
     AP-07p samt der Prämien je Kontrakt (AP-07pv, P1/P2)."""
@@ -317,10 +348,11 @@ def _struktur_zeile(
         oa_strategie=None,
         oa_status=None,
         oa_erkennung=None,
+        sicht=sicht,
     )
 
 
-def _kette_zeile(kette: Kette) -> dict:
+def _kette_zeile(kette: Kette, sicht: str) -> dict:
     """Spaltenwerte einer Chain für ``chains`` (Vertrag 13; Entscheidung 2:
     kein Euro-Betrag ohne FX-Umrechnung)."""
     return dict(
@@ -336,11 +368,14 @@ def _kette_zeile(kette: Kette) -> dict:
         oa_strategie=None,
         oa_status=None,
         oa_erkennung=None,
+        sicht=sicht,
     )
 
 
-def _anzahl(verbindung: Connection, tabelle) -> int:
-    return verbindung.execute(select(func.count()).select_from(tabelle)).scalar_one()
+def _anzahl_je_sicht(verbindung: Connection, tabelle, sicht: str) -> int:
+    return verbindung.execute(
+        select(func.count()).select_from(tabelle).where(tabelle.c.sicht == sicht)
+    ).scalar_one()
 
 
 # ---------------------------------------------------------------------------
@@ -348,56 +383,65 @@ def _anzahl(verbindung: Connection, tabelle) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
-    # -- Lesen und Rechnen über die gemeinsame Funktion (AP-04d, Vertrag 10):
-    #    kein zweiter Lesepfad neben der Durchsicht der Rollkandidaten.
-    bestand = bestand_berechnen(verbindung)
-    exec_je_id = bestand.exec_je_id
-    matching = bestand.matching
-    # Beine über ihr (open_exec_id, close_exec_id)-Paar — dasselbe Lookup wie
-    # in der Durchsicht (journal.durchsicht); offene Legs tragen None als Schluss.
-    leg_je_schluessel = {
-        (leg.open_exec_id, leg.close_exec_id): leg for leg in matching.legs
-    }
-    struktur_ergebnis = bestand.struktur_ergebnis
-    ketten_ergebnis = bestand.ketten_ergebnis
-    struktur_je_schluessel = bestand.struktur_je_schluessel
+def _sicht_schreiben(
+    verbindung: Connection,
+    sicht: str,
+    sicht_legs,
+    bestand: Bestand,
+    gesicherte_struktur_ids: set[int],
+    gesicherte_ketten_ids: set[int],
+) -> "_SichtErgebnis":
+    """Schreibt Strukturen/Ketten/Legs/Kettenglieder für genau eine Sicht
+    (AP-04sw). Baut dafür ``engine.structures``/``engine.chains`` auf dem
+    gegebenen Leg-Satz neu auf — für ``sicht='konto'`` liefert das dieselben
+    Strukturen/Ketten wie vor AP-04sw (``matching.legs`` unverändert), für
+    ``sicht='kette'`` den Satz aus ``engine.kettensicht.kettensicht_legs()``.
 
-    # -- Lesen (Vertrag 4): Overrides, aktueller Stand der abgeleiteten
-    #    Tabellen für den Abgleich.
-    overrides = [dict(z) for z in verbindung.execute(select(chain_overrides)).mappings()]
-    # Plan §6, Block B, Regel 2: Bestätigung und Ablehnung sind beide
-    # Benutzerdaten. Angewandt wird nur die Bestätigung; die Ablehnung hält
-    # einen Kandidaten dauerhaft von der Liste fern. Gesichert gegen Löschung
-    # (Regel 4) sind die Zeilen beider Urteile.
-    bestaetigungen = [o for o in overrides if o["urteil"] == "bestaetigt"]
-    gesicherte_struktur_ids = {o["structure_id"] for o in overrides}
-    gesicherte_ketten_ids = {o["chain_id"] for o in overrides}
+    Overrides (``gesicherte_*_ids``) schützen nur die Kontosicht vor
+    Löschung — die Kettensicht kennt noch keinen Override-Mechanismus
+    (Grenze von AP-04s/AP-04sw).
+    """
+    sicht_legs = tuple(sicht_legs)
+    legs_als_dict = [
+        dict(
+            conid=leg.conid, open_exec_id=leg.open_exec_id, close_exec_id=leg.close_exec_id,
+            menge=leg.menge, offen_ja_nein=leg.offen_ja_nein, brutto_pnl=leg.brutto_pnl,
+            kommission_gesamt=leg.kommission_gesamt,
+        )
+        for leg in sicht_legs
+    ]
+    struktur_ergebnis = bilde_structures(
+        legs_als_dict, bestand.ausfuehrungen, bestand.instrument_je_conid
+    )
+    ketten_ergebnis = bilde_chains(
+        struktur_ergebnis, legs_als_dict, bestand.ausfuehrungen, bestand.instrument_je_conid
+    )
+    struktur_je_schluessel = _struktur_je_schluessel_mit_synthetischen(
+        struktur_ergebnis, ketten_ergebnis
+    )
+    leg_je_schluessel = {
+        (leg.open_exec_id, leg.close_exec_id): leg for leg in sicht_legs
+    }
 
     alte_struktur_ids = {
         z["natur_schluessel"]: z["structure_id"]
         for z in verbindung.execute(
             select(structures.c.structure_id, structures.c.natur_schluessel)
+            .where(structures.c.sicht == sicht)
         ).mappings()
     }
     alte_ketten_ids = {
         z["natur_schluessel"]: z["chain_id"]
         for z in verbindung.execute(
-            select(chains.c.chain_id, chains.c.natur_schluessel)
+            select(chains.c.chain_id, chains.c.natur_schluessel).where(chains.c.sicht == sicht)
         ).mappings()
     }
 
-    # -- Schreiben (Vertrag 6). legs und chain_links sind vollständiger
-    #    Austausch (Vertrag 14/15) und gehen zuerst weg — sie halten die
-    #    Fremdschlüssel auf structures/chains.
-    verbindung.execute(delete(legs))
-    verbindung.execute(delete(chain_links))
-
-    # structures: Abgleich über den Naturschlüssel (Vertrag 9).
+    # structures: Abgleich über den Naturschlüssel (Vertrag 9), je Sicht.
     struktur_id_je_schluessel: dict[str, int] = {}
     for schluessel in sorted(struktur_je_schluessel):
         werte = _struktur_zeile(
-            struktur_je_schluessel[schluessel], schluessel, bestand, leg_je_schluessel
+            struktur_je_schluessel[schluessel], schluessel, bestand, leg_je_schluessel, sicht
         )
         structure_id = alte_struktur_ids.get(schluessel)
         if structure_id is None:
@@ -430,7 +474,7 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         for schluessel, struktur in struktur_je_schluessel.items()
         for leg in struktur.leg_schluessel
     }
-    for leg in matching.legs:
+    for leg in sicht_legs:
         verbindung.execute(
             insert(legs).values(
                 conid=leg.conid,
@@ -443,14 +487,15 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
                 offen_ja_nein=leg.offen_ja_nein,
                 basis_ungeklaert=leg.basis_ungeklaert,
                 structure_id=struktur_id_je_leg.get((leg.open_exec_id, leg.close_exec_id)),
+                sicht=sicht,
             )
         )
 
-    # chains: Abgleich über den Naturschlüssel (Vertrag 9, 13).
+    # chains: Abgleich über den Naturschlüssel (Vertrag 9, 13), je Sicht.
     kette_je_schluessel = {_kette_schluessel(k): k for k in ketten_ergebnis.chains}
     ketten_id_je_schluessel: dict[str, int] = {}
     for schluessel in sorted(kette_je_schluessel):
-        werte = _kette_zeile(kette_je_schluessel[schluessel])
+        werte = _kette_zeile(kette_je_schluessel[schluessel], sicht)
         chain_id = alte_ketten_ids.get(schluessel)
         if chain_id is None:
             chain_id = verbindung.execute(
@@ -485,10 +530,64 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
                     sequenz=glied.sequenz,
                     verknuepfungstyp=glied.verknuepfungstyp,
                     erkennung=glied.erkennung,
+                    sicht=sicht,
                 )
             )
             eintraege.append([_struktur_schluessel(glied.structure), glied.erkennung])
         glieder_je_kette[schluessel] = eintraege
+
+    return _SichtErgebnis(
+        struktur_id_je_schluessel=struktur_id_je_schluessel,
+        ketten_id_je_schluessel=ketten_id_je_schluessel,
+        struktur_je_schluessel=struktur_je_schluessel,
+        kette_je_schluessel=kette_je_schluessel,
+        glieder_je_kette=glieder_je_kette,
+        ketten_ergebnis=ketten_ergebnis,
+    )
+
+
+def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
+    # -- Lesen und Rechnen über die gemeinsame Funktion (AP-04d, Vertrag 10):
+    #    kein zweiter Lesepfad neben der Durchsicht der Rollkandidaten.
+    bestand = bestand_berechnen(verbindung)
+    exec_je_id = bestand.exec_je_id
+    matching = bestand.matching
+
+    # -- Lesen (Vertrag 4): Overrides, aktueller Stand der abgeleiteten
+    #    Tabellen für den Abgleich. Gelten nur für die Kontosicht (Grenze).
+    overrides = [dict(z) for z in verbindung.execute(select(chain_overrides)).mappings()]
+    # Plan §6, Block B, Regel 2: Bestätigung und Ablehnung sind beide
+    # Benutzerdaten. Angewandt wird nur die Bestätigung; die Ablehnung hält
+    # einen Kandidaten dauerhaft von der Liste fern. Gesichert gegen Löschung
+    # (Regel 4) sind die Zeilen beider Urteile.
+    bestaetigungen = [o for o in overrides if o["urteil"] == "bestaetigt"]
+    gesicherte_struktur_ids = {o["structure_id"] for o in overrides}
+    gesicherte_ketten_ids = {o["chain_id"] for o in overrides}
+
+    # -- Schreiben (Vertrag 6). legs und chain_links sind vollständiger
+    #    Austausch (Vertrag 14/15) und gehen zuerst weg — sie halten die
+    #    Fremdschlüssel auf structures/chains. Beide Sichten zusammen, da
+    #    keine der beiden Tabellen eine Sicht-übergreifende Identität trägt.
+    verbindung.execute(delete(legs))
+    verbindung.execute(delete(chain_links))
+
+    konto = _sicht_schreiben(
+        verbindung, "konto", matching.legs, bestand, gesicherte_struktur_ids,
+        gesicherte_ketten_ids,
+    )
+    struktur_id_je_schluessel = konto.struktur_id_je_schluessel
+    ketten_id_je_schluessel = konto.ketten_id_je_schluessel
+    struktur_je_schluessel = konto.struktur_je_schluessel
+    kette_je_schluessel = konto.kette_je_schluessel
+    glieder_je_kette = konto.glieder_je_kette
+    ketten_ergebnis = konto.ketten_ergebnis
+
+    # AP-04sw: die Kettensicht — eigene Zuordnung derselben Ausführungen
+    # (Plan §5), ohne Override-Schutz (Grenze von AP-04s).
+    kette_legs = kettensicht_legs(
+        matching.legs, exec_je_id, bestand.instrument_je_conid
+    )
+    _sicht_schreiben(verbindung, "kette", kette_legs, bestand, set(), set())
 
     # -- Overrides anwenden (Vertrag 16–21); chain_overrides selbst wird nie
     #    geschrieben oder gelöscht (Regel 4).
@@ -547,17 +646,21 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     )
 
     return RebuildErgebnis(
-        legs=_anzahl(verbindung, legs),
-        structures=_anzahl(verbindung, structures),
-        chains=_anzahl(verbindung, chains),
-        chain_links=_anzahl(verbindung, chain_links),
-        nicht_strukturiert=len(struktur_ergebnis.nicht_strukturiert),
+        legs=_anzahl_je_sicht(verbindung, legs, "konto"),
+        structures=_anzahl_je_sicht(verbindung, structures, "konto"),
+        chains=_anzahl_je_sicht(verbindung, chains, "konto"),
+        chain_links=_anzahl_je_sicht(verbindung, chain_links, "konto"),
+        nicht_strukturiert=len(bestand.struktur_ergebnis.nicht_strukturiert),
         overrides_angewandt=angewandt,
         overrides_verwaist=len(verwaiste),
         kandidaten_offen=offene_kandidaten,
         oa_zugeordnet=oa_zugeordnet,
         oa_fehler=oa_fehler,
         campaign_kandidaten_offen=campaign_kandidaten_offen,
+        legs_kette=_anzahl_je_sicht(verbindung, legs, "kette"),
+        structures_kette=_anzahl_je_sicht(verbindung, structures, "kette"),
+        chains_kette=_anzahl_je_sicht(verbindung, chains, "kette"),
+        chain_links_kette=_anzahl_je_sicht(verbindung, chain_links, "kette"),
     )
 
 

@@ -256,7 +256,7 @@ def test_mehrere_waehrungen_lassen_die_summe_leer(klient, migrated_db):
     with engine.begin() as verbindung:
         struktur_id = verbindung.execute(
             select(structures.c.structure_id).where(
-                structures.c.natur_schluessel == "A1"
+                structures.c.natur_schluessel == "A1", structures.c.sicht == "konto"
             )
         ).scalar_one()
         verbindung.execute(

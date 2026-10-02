@@ -484,6 +484,11 @@ legs = Table(
     # Entleerbar: nicht jede Leg landet in einer Struktur. Der P7-Vorfilter
     # schließt alles aus, was nicht per Trade eröffnet wurde (AP-04, Block A).
     Column("structure_id", ForeignKey("structures.structure_id"), nullable=True, index=True),
+    # AP-04sw: Pflichtfeld in jeder abgeleiteten Tabelle (Plan §5, „Zwei
+    # Sichten"). Dieselbe Ausführung erscheint mit eigener Zuordnung in
+    # beiden Sichten — nie in einer Abfrage gemischt.
+    Column("sicht", Text, nullable=False, server_default="konto"),
+    CheckConstraint("sicht IN ('konto', 'kette')", name="ck_legs_sicht"),
 )
 
 structures = Table(
@@ -533,7 +538,11 @@ structures = Table(
     # verbunden. Ohne ihn bekäme dieselbe Struktur bei jedem Lauf eine neue
     # Nummer, und die Fremdschlüssel in `chain_overrides` zeigten ins Leere
     # (AP-04v).
-    Column("natur_schluessel", Text, nullable=False, unique=True),
+    Column("natur_schluessel", Text, nullable=False),
+    # AP-04sw: wie an `legs` — jede Struktur existiert als zwei Zeilen, je
+    # eine pro Sicht, mit demselben Naturschlüssel. Die Eindeutigkeit gilt
+    # deshalb nur noch zusammen mit `sicht`.
+    Column("sicht", Text, nullable=False, server_default="konto"),
     CheckConstraint(
         "erkennung IN ('order_id', 'heuristik', 'manuell')",
         name="ck_structures_erkennung",
@@ -541,6 +550,10 @@ structures = Table(
     CheckConstraint(
         "oa_erkennung IN ('auto', 'heuristik')",
         name="ck_structures_oa_erkennung",
+    ),
+    CheckConstraint("sicht IN ('konto', 'kette')", name="ck_structures_sicht"),
+    UniqueConstraint(
+        "natur_schluessel", "sicht", name="uq_structures_natur_schluessel_sicht"
     ),
 )
 
@@ -564,16 +577,20 @@ chains = Table(
     # Wie bei `structures`: der Naturschlüssel der eröffnenden Struktur, mit
     # `k:` davor. Rolls hängen hinten an, der Kettenanfang bleibt derselbe —
     # deshalb überlebt die `chain_id` einen Rebuild (AP-04v).
-    Column("natur_schluessel", Text, nullable=False, unique=True),
+    Column("natur_schluessel", Text, nullable=False),
     # AP-13w: wie an `structures` — roh aus dem OA-Export, `oa_erkennung`
     # ist das Pflichtfeld der automatisch erzeugten Verknüpfung (Regel 7).
     Column("oa_strategie", Text, nullable=True),
     Column("oa_status", Text, nullable=True),
     Column("oa_erkennung", Text, nullable=True),
+    # AP-04sw: wie an `structures` — Eindeutigkeit nur noch je Sicht.
+    Column("sicht", Text, nullable=False, server_default="konto"),
     CheckConstraint(
         "oa_erkennung IN ('auto', 'heuristik')",
         name="ck_chains_oa_erkennung",
     ),
+    CheckConstraint("sicht IN ('konto', 'kette')", name="ck_chains_sicht"),
+    UniqueConstraint("natur_schluessel", "sicht", name="uq_chains_natur_schluessel_sicht"),
 )
 
 chain_links = Table(
@@ -585,6 +602,8 @@ chain_links = Table(
     # open / roll / close / adjust
     Column("verknuepfungstyp", Text, nullable=False),
     Column("erkennung", Text, nullable=False),
+    # AP-04sw: Pflichtfeld wie an den anderen drei abgeleiteten Tabellen.
+    Column("sicht", Text, nullable=False, server_default="konto"),
     CheckConstraint(
         "verknuepfungstyp IN ('open', 'roll', 'close', 'adjust')",
         name="ck_chain_links_verknuepfungstyp",
@@ -593,6 +612,7 @@ chain_links = Table(
         "erkennung IN ('auto', 'heuristik', 'manuell')",
         name="ck_chain_links_erkennung",
     ),
+    CheckConstraint("sicht IN ('konto', 'kette')", name="ck_chain_links_sicht"),
 )
 
 campaigns = Table(

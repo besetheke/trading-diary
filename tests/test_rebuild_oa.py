@@ -73,15 +73,26 @@ def _optionapp_trade(
 
 
 def _kette_zeile(db_pfad) -> dict:
+    # AP-04sw: natur_schluessel ist seither nur noch je sicht eindeutig;
+    # dieser Test kennt nur die Kontosicht.
     engine = create_db_engine(db_pfad)
     with engine.begin() as verbindung:
-        return dict(verbindung.execute(select(chains)).mappings().one())
+        return dict(
+            verbindung.execute(
+                select(chains).where(chains.c.sicht == "konto")
+            ).mappings().one()
+        )
 
 
 def _struktur_zeilen(db_pfad) -> list[dict]:
     engine = create_db_engine(db_pfad)
     with engine.begin() as verbindung:
-        return [dict(z) for z in verbindung.execute(select(structures)).mappings()]
+        return [
+            dict(z)
+            for z in verbindung.execute(
+                select(structures).where(structures.c.sicht == "konto")
+            ).mappings()
+        ]
 
 
 def test_treffer_schreibt_strategie_status_erkennung_an_kette_und_struktur(migrated_db):
