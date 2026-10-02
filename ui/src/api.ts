@@ -22,6 +22,11 @@ export interface Kette {
   waehrung: string | null
   waehrungen: string[]
   sicht: string
+  // AP-13x: OA-Strategie/-Status/-Erkennung der Kette (AP-13wk) — reine
+  // Anzeige, Text oder leer; keine Interpretation.
+  oa_strategie: string | null
+  oa_status: string | null
+  oa_erkennung: string | null
 }
 
 export interface Struktur {
@@ -48,6 +53,10 @@ export interface Struktur {
   netto_pnl: string | null
   waehrung: string
   sicht: string
+  // AP-13x: OA-Strategie/-Status/-Erkennung der Struktur (AP-13wk).
+  oa_strategie: string | null
+  oa_status: string | null
+  oa_erkennung: string | null
 }
 
 export interface Kettenglied {

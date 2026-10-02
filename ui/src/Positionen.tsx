@@ -198,6 +198,7 @@ export default function Positionen(): JSX.Element {
                 <th>Ende</th>
                 <th className="zahl">Rolls</th>
                 <th>Endzustand</th>
+                <th>OA-Strategie</th>
                 <th className="zahl">Preis auf</th>
                 <th className="zahl">Preis zu</th>
                 <th className="zahl">Ergebnis netto¹</th>
@@ -229,6 +230,11 @@ export default function Positionen(): JSX.Element {
                     <td>{kette.beendet_am ? zeit(kette.beendet_am) : '—'}</td>
                     <td className="zahl">{kette.anzahl_rolls}</td>
                     <td>{kette.endzustand ?? '—'}</td>
+                    {/* AP-13x: OA-Strategie der Kette (AP-13wk), reines
+                        Durchreichen; leer bleibt —. Status und Erkennung
+                        bleiben der Detailansicht vorbehalten — die
+                        Listenzeile nicht überladen. */}
+                    <td>{kette.oa_strategie ?? '—'}</td>
                     <td
                       className="zahl"
                       title={

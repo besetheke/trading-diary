@@ -77,6 +77,11 @@ class KetteAntwort(BaseModel):
     waehrung: str | None
     waehrungen: list[str]
     sicht: str
+    # AP-13x: OA-Zuordnung der Kette (AP-13wk) — reines Durchreichen der
+    # gespeicherten Werte, keine Berechnung, keine Interpretation.
+    oa_strategie: str | None
+    oa_status: str | None
+    oa_erkennung: str | None
 
 
 class StrukturAntwort(BaseModel):
@@ -105,6 +110,10 @@ class StrukturAntwort(BaseModel):
     netto_pnl: str | None
     waehrung: str
     sicht: str
+    # AP-13x: OA-Zuordnung der Struktur (AP-13wk) — reines Durchreichen.
+    oa_strategie: str | None
+    oa_status: str | None
+    oa_erkennung: str | None
 
 
 class KettengliedAntwort(BaseModel):
@@ -200,6 +209,10 @@ def _struktur_als_dict(s) -> dict:
         netto_pnl=_als_text(s["netto_pnl"]),
         waehrung=s["waehrung"],
         sicht=SICHT,
+        # AP-13x: direkt aus der Strukturzeile durchreichen — keine Berechnung.
+        oa_strategie=s["oa_strategie"],
+        oa_status=s["oa_status"],
+        oa_erkennung=s["oa_erkennung"],
     )
 
 
@@ -233,6 +246,12 @@ def _kette_als_dict(
         waehrung=waehrungen[0] if len(waehrungen) == 1 else None,
         waehrungen=waehrungen,
         sicht=SICHT,
+        # AP-13x: die Kette trägt diese Spalten bereits (AP-13w-Migration) —
+        # direkt aus der Kettenzeile, nicht über _ketten_zuschuesse()
+        # hergeleitet.
+        oa_strategie=k["oa_strategie"],
+        oa_status=k["oa_status"],
+        oa_erkennung=k["oa_erkennung"],
     )
 
 

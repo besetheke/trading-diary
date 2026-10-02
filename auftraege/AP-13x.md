@@ -1,7 +1,7 @@
 ---
 titel: OA-Strategie und -Status in API und UI
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13wk
 ---
 

@@ -27,6 +27,15 @@ function erkennung(schluessel: string): string {
   return ERKENNUNGEN[schluessel] ?? schluessel
 }
 
+// AP-13x, Regel 7: Die OA-Zuordnung ist automatisch erzeugt — und bei
+// Unsicherheit (Fingerabdruck weicht ab) muss das erkennbar bleiben, statt
+// als stille Tatsache serviert zu werden. Ein Tooltip genügt (Vertrag).
+function oaErkennungsHinweis(wert: string | null): string | undefined {
+  if (wert === 'auto') return 'automatisch'
+  if (wert === 'heuristik') return 'unsicher, Fingerabdruck weicht ab'
+  return undefined
+}
+
 export default function PositionDetail(): JSX.Element {
   const { chainId } = useParams()
   const nummer = Number.parseInt(chainId ?? '', 10)
@@ -202,6 +211,20 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
           <dt>Struktur</dt>
           <dd className="schluessel" title={struktur.natur_schluessel}>
             {struktur.natur_schluessel}
+          </dd>
+        </div>
+        {/* AP-13x: OA-Strategie und -Status der Struktur (AP-13wk), direkt
+            nach der Verknüpfungs-Erkennung im Kartenkopf — reines
+            Durchreichen, leer bleibt —. Die OA-Erkennung wird nur als
+            Hinweis (title) beim Status sichtbar, kein eigenes Element. */}
+        <div>
+          <dt>OA-Strategie</dt>
+          <dd>{struktur.oa_strategie ?? '—'}</dd>
+        </div>
+        <div>
+          <dt>OA-Status</dt>
+          <dd title={oaErkennungsHinweis(struktur.oa_erkennung)}>
+            {struktur.oa_status ?? '—'}
           </dd>
         </div>
         <div>
