@@ -2593,3 +2593,60 @@ umgeleitete Beine ohne freien Schließer bleiben offene Ketten (AP-04s-Grenze)
 und fallen aus den abgeschlossenen Kennzahlen heraus; die Degradation in
 Tranche III muss das ausweisen.
 
+## OF-62 · Regel 3 (wirtschaftliche Sicht): Mengenvorzeichen und Leg-Anteile am Echtbestand
+
+Der erste Echtlauf (03.10.2026) machte die wirtschaftliche EUR-Sicht
+unplausibel (−75,9 Mio EUR bei +210 k Handelswährung). Zwei Befunde, beide
+handgerechnet: IB Flex trägt das SELL-/BUY-Vorzeichen zusätzlich in der
+Menge — Regel 3 wertete es doppelt (AP-03, Regel 1 / OF-13 gilt auch hier);
+und bei Teilablösungen/Assignments ist `legs.menge` der Anteil der Kette an
+der Ausführung, nicht deren Gesamtmenge (AP-03, Regel 5).
+
+**Behoben (AP-06vk):** `_wirtschaftlich` rechnet je Leg-Seite mit
+`leg.menge` und vorzeichenloser Menge; die Kommission läuft anteilig mit dem
+Kurs der jeweiligen Seite. Die Abnahmebasis (alle Mengen je Leg 1) bleibt
+unberührt grün; Handrechnungen Kette 7184/9533/9215 stimmen centgenau.
+Künftig gilt: Wer Regel 3 ändert, muss die drei Echtlauf-Ketten als
+Regression im Blick behalten (bis ein dauerhafter Test existiert).
+
+## OF-63 · Schema-Drift: journal.db trug oa_*-Spalten ohne Migration
+
+Am 03.10.2026 brach `alembic upgrade head` auf `journal.db` mit
+`CircularDependencyError` — `structures` hatte die Spalten
+`oa_strategie/oa_status/oa_erkennung` bereits (alle NULL, ohne das
+CHECK `ck_structures_oa_erkennung`), obwohl `alembic_version` auf
+`d4f8b2c6a913` stand und `chains` die Spalten nicht hatte. Ein
+Migrationsrest scheidet aus (das CHECK fehlte); die Ursache ist aus dem
+Repo nicht rekonstruierbar.
+
+**Behoben (03.10.2026):** Backup
+(`backups/journal_2026-10-03_pre_e5f2b8c4d7a1.sqlite`, `VACUUM INTO`),
+`DROP COLUMN` der drei driftenden Spalten (0 Zeilen betroffen), danach
+`a3e8f1c9d426 → b7f4e2a8c1d5 → e5f2b8c4d7a1` regulär; Null-Drift-Beweis
+durch Spalten-/Constraint-/FK-Vergleich gegen eine frisch migrierte Leerd-DB
+(einziger Unterschied: FK-Nummerierungsreihenfolge, semantisch bedeutungslos).
+
+**Offen:** Die Ursache des Drifts ist unbekannt. Beobachtung: Nach jedem
+manuellen Schema-Eingriff außerhalb der Migrationen gilt
+`alembic current` allein nicht mehr als Drift-Freiheits-Beweis — der
+Schema-Vergleich gegen eine frische Head-DB (wie oben) ist der zuverlässige
+Check und sollte nach auffälligen Ereignissen wiederholt werden.
+
+## OF-64 · Betriebsrisiko: journal.db liegt auf dem Google-Drive-Volume
+
+Beim ersten Echtlauf brach der Commit des Kontosicht-Berichts mit
+`sqlite3.OperationalError: disk I/O error` ab (nach 46 s Rechnung, DB
+gesund, kein WAL-Rest, 11 GB frei); der Wiederholungslauf war sofort grün.
+`journal.db` liegt unter `G:\Meine Ablage\#Code#\Trading Diary` — ein
+Cloud-Sync-Volume. Der Sync-Client fasst die wachsende DB (164→171 MB durch
+den ersten Bericht) genau beim Commit an; WAL-/SHM-Memory-Mapping und
+Datei-Upload konkurrieren. Der Plan (§3) sieht die Arbeits-DB ohnehin lokal
+und nur das Backup (`VACUUM INTO`) aufs Netzlaufwerk.
+
+**Offen (Nutzerentscheidung):** Arbeits-DB auf ein lokales Laufwerk
+verschieben (Startskripte und `JOURNAL_DB` entsprechend anpassen) oder das
+betriebliche Risiko akzeptieren und nur die Häufigkeit flüchtiger
+Commit-Fehler beobachten. Ein Wiederholungslauf nach einem `disk I/O error`
+ist bis dahin die dokumentierte Erste-Hilfe.
+
+

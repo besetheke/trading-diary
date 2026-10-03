@@ -132,35 +132,87 @@ def _beteiligt(
         ) from None
 
 
-def _wirtschaftlich(ausfuehrungen: list[dict], mult_je_conid: dict) -> Decimal | None:
-    """Regel 3: je Ausführung ``preis × menge × multiplikator`` mit Vorzeichen
-    der Seite (SELL +, BUY −), multipliziert mit dem buchungskurs derselben
-    Ausführung; die Kommission derselben Ausführung läuft mit demselben Kurs
-    (dokumentierte Annahme: ``kommission_waehrung`` ist die Währung der
-    Ausführung, wie der Flex-Export sie liefert). E4: fehlt ein Kurs, gibt es
-    keinen Wert — None, kein Ersatzkurs.
+def _wirtschaftlich(
+    legs: list[dict], exec_je_id: dict, mult_je_conid: dict
+) -> Decimal | None:
+    """Regel 3, je Leg-Seite: ``preis × leg.menge × multiplikator`` mit
+    Vorzeichen der Seite (SELL +, BUY −), multipliziert mit dem buchungskurs
+    derselben Ausführung; die Kommission derselben Ausführung läuft mit
+    demselben Kurs, anteilig nach Leg-Menge (AP-03, Regel 5 — die Menge einer
+    Ausführung kann über mehrere Legs, Strukturen oder Sichten geteilt sein).
+
+    AP-06vk (03.10.2026, Echtlauf): zwei Korrekturen gegenüber der ersten
+    Fassung, beide an der Abnahmebasis vorbei entstanden, weil deren Welt
+    „alle Mengen je Leg 1" und je Ausführung 1 testet:
+
+    - Die Menge ist vorzeichenlos einzusetzen (AP-03, Regel 1 / OF-13): IB Flex
+      trägt das Seitenvorzeichen zusätzlich in der Menge (SELL = negativ); die
+      Doppelverwendung kippte jeden Verkaufscashflow (Kette 7184 als
+      Handrechnung: SELL 5,82 × menge −1 × mult 100 ergab −582 statt +582).
+    - Geldwert ist der Leg-Anteil, nicht die Gesamtausführung (AP-03, Regel 5):
+      Bei Teilablösungen (Roll) und Assignments steht in ``legs.menge`` der
+      zugeordnete Anteil; die volle Ausführung je Leg zu werten zählte
+      geteilte Ströme doppelt (Kette 9533: exec SELL 262,30 × 40 auf zwei
+      Legs mit je menge 10 — +52.460 doppelt) und Assignment-Cashflows
+      verzerrt (Kette 9215: leg menge 5 gegen exec menge 100).
+
+    E4: fehlt ein Kurs einer beteiligten Ausführung, gibt es keinen Wert —
+    None, kein Ersatzkurs.
     """
-    if any(a["buchungskurs"] is None for a in ausfuehrungen):
-        return None
+    for leg in legs:
+        for schluessel in ("open_exec_id", "close_exec_id"):
+            if leg[schluessel] is None:
+                continue
+            try:
+                a = exec_je_id[leg[schluessel]]
+            except KeyError as e:
+                raise ValueError(
+                    f"Ausführung {e.args[0]!r} ist in einem Leg referenziert, "
+                    "aber nicht unter den Ausführungszeilen — kein Raten "
+                    "(AP-06v, Regel 3)"
+                ) from None
+            if a["buchungskurs"] is None:
+                return None
     summe = _NULL
-    for a in ausfuehrungen:
-        vorzeichen = _VORZEICHEN.get(a["side"])
-        if vorzeichen is None:
-            raise ValueError(
-                f"Ausführung {a['exec_id']}: unbekannte Seite {a['side']!r} — "
-                "kein Vorzeichen ableitbar (AP-06v, Regel 3)"
+    for leg in legs:
+        # Regel 5 (kein float): Leg-Mengen können als int ankommen — hier
+        # normalisieren, nicht bei jeder Rechnung.
+        leg_menge = (
+            leg["menge"] if isinstance(leg["menge"], Decimal) else Decimal(leg["menge"])
+        )
+        for schluessel in ("open_exec_id", "close_exec_id"):
+            exec_id = leg[schluessel]
+            if exec_id is None:
+                continue
+            a = exec_je_id[exec_id]
+            vorzeichen = _VORZEICHEN.get(a["side"])
+            if vorzeichen is None:
+                raise ValueError(
+                    f"Ausführung {exec_id}: unbekannte Seite {a['side']!r} — "
+                    "kein Vorzeichen ableitbar (AP-06v, Regel 3)"
+                )
+            try:
+                multiplikator = mult_je_conid[a["conid"]]
+            except KeyError:
+                raise ValueError(
+                    f"Ausführung {exec_id}: kein Instrument zu conid {a['conid']} "
+                    "— kein Multiplikator ableitbar (AP-06v, Regel 3)"
+                ) from None
+            gesamtmenge = abs(a["menge"])
+            if gesamtmenge == _NULL:
+                raise ValueError(
+                    f"Ausführung {exec_id}: menge 0 — kein Kommissionsanteil "
+                    "ableitbar (AP-06v, Regel 3; AP-03, Regel 5)"
+                )
+            kommission = (
+                a["kommission"] * (leg_menge / gesamtmenge)
+                if a["kommission"] is not None
+                else _NULL
             )
-        try:
-            multiplikator = mult_je_conid[a["conid"]]
-        except KeyError:
-            raise ValueError(
-                f"Ausführung {a['exec_id']}: kein Instrument zu conid {a['conid']} "
-                "— kein Multiplikator ableitbar (AP-06v, Regel 3)"
-            ) from None
-        kommission = a["kommission"] if a["kommission"] is not None else _NULL
-        summe += (
-            vorzeichen * a["preis"] * a["menge"] * multiplikator + kommission
-        ) * a["buchungskurs"]
+            summe += (
+                vorzeichen * a["preis"] * abs(leg_menge) * multiplikator
+                + kommission
+            ) * a["buchungskurs"]
     return summe
 
 
@@ -266,7 +318,11 @@ def kennzahlen_auswertung(
         eur_kurs_fehlt = sum(1 for a in beteiligte if a["buchungskurs"] is None)
         if eur_kurs_fehlt:
             fehler_menge.add((str(chain_id), "buchungskurs_fehlt"))
-        wirtschaftlich = _wirtschaftlich(beteiligte, mult_je_conid) if netto is not None else None
+        wirtschaftlich = (
+            _wirtschaftlich(_ketten_legs(structure_ids), exec_je_id, mult_je_conid)
+            if netto is not None
+            else None
+        )
         letzte = _letzte_schliessung(_ketten_legs(structure_ids), exec_je_id)
         ib = None
         if netto is not None and letzte is not None and letzte["buchungskurs"] is not None:
@@ -304,9 +360,12 @@ def kennzahlen_auswertung(
                 "nennen eine Kette — kein Raten (AP-06v, Regel 2)"
             )
         netto = s["netto_pnl"]
-        beteiligte = _beteiligt([structure_id], legs_je_struktur, exec_je_id)
         wirtschaftlich = (
-            _wirtschaftlich(beteiligte, mult_je_conid) if netto is not None else None
+            _wirtschaftlich(
+                legs_je_struktur.get(structure_id, []), exec_je_id, mult_je_conid
+            )
+            if netto is not None
+            else None
         )
         struktur_ergebnisse.append(
             KennzahlStruktur(
