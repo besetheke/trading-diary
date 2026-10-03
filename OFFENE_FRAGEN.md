@@ -2609,6 +2609,17 @@ unberührt grün; Handrechnungen Kette 7184/9533/9215 stimmen centgenau.
 Künftig gilt: Wer Regel 3 ändert, muss die drei Echtlauf-Ketten als
 Regression im Blick behalten (bis ein dauerhafter Test existiert).
 
+**Nachtrag (AP-06vr, 03.10.2026):** Der dauerhafte Regressionstest existiert
+— `tests/test_kennzahlen_regression.py` (eigene Datei, Abnahmebasis bleibt
+eingefroren), drei Welten nach den Handrechnungsketten 7184/9533/9215:
+Vorzeichen, Teilablösung, Assignment. Festgehalten ist auch die dabei
+gemessene Mengen-Konvention des Bestands: `legs.menge` vorzeichenlos
+(21.000 von 21.000 Zeilen positiv, `engine/matching.py` speichert `abs`),
+`executions.menge` mit IB-Flex-Vorzeichen (SELL negativ, 16.244 Zeilen) —
+nur so ist der Kommissionsanteil `leg.menge/|exec.menge|` vorzeichenlos
+korrekt. Wer eine der beiden Konventionen „vereinheitlicht", kippt Regel 3
+und wird von genau diesem Test erwischt.
+
 ## OF-63 · Schema-Drift: journal.db trug oa_*-Spalten ohne Migration
 
 Am 03.10.2026 brach `alembic upgrade head` auf `journal.db` mit
