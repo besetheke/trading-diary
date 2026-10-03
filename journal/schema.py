@@ -571,8 +571,10 @@ chains = Table(
     Column("anzahl_rolls", Integer, nullable=False),
     # Verfall / Geschlossen / Assigned / Offen
     Column("endzustand", Text, nullable=True),
-    # Berichtswährung EUR (P4); die Umrechnung geschieht in der Analyseschicht
-    # über fx_rates, das Ergebnis wird hier gespeichert.
+    # Berichtswährung EUR (P4) — bleibt dauerhaft leer (AP-06, Entscheidung
+    # E2): Der Rebuild setzt die Spalte bei jedem Lauf auf None, die
+    # EUR-Materialisierung liegt in metrics_by_chain
+    # (netto_eur_wirtschaftlich / netto_eur_ib).
     Column("netto_pnl_eur", ExactDecimal, nullable=True),
     # Wie bei `structures`: der Naturschlüssel der eröffnenden Struktur, mit
     # `k:` davor. Rolls hängen hinten an, der Kettenanfang bleibt derselbe —
@@ -753,10 +755,34 @@ fx_rates = Table(
 # ---------------------------------------------------------------------------
 
 # Stellvertreter: der Plan nennt nur die Namen. Die eigentliche Form (Spalten,
-# Aggregationsebene) legt AP-06 über eine Migration fest — dokumentiert in
-# OFFENE_FRAGEN.md (OF-01).
+# Aggregationsebene) legen die Tranchen von AP-06 über Migrationen fest —
+# dokumentiert in OFFENE_FRAGEN.md (OF-01).
 metrics_daily = Table("metrics_daily", metadata, Column("id", Integer, primary_key=True))
-metrics_by_chain = Table("metrics_by_chain", metadata, Column("id", Integer, primary_key=True))
+
+# AP-06 E2: EUR-Materialisierung je Kette (Cache, verwerfbar). Vollständig neu
+# geschrieben von `journal kennzahlen` (Regel 11), nie vom Rebuild. chain_id
+# ist je Sicht eindeutig: Ketten beider Sichten tragen eigene chain_id, jede
+# Kette genau eine Zeile. NULL nur nach Regel 11 (offen oder Kursmangel).
+# ON DELETE CASCADE (Löschverhalten, OF-01): Verschwindet eine Kette im
+# Rebuild, fällt die Cache-Zeile mit ihr — sonst könnte der Rebuild Ketten
+# nicht mehr löschen, sobald einmal Kennzahlen gelaufen ist (journal/db.py
+# schaltet PRAGMA foreign_keys ein).
+metrics_by_chain = Table(
+    "metrics_by_chain",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "chain_id",
+        ForeignKey("chains.chain_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    ),
+    # Maßgebliche wirtschaftliche Sicht (Regel 3) …
+    Column("netto_eur_wirtschaftlich", ExactDecimal, nullable=True),
+    # … und die IB-vergleichbare (Regel 4); der Währungseffekt ist die
+    # Differenz und wird nicht gespeichert.
+    Column("netto_eur_ib", ExactDecimal, nullable=True),
+)
 metrics_by_campaign = Table(
     "metrics_by_campaign", metadata, Column("id", Integer, primary_key=True)
 )
