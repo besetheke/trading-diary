@@ -14,6 +14,22 @@ Initialmigration das vollständige Schema aus §5 enthält und der Rauchtest
 (Spalten, Aggregationsebene, Löschverhalten) sollte AP-06 über eine Migration
 festlegen.
 
+**Teilweise geschehen (AP-06v, E2 — Nutzerfreigabe):** `metrics_by_chain`
+wird in Tranche I minimal geformt (`chain_id` eindeutig auf `chains.chain_id`,
+`netto_eur_wirtschaftlich`, `netto_eur_ib`), weil die Analyseschicht die
+EUR-Werte in den Cache legt statt in `chains.netto_pnl_eur` — dort setzt sie
+der Rebuild bei jedem Lauf auf `None` zurück, ein Wert wäre eine stille
+Reihenfolge-Abhängigkeit (Rebuild vor Analytik). `chains.netto_pnl_eur`
+bleibt dauerhaft leer (Plan §5 führt die Spalte; die Verankerung „leer nach
+rebuild“ in `tests/test_rebuild.py` bleibt gültig, nur der Spaltenkommentar
+wird korrigiert). Das Löschverhalten ist mitgeformt: `chain_id` trägt
+`ON DELETE CASCADE` — verschwindet eine Kette im Rebuild, fällt ihre
+Cache-Zeile mit ihr (der Rebuild bleibt von der Analytik unberührt; ohne
+CASCADE liefe sein Löschen verschollener Ketten auf einen IntegrityError,
+sobald einmal Kennzahlen gelaufen ist), Werte überlebender Ketten gelten
+fort, bis der nächste Bericht sie neu schreibt. `metrics_daily` (Tranche IV)
+und `metrics_by_campaign` (Tranche V) bleiben weiter offen.
+
 ## OF-02 · Form der Override-Tabellen `chain_overrides` und `campaign_overrides`
 
 Plan §5 nennt sie ohne Spalten („manuelle Korrekturen der Erkennung“).
@@ -2116,6 +2132,40 @@ Anwendung nach `pip install -e .` nicht startbar gewesen — FastAPI bringt
 keinen Server mit.
 
 Die Lücke lag in den Abnahmebasen AP-07lv und AP-08lv: Sie nannten `fastapi`
+
+## OF-58 · AP-10: Jahresgrenze der steuerlichen Auswertung ohne Zeitzonen (naiv, wie gespeichert)
+
+Die steuerliche Auswertung (AP-10) legt das Zuflussjahr mit dem Jahr der
+`handelszeit` der schließenden Ausführung fest — naiv, wie der Import die
+Zeiten speichert (Anschluss an OF-04, das dieselbe Frage für die Engine
+entschieden hat). Geschäfte kurz vor Mitternacht einer Jahrgrenze können so
+im anderen Jahr landen, als eine um UTC (IB handelt in Amerika-typischen
+Zeiten meist gegen 22:30 MEZ — die Grenzfälle sind selten, aber existieren).
+Nicht geraten, sondern bewusst geparkt: Eine Zeitzonen-Migration wäre eine
+eigene Datenmigration über alle `handelszeit`-Spalten mit eigener
+Abnahmebasis; sie ändert Daten, nicht den Vertrag von AP-10. Bis dahin gilt
+wie bei OF-04: naiv wie gespeichert, dokumentiert in
+auftraege/AP-10v.md (Entscheidung 2, Regel 3).
+
+## OF-59 · AP-10: EUR-Ausweis der Steuerzahlen über den Buchungskurs — die wirtschaftliche Sicht bleibt offen
+
+AP-10 weist jede Topfzeile zusätzlich als `netto_eur_ib` aus: netto ×
+`buchungskurs` der schließenden Ausführung. Das ist die Sicht, die auch IB
+seinen Reports zugrunde legt (ein Kurs je Buchungstag), und damit die
+einzige, die gegen IB prüfbar ist. Die steuerlich möglicherweise gebotene
+Sicht — Kurs je Zahlungsstrom, d. h. Eröffnung und Schließung jeder Leg
+einzeln umgerechnet — ist eine andere Zahl und mit dem Steuerberater zu
+klären; sie bewusst nicht geraten. Zwei Konsequenzen sind dokumentiert:
+
+1. Fehlt der Buchungskurs einer Schließung, bleibt die EUR-Spalte für diese
+   Leg leer, `eur_kurs_fehlt` zählt den Mangel und die Fehlerliste benennt
+   ihn (`buchungskurs_fehlt`) — kein stiller Kurs 1, auch nicht bei
+   EUR-Instrumenten (AP-10v, Regel 6).
+2. Bei Zuteilung/Ausübung kann die Journa-Zahl von der IB-Zahl abweichen,
+   weil die geparkte Prämie (OF-24-Auflage) noch nicht gebaut ist. AP-10
+   exportiert deshalb nur die Journa-Sicht-Komponenten; die
+   IB-Paritätbarkeit folgt mit OF-24, nicht hier.
+
 und `httpx`, aber nicht den Server, der beides ausliefert. Nachgetragen als
 Laufzeitabhängigkeit.
 
@@ -2497,3 +2547,49 @@ Vorbereitungspakets. Bis dahin bleibt AP-13s dritte Abnahmegröße
 („Abweichungen erklärbar") offen; die ersten beiden (Abdeckung ≥ 95 %,
 Fehlerliste) sind mit OF-55/OF-56 klar erfüllt (100 % Abdeckung, 0
 Fehler, gemessen an `Trades_2026-02_OA.xlsx`).
+
+## OF-60 · fx_rates: Tageskurs-Regel „letzte Ausführung des Tages" ist eine Annahme
+
+Der Plan (§5) nennt `fx_rates` als Kursquelle der Analyseschicht, aber ohne
+Regel, welcher Kurs an einem Tag mit mehreren verschiedenen
+`fxRateToBase`-Werten gilt (AP-06v, Entscheidung E3).
+
+**Annahme (AP-06v, Regel 11):** Kennzahlen rechnen niemals aus `fx_rates`,
+sondern je Ausführung mit deren eigenem `buchungskurs` (wirtschaftliche
+Sicht). `fx_rates` ist eine verwerfbare Materialisierung für Inspektion und
+spätere Tranchen: je (datum, waehrung ≠ EUR) der `buchungskurs` der letzten
+Ausführung des Tages (max `handelszeit`, Gleichstand größte `exec_id`),
+`quelle = 'abgeleitet_letzte_ausfuehrung'` — als abgeleitet gekennzeichnet,
+damit sie niemand mit einer echten Kursquelle verwechselt (Nutzerfreigabe
+E3). Anlage: `analytics/kennzahlen.py`
+(`fx_tageskurse`, `kennzahlen_bericht`).
+
+**Offen:** (a) Ob Tranche IV (Equity-Kurve/metrics-Cache) stattdessen einen
+Tagesendkurs oder -durchschnitt braucht — dann Regel 11 dort erweitern und
+`quelle` unterscheiden. (b) Ob `fxRateToBase` an echten Tagen überhaupt
+streut — beim ersten echten Datenbestand messen und hier nachtragen.
+
+## OF-61 · Kettensicht: Wie kommen Overrides (bestätigte Rolls) hinein?
+
+AP-04sw wendet `chain_overrides` bewusst nur in der Kontosicht an — Grenze
+von AP-04s („kein Override-Schutz" für die Kettensicht). Bestätigte Rolls
+existieren in der Kettensicht also nicht. Die Abnahme von AP-06 (Plan §6)
+verlangt die Roll-Degradation aber „wahlweise nur auf belegten Ketten oder
+auf belegten plus bestätigten" und nennt in beiden Fällen die Abdeckung —
+die bestätigte Variante ginge mit der Freigabe von E1 in AP-06v sonst still
+verloren.
+
+**Entschieden (Nutzerfreigabe E1, AP-06v):** Tranche I startet mit der
+dokumentierten Einschränkung. Vor Tranche III ist ein kleines Nachziehpaket
+„Overrides auch in der Kettensicht anwenden" zu bauen — erst dann darf die
+Degradationsvariante „belegte plus bestätigte" als erfüllt gelten.
+
+**Nicht geraten:** Ob Overrides je Sicht angewandt werden (eigene
+Zuordnungen für Ketten der Kettensicht) oder bestätigte Kontosicht-Rolls auf
+die Ketten der Kettensicht abgebildet werden, ist eine Designfrage mit
+unterschiedlichen Folgen für Naturschlüssel-Abgleich und Verwaisung — erst
+mit echten Roll-Kandidaten entscheidbar. Dazugehört die Abdeckungs-Angabe:
+umgeleitete Beine ohne freien Schließer bleiben offene Ketten (AP-04s-Grenze)
+und fallen aus den abgeschlossenen Kennzahlen heraus; die Degradation in
+Tranche III muss das ausweisen.
+
