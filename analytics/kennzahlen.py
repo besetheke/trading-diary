@@ -1,0 +1,652 @@
+"""Kennzahlen je Ebene und EUR-Fundament (AP-06, Tranche I „Analytik I").
+
+Vertrag ist ``auftraege/AP-06v.md``; die Abnahmetests in
+``tests/test_kennzahlen.py`` sind unveränderlich — jede Abweichung dieser
+Implementierung von den Tests ist ein Fehler hier, nicht dort. Alle Beträge
+sind ``Decimal``: kein float, keine stillen Rundungen (CLAUDE.md, Regel 5).
+
+Aufteilung nach P2/P3:
+
+- ``kennzahlen_auswertung`` und ``fx_tageskurse`` sind rein — keine Uhr,
+  kein Netzwerk, kein Zufall; gleiche Eingabe liefert bitgleiche Ausgabe.
+- ``kennzahlen_bericht`` ist die einzige Stelle mit Schreibzugriffen: Sie
+  schreibt ``fx_rates`` und ``metrics_by_chain`` vollständig neu (Regel 11)
+  und lässt ``chains.netto_pnl_eur`` leer (E2).
+
+Freigegebene Entscheidungen, hier wirksam: E1 — die Auswertungssicht ist
+Parameter, jede Ergebniszeile trägt ihre Sicht, niemals gemischt. E2 — die
+wirtschaftliche EUR-Sicht ist maßgeblich, gespeichert wird in
+``metrics_by_chain``. E3 — ``fx_rates`` ist Materialisierung mit
+``quelle = 'abgeleitet_letzte_ausfuehrung'``, keine Rechenquelle. E4 — ein
+fehlender buchungskurs ist ein gezählter Mangel, nie ein stiller Kurs 1.
+E5 — netto exakt 0,00 zählt in den Nenner der Trefferquote, nicht in den
+Zähler. E6 — die Qualitätsstufe ist das Minimum über die beteiligten
+Ausführungen, gebildet über eine explizite Rangfolge im Code.
+"""
+
+import pathlib
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
+
+from sqlalchemy import delete, insert, select
+
+from journal.db import create_db_engine
+from journal.schema import (
+    chain_links,
+    chains,
+    executions,
+    fx_rates,
+    instruments,
+    legs,
+    metrics_by_chain,
+    structures,
+)
+
+# E6: explizite Rangfolge statt Stringvergleich — A < B < C ist heute
+# zufällig alphabetisch, eine dazukommende Stufe bräche sonst still.
+STUFEN_RANG = {"A": 0, "B": 1, "C": 2}
+
+# E3: Kennzeichnung der abgeleiteten Tageskurse — nicht mit einer echten
+# Kursquelle verwechselbar.
+QUELLE_ABGELEITET = "abgeleitet_letzte_ausfuehrung"
+
+_VORZEICHEN = {"SELL": 1, "BUY": -1}
+_NULL = Decimal("0")
+_VIER_STELLEN = Decimal("0.0001")
+
+
+@dataclass(frozen=True)
+class KennzahlKette:
+    chain_id: int
+    sicht: str                      # 'kette' oder 'konto' — immer gefüllt
+    underlying: str
+    asset_class: str
+    anzahl_rolls: int
+    abgeschlossen: bool             # beendet_am ist nicht leer
+    waehrung: str                   # der Strukturen der Kette
+    netto: Decimal | None           # Instrumentenwährung, Summe der Strukturen
+    netto_eur_wirtschaftlich: Decimal | None
+    netto_eur_ib: Decimal | None
+    waehrungseffekt_eur: Decimal | None   # wirtschaftlich − IB
+    eur_kurs_fehlt: int             # Ausführungen der Kette ohne buchungskurs
+    qualitaetsstufe: str            # schlechteste beteiligte Ausführung
+
+
+@dataclass(frozen=True)
+class KennzahlStruktur:
+    structure_id: int
+    chain_id: int
+    sicht: str
+    typ: str
+    waehrung: str
+    brutto: Decimal | None
+    kommission: Decimal | None
+    netto: Decimal | None
+    netto_eur_wirtschaftlich: Decimal | None
+
+
+@dataclass(frozen=True)
+class KennzahlFehler:
+    """Fehlerzeile nach AP-06v — ``KennzahlErgebnis.fehler`` trägt die Paare
+    als einfache Tupel ``(schluessel, grund)``, weil die Abnahmebasis sie so
+    vergleicht; diese Klasse benennt nur die Bedeutung der Felder."""
+
+    schluessel: str                 # Ketten-Id als Text
+    grund: str                      # 'buchungskurs_fehlt' | 'waehrung_gemischt'
+
+
+@dataclass(frozen=True)
+class KennzahlErgebnis:
+    sicht: str
+    ketten: tuple[KennzahlKette, ...]
+    strukturen: tuple[KennzahlStruktur, ...]
+    fehler: tuple[tuple[str, str], ...]
+    summe_netto_eur: Decimal | None     # wirtschaftlich, ohne mangelbehaftete
+    trefferquote_kette: Decimal | None  # 4 Stellen, HALF_UP
+    trefferquote_struktur: Decimal | None
+    anzahl_ketten_abgeschlossen: int
+    anzahl_strukturen_abgeschlossen: int
+
+
+def _beteiligt(
+    structure_ids: list[int], legs_je_struktur: dict[int, list[dict]], exec_je_id: dict
+) -> list[dict]:
+    """Je Ausführung genau einmal (Regel 3): Der Zahlungsstrom läuft je
+    beteiligter Ausführung mit deren Menge — teilt ein Roll eine Ausführung
+    zwischen zwei Legs, zahlt sie trotzdem nur einmal; die Leg-Mengen
+    summieren sich zur Ausführungsmenge, ein Doppelanschluss verdoppelte den
+    Strom sonst still.
+    """
+    ids: list[str] = []
+    for structure_id in structure_ids:
+        for leg in legs_je_struktur.get(structure_id, ()):
+            ids.append(leg["open_exec_id"])
+            if leg["close_exec_id"] is not None:
+                ids.append(leg["close_exec_id"])
+    try:
+        return [exec_je_id[i] for i in dict.fromkeys(ids)]
+    except KeyError as e:
+        raise ValueError(
+            f"Ausführung {e.args[0]!r} ist in einem Leg referenziert, aber nicht "
+            "unter den Ausführungszeilen — kein Raten (AP-06v, Regel 3)"
+        ) from None
+
+
+def _wirtschaftlich(ausfuehrungen: list[dict], mult_je_conid: dict) -> Decimal | None:
+    """Regel 3: je Ausführung ``preis × menge × multiplikator`` mit Vorzeichen
+    der Seite (SELL +, BUY −), multipliziert mit dem buchungskurs derselben
+    Ausführung; die Kommission derselben Ausführung läuft mit demselben Kurs
+    (dokumentierte Annahme: ``kommission_waehrung`` ist die Währung der
+    Ausführung, wie der Flex-Export sie liefert). E4: fehlt ein Kurs, gibt es
+    keinen Wert — None, kein Ersatzkurs.
+    """
+    if any(a["buchungskurs"] is None for a in ausfuehrungen):
+        return None
+    summe = _NULL
+    for a in ausfuehrungen:
+        vorzeichen = _VORZEICHEN.get(a["side"])
+        if vorzeichen is None:
+            raise ValueError(
+                f"Ausführung {a['exec_id']}: unbekannte Seite {a['side']!r} — "
+                "kein Vorzeichen ableitbar (AP-06v, Regel 3)"
+            )
+        try:
+            multiplikator = mult_je_conid[a["conid"]]
+        except KeyError:
+            raise ValueError(
+                f"Ausführung {a['exec_id']}: kein Instrument zu conid {a['conid']} "
+                "— kein Multiplikator ableitbar (AP-06v, Regel 3)"
+            ) from None
+        kommission = a["kommission"] if a["kommission"] is not None else _NULL
+        summe += (
+            vorzeichen * a["preis"] * a["menge"] * multiplikator + kommission
+        ) * a["buchungskurs"]
+    return summe
+
+
+def _letzte_schliessung(legs: list[dict], exec_je_id: dict) -> dict | None:
+    """Regel 4: die zeitlich letzte schließende Ausführung der übergebenen
+    Legs; bei Gleichstand der handelszeit entscheidet die größte exec_id
+    (Textvergleich, wie executions.exec_id gespeichert ist)."""
+    schliessungen = [
+        exec_je_id[leg["close_exec_id"]] for leg in legs if leg["close_exec_id"] is not None
+    ]
+    if not schliessungen:
+        return None
+    return max(schliessungen, key=lambda a: (a["handelszeit"], a["exec_id"]))
+
+
+def _qualitaetsstufe(ausfuehrungen: list[dict]) -> str:
+    """E6: Minimum über die beteiligten Ausführungen, über die explizite
+    Rangfolge STUFEN_RANG. Ohne Ausführungen vakant 'A'; eine unbekannte
+    Stufe wirft benannt statt still zu sortieren."""
+    try:
+        rang = min(STUFEN_RANG[a["qualitaetsstufe"]] for a in ausfuehrungen)
+    except KeyError as e:
+        raise ValueError(
+            f"Unbekannte qualitaetsstufe {e.args[0]!r} — keine Rangfolge "
+            "definiert (AP-06v, E6)"
+        ) from None
+    except ValueError:
+        rang = 0
+    return next(stufe for stufe, r in STUFEN_RANG.items() if r == rang)
+
+
+def _quote(zaehler: int, nenner: int) -> Decimal | None:
+    """E5: Quote als Decimal, vier Stellen, HALF_UP — Nenner 0 liefert None."""
+    if nenner == 0:
+        return None
+    return (Decimal(zaehler) / Decimal(nenner)).quantize(
+        _VIER_STELLEN, rounding=ROUND_HALF_UP
+    )
+
+
+def kennzahlen_auswertung(
+    ketten_zeilen: list[dict],
+    struktur_zeilen: list[dict],
+    glieder_zeilen: list[dict],
+    leg_zeilen: list[dict],
+    ausfuehrungs_zeilen: list[dict],
+    instrumenten_zeilen: list[dict],
+    *,
+    sicht: str = "kette",
+    nur_qualitaetsstufe_a: bool = False,
+) -> KennzahlErgebnis:
+    """Ketten- und Strukturkennzahlen nach AP-06v, Regeln 1–10 (rein, P2).
+
+    Eingangszeilen sind plain dicts mit den Spaltennamen der Tabellen; die
+    Zuordnung Struktur → Kette läuft über ``glieder_zeilen`` (chain_links,
+    Regel 2). Regel 1: Zeilen der falschen Sicht liest die Hülle gar nicht
+    erst — das Ergebnis trägt die angeforderte Sicht in jeder Zeile.
+    """
+    if sicht not in ("kette", "konto"):
+        raise ValueError(
+            f"Unbekannte sicht {sicht!r} — erlaubt sind 'kette' und 'konto' "
+            "(AP-06v, Regel 1)"
+        )
+    exec_je_id = {z["exec_id"]: z for z in ausfuehrungs_zeilen}
+    mult_je_conid = {z["conid"]: z["multiplikator"] for z in instrumenten_zeilen}
+    kette_je_id = {z["chain_id"]: z for z in ketten_zeilen}
+    struktur_je_id = {z["structure_id"]: z for z in struktur_zeilen}
+    chain_je_struktur = {z["structure_id"]: z["chain_id"] for z in glieder_zeilen}
+    legs_je_struktur: dict[int, list[dict]] = {}
+    for leg in leg_zeilen:
+        legs_je_struktur.setdefault(leg["structure_id"], []).append(leg)
+
+    def _ketten_legs(structure_ids: list[int]) -> list[dict]:
+        gesamt: list[dict] = []
+        for structure_id in structure_ids:
+            gesamt.extend(legs_je_struktur.get(structure_id, ()))
+        return gesamt
+
+    ketten_ergebnisse: list[KennzahlKette] = []
+    fehler_menge: set[tuple[str, str]] = set()
+    for chain_id in sorted(kette_je_id):
+        zeile = kette_je_id[chain_id]
+        structure_ids = sorted(
+            sid for sid, cid in chain_je_struktur.items() if cid == chain_id
+        )
+        betroffene = [struktur_je_id[sid] for sid in structure_ids if sid in struktur_je_id]
+        fehlende_strukturen = [sid for sid in structure_ids if sid not in struktur_je_id]
+        if fehlende_strukturen:
+            raise ValueError(
+                f"Kette {chain_id}: chain_links ohne structures-Zeile "
+                f"{fehlende_strukturen} — kein Raten (AP-06v, Regel 2)"
+            )
+        waehrungen = sorted({s["waehrung"] for s in betroffene})
+        gemischt = len(waehrungen) > 1
+        if gemischt:
+            # Regel 10: defensive Fehlerzeile statt gemischter Summe.
+            fehler_menge.add((str(chain_id), "waehrung_gemischt"))
+        netto = None
+        if not gemischt and betroffene and all(s["netto_pnl"] is not None for s in betroffene):
+            # Regel 2: Summe der Strukturen; offen oder ohne netto → None.
+            netto = sum((s["netto_pnl"] for s in betroffene), _NULL)
+        beteiligte = _beteiligt(structure_ids, legs_je_struktur, exec_je_id)
+        eur_kurs_fehlt = sum(1 for a in beteiligte if a["buchungskurs"] is None)
+        if eur_kurs_fehlt:
+            fehler_menge.add((str(chain_id), "buchungskurs_fehlt"))
+        wirtschaftlich = _wirtschaftlich(beteiligte, mult_je_conid) if netto is not None else None
+        letzte = _letzte_schliessung(_ketten_legs(structure_ids), exec_je_id)
+        ib = None
+        if netto is not None and letzte is not None and letzte["buchungskurs"] is not None:
+            # Regel 4: netto × Kurs der letzten schließenden Ausführung.
+            ib = netto * letzte["buchungskurs"]
+        effekt = None
+        if wirtschaftlich is not None and ib is not None:
+            # Regel 5: wirtschaftlich − IB; None, sobald ein Kurs fehlt.
+            effekt = wirtschaftlich - ib
+        ketten_ergebnisse.append(
+            KennzahlKette(
+                chain_id=chain_id,
+                sicht=sicht,
+                underlying=zeile["underlying"],
+                asset_class=zeile["asset_class"],
+                anzahl_rolls=zeile["anzahl_rolls"],
+                abgeschlossen=zeile["beendet_am"] is not None,
+                waehrung=waehrungen[0] if waehrungen else "",
+                netto=netto,
+                netto_eur_wirtschaftlich=wirtschaftlich,
+                netto_eur_ib=ib,
+                waehrungseffekt_eur=effekt,
+                eur_kurs_fehlt=eur_kurs_fehlt,
+                qualitaetsstufe=_qualitaetsstufe(beteiligte),
+            )
+        )
+
+    struktur_ergebnisse: list[KennzahlStruktur] = []
+    for structure_id in sorted(struktur_je_id):
+        s = struktur_je_id[structure_id]
+        chain_id = chain_je_struktur.get(structure_id, s.get("chain_id"))
+        if chain_id is None:
+            raise ValueError(
+                f"Struktur {structure_id}: weder chain_links noch die Zeile "
+                "nennen eine Kette — kein Raten (AP-06v, Regel 2)"
+            )
+        netto = s["netto_pnl"]
+        beteiligte = _beteiligt([structure_id], legs_je_struktur, exec_je_id)
+        wirtschaftlich = (
+            _wirtschaftlich(beteiligte, mult_je_conid) if netto is not None else None
+        )
+        struktur_ergebnisse.append(
+            KennzahlStruktur(
+                structure_id=structure_id,
+                chain_id=chain_id,
+                sicht=sicht,
+                typ=s["typ"],
+                waehrung=s["waehrung"],
+                brutto=s["brutto_pnl"],
+                kommission=s["kommission"],
+                netto=netto,
+                netto_eur_wirtschaftlich=wirtschaftlich,
+            )
+        )
+
+    if nur_qualitaetsstufe_a:
+        # E6: Zeilen mit Minimum ≠ A verschwinden ganz (unbewertet gewollt
+        # weggefiltert) — aus Ketten, Strukturen, Summen, Quoten, Anzahlen.
+        # Nach der Abnahmebasis ([1, 2, 4] ohne die offene Kette 3) geht mit
+        # ihnen jede offene, unbewertete Zeile fort: Der Stufe-A-Bericht
+        # zeigt nur Bewertbares — die Fehlerliste der Kursmängel bleibt.
+        erlaubt = {k.chain_id for k in ketten_ergebnisse if k.qualitaetsstufe == "A"}
+        ketten_ergebnisse = [
+            k for k in ketten_ergebnisse if k.chain_id in erlaubt and k.abgeschlossen
+        ]
+        struktur_ergebnisse = [
+            s
+            for s in struktur_ergebnisse
+            if s.chain_id in erlaubt
+            and s.netto is not None
+            and _qualitaetsstufe(_beteiligt([s.structure_id], legs_je_struktur, exec_je_id))
+            == "A"
+        ]
+
+    bewertbare_ketten = [k for k in ketten_ergebnisse if k.abgeschlossen and k.netto is not None]
+    bewertbare_strukturen = [s for s in struktur_ergebnisse if s.netto is not None]
+    beitraege = [
+        k.netto_eur_wirtschaftlich
+        for k in ketten_ergebnisse
+        if k.netto_eur_wirtschaftlich is not None
+    ]
+    return KennzahlErgebnis(
+        sicht=sicht,
+        ketten=tuple(ketten_ergebnisse),
+        strukturen=tuple(
+            sorted(struktur_ergebnisse, key=lambda s: (s.chain_id, s.structure_id))
+        ),
+        fehler=tuple(sorted(fehler_menge)),
+        summe_netto_eur=sum(beitraege, _NULL) if beitraege else None,
+        trefferquote_kette=_quote(
+            sum(1 for k in bewertbare_ketten if k.netto > _NULL),
+            len(bewertbare_ketten),
+        ),
+        trefferquote_struktur=_quote(
+            sum(1 for s in bewertbare_strukturen if s.netto > _NULL),
+            len(bewertbare_strukturen),
+        ),
+        anzahl_ketten_abgeschlossen=sum(1 for k in ketten_ergebnisse if k.abgeschlossen),
+        anzahl_strukturen_abgeschlossen=len(bewertbare_strukturen),
+    )
+
+
+def fx_tageskurse(ausfuehrungs_zeilen: list[dict]) -> list[dict]:
+    """Tageskurse nach Regel 11 (rein): je (datum, waehrung ≠ EUR) der
+    buchungskurs der letzten Ausführung des Tages — max handelszeit, bei
+    Gleichstand die größte exec_id. Hat die gewählte Ausführung keinen Kurs,
+    gibt es den Eintrag nicht (E4: kein stiller Ersatzkurs durch eine
+    frühere Ausführung desselben Tages). EUR braucht keinen Eintrag (Regel
+    3). Sortierung nach (datum, waehrung); quelle nach E3.
+    """
+    letzte: dict[tuple, dict] = {}
+    for a in ausfuehrungs_zeilen:
+        if a["waehrung"] == "EUR":
+            continue
+        schluessel = (a["handelszeit"].date(), a["waehrung"])
+        bisher = letzte.get(schluessel)
+        if bisher is None or (a["handelszeit"], a["exec_id"]) > (
+            bisher["handelszeit"],
+            bisher["exec_id"],
+        ):
+            letzte[schluessel] = a
+    kurse = []
+    for datum, waehrung in sorted(letzte):
+        a = letzte[(datum, waehrung)]
+        if a["buchungskurs"] is None:
+            continue
+        kurse.append(
+            dict(
+                datum=datum,
+                waehrung=waehrung,
+                kurs_eur=a["buchungskurs"],
+                quelle=QUELLE_ABGELEITET,
+            )
+        )
+    return kurse
+
+
+def _geld(wert: Decimal | None) -> str:
+    """Regel 13: Beträge mit zwei Nachkommastellen, None als leeres Feld."""
+    return "" if wert is None else f"{wert:.2f}"
+
+
+def _quote_text(wert: Decimal | None) -> str:
+    """Regel 13: Quoten mit vier Nachkommastellen, None als leeres Feld."""
+    return "" if wert is None else f"{wert:.4f}"
+
+
+def als_csv(ergebnis: KennzahlErgebnis) -> str:
+    """CSV nach Regel 13: Semikolon-getrennt, 22 Spalten, Kopf exakt; Zeilen
+    in der Reihenfolge Kopf, kette (nach chain_id), struktur (nach
+    chain_id, structure_id), fehler (nach schluessel, grund), eine
+    summe-Zeile zuletzt. Spalte 13 der summe-Zeile zählt die Ketten mit
+    Kursmangel."""
+    kopf = (
+        "abschnitt;sicht;chain_id;underlying;asset_class;status;anzahl_rolls;waehrung;"
+        "netto;netto_eur_wirtschaftlich;netto_eur_ib;waehrungseffekt_eur;eur_kurs_fehlt;"
+        "qualitaetsstufe;structure_id;typ;brutto;kommission;schluessel;grund;"
+        "trefferquote_kette;trefferquote_struktur"
+    )
+    zeilen = [kopf]
+    for k in ergebnis.ketten:
+        zeilen.append(
+            ";".join(
+                [
+                    "kette",
+                    ergebnis.sicht,
+                    str(k.chain_id),
+                    k.underlying,
+                    k.asset_class,
+                    "abgeschlossen" if k.abgeschlossen else "offen",
+                    str(k.anzahl_rolls),
+                    k.waehrung,
+                    _geld(k.netto),
+                    _geld(k.netto_eur_wirtschaftlich),
+                    _geld(k.netto_eur_ib),
+                    _geld(k.waehrungseffekt_eur),
+                    str(k.eur_kurs_fehlt),
+                    k.qualitaetsstufe,
+                ]
+                + [""] * 8
+            )
+        )
+    for s in ergebnis.strukturen:
+        if s.netto is None:
+            # Offene Strukturen haben kein netto — Regel 13 füllt Spalte 9,
+            # deshalb erscheinen sie nicht als CSV-Zeile. Die offene KETTE
+            # hat ihre 'offen'-Zeile, die offene Struktur keine.
+            continue
+        zeilen.append(
+            ";".join(
+                [
+                    "struktur",
+                    ergebnis.sicht,
+                    str(s.chain_id),
+                    "",
+                    "",
+                    "",
+                    "",
+                    s.waehrung,
+                    _geld(s.netto),
+                    _geld(s.netto_eur_wirtschaftlich),
+                    "",
+                    "",
+                    "",
+                    "",
+                    str(s.structure_id),
+                    s.typ,
+                    _geld(s.brutto),
+                    _geld(s.kommission),
+                ]
+                + [""] * 4
+            )
+        )
+    for schluessel, grund in ergebnis.fehler:
+        zeilen.append(";".join(["fehler", ergebnis.sicht] + [""] * 16
+                               + [schluessel, grund, "", ""]))
+    anzahl_mangel = sum(1 for k in ergebnis.ketten if k.eur_kurs_fehlt)
+    zeilen.append(
+        ";".join(
+            ["summe", ergebnis.sicht]
+            + [""] * 7
+            + [
+                _geld(ergebnis.summe_netto_eur),
+                "",
+                "",
+                str(anzahl_mangel),
+            ]
+            + [""] * 7
+            + [
+                _quote_text(ergebnis.trefferquote_kette),
+                _quote_text(ergebnis.trefferquote_struktur),
+            ]
+        )
+    )
+    return "\n".join(zeilen)
+
+
+def kennzahlen_bericht(
+    db_pfad: str | pathlib.Path,
+    *,
+    sicht: str = "kette",
+    nur_qualitaetsstufe_a: bool = False,
+) -> KennzahlErgebnis:
+    """I/O-Hülle (P3) nach AP-06v: Liest chains, structures, chain_links,
+    legs, executions und instruments — je abgeleitete Tabelle gefiltert auf
+    die jeweilige Sicht (Regel 1: Zeilen der falschen Sicht werden nicht
+    gelesen) — ruft die reine Funktion und schreibt in einer Transaktion:
+
+    - ``fx_rates`` vollständig neu (Regel 11): Tageskurse über ALLE
+      Ausführungen, unabhängig von der angeforderten Sicht.
+    - ``metrics_by_chain`` vollständig neu (Regel 11): je Kette BEIDER
+      Sichten eine Zeile — aus dem ungefilterten Ergebnis, damit der
+      Berichtsfilter ``nur_qualitaetsstufe_a`` den Cache nicht lückenhaft
+      macht. NULL nur für offene oder kursmangelbehaftete Ketten.
+    - ``chains.netto_pnl_eur`` bleibt leer (E2 — der Rebuild setzt die
+      Spalte ohnehin bei jedem Lauf auf None).
+
+    Zurück kommt das (ggf. gefilterte) Ergebnis der angeforderten Sicht.
+    """
+    if sicht not in ("kette", "konto"):
+        raise ValueError(
+            f"Unbekannte sicht {sicht!r} — erlaubt sind 'kette' und 'konto' "
+            "(AP-06v, Regel 1)"
+        )
+    engine = create_db_engine(db_pfad)
+    with engine.begin() as verbindung:
+        ausfuehrungs_zeilen = [
+            dict(z)
+            for z in verbindung.execute(
+                select(
+                    executions.c.exec_id,
+                    executions.c.conid,
+                    executions.c.side,
+                    executions.c.menge,
+                    executions.c.preis,
+                    executions.c.waehrung,
+                    executions.c.kommission,
+                    executions.c.kommission_waehrung,
+                    executions.c.buchungskurs,
+                    executions.c.handelszeit,
+                    executions.c.qualitaetsstufe,
+                )
+            ).mappings()
+        ]
+        instrumenten_zeilen = [
+            dict(z)
+            for z in verbindung.execute(
+                select(instruments.c.conid, instruments.c.multiplikator)
+            ).mappings()
+        ]
+
+        ergebnis: KennzahlErgebnis | None = None
+        materialisierung: list[KennzahlErgebnis] = []
+        for laufende_sicht in ("kette", "konto"):
+            ketten_zeilen = [
+                dict(z)
+                for z in verbindung.execute(
+                    select(
+                        chains.c.chain_id,
+                        chains.c.underlying,
+                        chains.c.asset_class,
+                        chains.c.anzahl_rolls,
+                        chains.c.beendet_am,
+                    ).where(chains.c.sicht == laufende_sicht)
+                ).mappings()
+            ]
+            struktur_zeilen = [
+                dict(z)
+                for z in verbindung.execute(
+                    select(
+                        structures.c.structure_id,
+                        structures.c.typ,
+                        structures.c.waehrung,
+                        structures.c.brutto_pnl,
+                        structures.c.kommission,
+                        structures.c.netto_pnl,
+                        structures.c.geschlossen_am,
+                    ).where(structures.c.sicht == laufende_sicht)
+                ).mappings()
+            ]
+            glieder_zeilen = [
+                dict(z)
+                for z in verbindung.execute(
+                    select(chain_links.c.chain_id, chain_links.c.structure_id).where(
+                        chain_links.c.sicht == laufende_sicht
+                    )
+                ).mappings()
+            ]
+            leg_zeilen = [
+                dict(z)
+                for z in verbindung.execute(
+                    select(
+                        legs.c.structure_id,
+                        legs.c.conid,
+                        legs.c.open_exec_id,
+                        legs.c.close_exec_id,
+                        legs.c.menge,
+                    ).where(legs.c.sicht == laufende_sicht)
+                ).mappings()
+            ]
+            ungefiltert = kennzahlen_auswertung(
+                ketten_zeilen,
+                struktur_zeilen,
+                glieder_zeilen,
+                leg_zeilen,
+                ausfuehrungs_zeilen,
+                instrumenten_zeilen,
+                sicht=laufende_sicht,
+            )
+            materialisierung.append(ungefiltert)
+            if laufende_sicht == sicht:
+                ergebnis = (
+                    ungefiltert
+                    if not nur_qualitaetsstufe_a
+                    else kennzahlen_auswertung(
+                        ketten_zeilen,
+                        struktur_zeilen,
+                        glieder_zeilen,
+                        leg_zeilen,
+                        ausfuehrungs_zeilen,
+                        instrumenten_zeilen,
+                        sicht=laufende_sicht,
+                        nur_qualitaetsstufe_a=True,
+                    )
+                )
+
+        verbindung.execute(delete(fx_rates))
+        for satz in fx_tageskurse(ausfuehrungs_zeilen):
+            verbindung.execute(insert(fx_rates).values(**satz))
+
+        verbindung.execute(delete(metrics_by_chain))
+        for teil in materialisierung:
+            for kette in teil.ketten:
+                verbindung.execute(
+                    insert(metrics_by_chain).values(
+                        chain_id=kette.chain_id,
+                        netto_eur_wirtschaftlich=kette.netto_eur_wirtschaftlich,
+                        netto_eur_ib=kette.netto_eur_ib,
+                    )
+                )
+
+    assert ergebnis is not None  # sicht ist oben auf kette/konto begrenzt
+    return ergebnis

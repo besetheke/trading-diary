@@ -1,6 +1,7 @@
 """CLI des Journals (AP-02): ``journal import <datei>`` — seit AP-04p
 zusätzlich ``journal rebuild``, seit AP-04d ``journal
-kandidaten-ausschreiben`` und ``journal kandidaten-einlesen``.
+kandidaten-ausschreiben`` und ``journal kandidaten-einlesen``, seit AP-06
+``journal kennzahlen``.
 
 Der Datenbankpfad kommt aus ``--db``, sonst aus der Umgebungsvariablen
 ``JOURNAL_DB``, sonst gilt ``journal.db`` (OF-06). Aufgerufen als
@@ -13,6 +14,7 @@ import os
 import pathlib
 import sys
 
+from analytics.kennzahlen import als_csv, kennzahlen_bericht
 from ingest.flex import import_flex_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.rebuild import rebuild
@@ -69,6 +71,28 @@ def main(argv: list[str] | None = None) -> int:
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    kennzahl = unterbefehle.add_parser(
+        "kennzahlen",
+        help="Kennzahlen je Kette/Struktur als CSV schreiben; fx_rates und "
+        "metrics_by_chain vollständig neu (AP-06)",
+    )
+    kennzahl.add_argument("datei", type=pathlib.Path, help="Pfad zur Zieldatei (CSV)")
+    kennzahl.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    kennzahl.add_argument(
+        "--sicht",
+        choices=("kette", "konto"),
+        default="kette",
+        help="Auswertungssicht (Default: kette — die strategische Sicht, AP-06 E1)",
+    )
+    kennzahl.add_argument(
+        "--nur-stufe-a",
+        action="store_true",
+        help="Nur Ketten/Strukturen der Qualitätsstufe A (E6)",
     )
     argumente = parser.parse_args(argv)
 
@@ -145,6 +169,29 @@ def main(argv: list[str] | None = None) -> int:
             f"{ergebnis.unentschieden} unentschieden"
         )
         print("Jetzt `journal rebuild` ausführen, damit die Entscheidungen wirksam werden.")
+    elif argumente.befehl == "kennzahlen":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = kennzahlen_bericht(
+                db_pfad,
+                sicht=argumente.sicht,
+                nur_qualitaetsstufe_a=argumente.nur_stufe_a,
+            )
+        except ValueError as fehler:
+            # Widerspruch in den Daten: benannt abbrechen, kein Traceback —
+            # die Transaktion hat nichts geschrieben (AP-06v, Regel 8).
+            print(f"Kennzahlen fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        # UTF-8 mit BOM wie der Kandidaten-Export (Regel 13): Excel öffnet die
+        # Datei ohne Encoding-Rätsel; Zeilenende fest auf \n, damit die Datei
+        # auf jedem Betriebssystem bytgleich ausfällt.
+        with open(argumente.datei, "w", encoding="utf-8-sig", newline="\n") as datei:
+            datei.write(als_csv(ergebnis) + "\n")
+        print(
+            f"Kennzahlen nach {argumente.datei}: {len(ergebnis.ketten)} Ketten, "
+            f"{len(ergebnis.strukturen)} Strukturen, {len(ergebnis.fehler)} Fehler, "
+            f"Summe netto EUR {ergebnis.summe_netto_eur}"
+        )
     return 0
 
 
