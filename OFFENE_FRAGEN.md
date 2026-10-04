@@ -2675,3 +2675,50 @@ Wiederholungslauf war grün. Auch im Git-Betrieb gilt: nach kryptischem
 Fehler einmal wiederholen, bevor man sucht.
 
 
+
+## OF-65 · OA-Gesamtexport: Er ersetzt die Monatsdateien, und eine Fortschreibung ist nicht definiert
+
+**Befund 04.10.2026**, beim Prüfen von `fixtures/golden/Trades_2026-10-04_16-02-17_all.xlsx`
+(Gesamtexport der OptionApp, Blatt `Trades`, elf Spalten wie im Anhang). Nur
+Zählwerte, Regel 2.
+
+- **5.358 Trades**, alle mit Eröffnung 2026, 5.358 eindeutige Klammernummern.
+  Status: CANCELED 3.975, EXPIRED 671, CLOSED 570, PARTIALLY STOPPED 51,
+  STOPPED 40, EXPIRED (estimated) 36, RUNNING 14, UNMANAGED 1.
+- **Die drei Monatsdateien sind Teilmengen**: Januar 268 von 268 enthalten,
+  Februar 66 von 66, August 178 von 178. Inhaltlich identisch sind aber nur
+  Februar 66 von 66 und August 177 von 178 — **Januar 0 von 268**: Die
+  Januar-Trades haben sich seit dem Monatsexport verändert (laufend →
+  abgeschlossen).
+- **Folge:** Der Parser bricht bei „gleiche Nummer, abweichender Inhalt" ab
+  (AP-13, Vertrag 10). Wer die Monatsdateien *und* den Gesamtexport lädt, läuft
+  in genau diesen Abbruch. **Regel für jetzt: nur den Gesamtexport laden, nie
+  die Monatsdateien daneben.**
+- **Offen:** Wie schreibt man einen späteren, neueren Gesamtexport fort, wenn
+  laufende Trades inzwischen abgeschlossen sind? „Überschreiben" widerspricht
+  dem Parser (keine stille Entscheidung); „nur Neue laden" lässt Status und
+  Ergebnis veralten. Gebraucht wird eine ausdrückliche Fortschreibungsregel
+  (z. B. nur Trades mit Status RUNNING aktualisieren, nie abgeschlossene).
+  Nicht geraten; eigenes Paket, bevor ein zweiter Gesamtexport geladen wird.
+
+## OF-66 · OA-Gesamtexport: Ein DAX-Trade mit Eurex-Produktcode in der Leg-Grammatik
+
+Der Gesamtexport enthält **eine** Zeile (CLOSED, Strategie `DAX: BPS`), deren
+`Strikes` nicht der Grammatik `[-]<Menge>x<C|P><Strike> (<JJMMTT>)` folgt: Vor
+dem Recht steht ein Produktcode, Form `[-]<n>x<CODE> <P|C><Strike> (<JJMMTT>)`
+(Eurex-Optionsprodukt, vier Buchstaben). Der Parser bricht daran ab (richtig
+nach AP-13, Vertrag 5: Abweichung = Defekt der Quelle, nicht raten).
+
+Zwei Dinge dazu:
+
+1. **OA handelt inzwischen auch DAX.** Die Annahme „OA-Export enthält nur
+   SPX/SPY/XSP/QQQ/RUT" (Plan §6.1) gilt für 2026 nicht mehr. Damit wird die
+   Strategie-Dimension auch für einen Teil des DAX-Bestands möglich — relevant
+   für die DAX-Kommissionsfrage (AP-06).
+2. **Der Parser braucht eine Grammatikerweiterung** (optionaler Produktcode,
+   der nicht in die Leg-Identität eingeht; Strike/Expiry/Recht/Richtung/Menge
+   bleiben maßgeblich). Das ist ein Korrekturpaket an der Abnahmebasis von
+   AP-13 (Regel 1a, `aendert_tests: ja`, stark), danach eine Parsernachbesserung
+   durch das günstige Modell — dasselbe Muster wie AP-13pl/q und pm/r.
+   **Bis dahin lässt sich der Gesamtexport nicht laden** (Abbruch an dieser
+   einen von 5.358 Zeilen, ohne etwas zu schreiben).
