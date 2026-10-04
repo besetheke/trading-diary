@@ -2,7 +2,7 @@
 titel: "Analytik Tranche II: Kommissionsattribution (Abnahmebasis)"
 paket: AP-06w
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-06vr
 naechstes: AP-06wk
 aendert: tests/test_kommissions_attribution.py (neu, nach Freigabe), analytics/kommission.py (neu, durch AP-06wk), journal/cli.py (durch AP-06wk), OFFENE_FRAGEN.md
@@ -141,7 +141,10 @@ Handwerte ohne Stufenfilter (Kettensicht):
   −7.40−8.00−14.80 = −30.20 / 75+100+150 = 325.00, Anteil 30.20/325 =
   0.0929 (0.09292…); USX → nur K1: 0.0987; DAX 0.0800; NDX unverändert
   0.0987.
-- `anzahl_ketten_gesamt` = 6 (K1–K6) in jeder Konfiguration.
+- `anzahl_ketten_gesamt` = 6 (K1–K6) ohne Filter, **5 mit
+  `nur_qualitaetsstufe_a`** (K5 fällt ganz weg wie in Tranche I, E6).
+  Berichtigung 04.10.2026: Der Entwurf nannte „6 in jeder Konfiguration" und
+  widersprach damit E6; die Testdatei folgt E6.
 
 ## Entscheidungen (vom Nutzer zu prüfen)
 
@@ -169,6 +172,12 @@ Campaign-Ebene (V). Keine Aufschlüsselung nach Seite, DTE-Band oder Breite
 (AP-08-Rest). Keine Kommissionsaufschlüsselung je Bein oder je Ausführung —
 Aggregationsebene ist die Kette. Keine Zeitzonen-Logik (OF-04). Keine
 Änderung an `analytics/kennzahlen.py` oder dessen Abnahmebasis.
+
+## Stand
+
+Freigabe E1–E7 durch den Nutzer am 04.10.2026; `tests/test_kommissions_attribution.py`
+liegt vor (9 reine Tests auf K1–K6, 2 CLI-Tests auf der E2E-Welt K1–K5), geprüft
+gegen eine unabhängige Wegwerf-Umsetzung (danach entfernt). Offen: AP-06wk.
 
 ## Abnahme
 
