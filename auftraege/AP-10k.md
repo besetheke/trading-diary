@@ -1,7 +1,7 @@
 # AP-10k — Umsetzung: Steuerliche Auswertung
 
 modell: guenstig
-status: offen
+status: fertig
 aendert: analytics/steuer.py (neu), journal/steuer.py (neu), journal/cli.py (Subcommand steuer)
 aendert_tests: nein
 abhaengig_von: AP-10v (Vertrag + Abnahmetests liegen vor und sind unveränderlich)

@@ -15,9 +15,11 @@ import pathlib
 import sys
 
 from analytics.kennzahlen import als_csv, kennzahlen_bericht
+from analytics.steuer import als_csv as steuer_als_csv
 from ingest.flex import import_flex_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.rebuild import rebuild
+from journal.steuer import steuer_bericht
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -93,6 +95,22 @@ def main(argv: list[str] | None = None) -> int:
         "--nur-stufe-a",
         action="store_true",
         help="Nur Ketten/Strukturen der Qualitätsstufe A (E6)",
+    )
+    steuer = unterbefehle.add_parser(
+        "steuer",
+        help="Steuerliche Auswertung: Töpfe je Jahr, Details, Erträge, Fehler (AP-10)",
+    )
+    steuer.add_argument("datei", type=pathlib.Path, help="Pfad zur Zieldatei (CSV)")
+    steuer.add_argument(
+        "--jahr",
+        type=int,
+        default=None,
+        help="Nur Zeilen dieses Zuflussjahres; die Fehlerliste bleibt vollständig",
+    )
+    steuer.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
     )
     argumente = parser.parse_args(argv)
 
@@ -191,6 +209,21 @@ def main(argv: list[str] | None = None) -> int:
             f"Kennzahlen nach {argumente.datei}: {len(ergebnis.ketten)} Ketten, "
             f"{len(ergebnis.strukturen)} Strukturen, {len(ergebnis.fehler)} Fehler, "
             f"Summe netto EUR {ergebnis.summe_netto_eur}"
+        )
+    elif argumente.befehl == "steuer":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        ergebnis = steuer_bericht(db_pfad)
+        # UTF-8 mit BOM wie der Kennzahlen-Bericht (Regel 13): Excel öffnet
+        # die Datei ohne Encoding-Rätsel; Zeilenende fest auf \n, damit die
+        # Datei auf jedem Betriebssystem bytgleich ausfällt. Exit-Code 0 nur
+        # mit geschriebenem Dateikörper (AP-10v, Vertrag 13).
+        with open(argumente.datei, "w", encoding="utf-8-sig", newline="\n") as datei:
+            datei.write(steuer_als_csv(ergebnis, jahr=argumente.jahr))
+        print(
+            f"Steuer nach {argumente.datei}: {len(ergebnis.toepfe)} Topfzeilen, "
+            f"{len(ergebnis.details)} Legs bewertet, {len(ergebnis.ungeklaert)} "
+            f"Basis ungeklärt, {len(ergebnis.ertraege)} Ertragszeilen, "
+            f"{len(ergebnis.fehler)} Fehler"
         )
     return 0
 
