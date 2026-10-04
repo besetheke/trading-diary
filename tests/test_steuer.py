@@ -205,11 +205,13 @@ def test_details_drilldown_und_reihenfolge():
         "X-4", "X-2", "X-1", "X-10", "X-3",
     ]
     # Drilldown deckelt die Topfzeile (§5): 2025/termingeschaefte/USD.
-    summe = sum(
-        (z.brutto, z.kommission, z.netto) for z in ergebnis.details
-        if z.jahr == 2025 and z.topf == "termingeschaefte"
-    )
-    assert summe == (D("350.00"), D("-4.00"), D("346.00"))
+    zeilen = [z for z in ergebnis.details
+              if z.jahr == 2025 and z.topf == "termingeschaefte"]
+    assert (
+        sum(z.brutto for z in zeilen),
+        sum(z.kommission for z in zeilen),
+        sum(z.netto for z in zeilen),
+    ) == (D("350.00"), D("-4.00"), D("346.00"))
 
 
 def test_detailzeile_vollstaendig():
@@ -241,7 +243,9 @@ def test_kettensicht_wird_zurueckgewiesen():
     assert (SteuerFehler(schluessel="X-7", grund="sicht_vermischung")
             in ergebnis.fehler)
     assert all(z.close_exec_id != "X-7" for z in ergebnis.details)
-    assert all(z.jahr != 2025 or z.topf != "aktien" for z in ergebnis.toepfe)
+    # L7 (OPT, brutto 10.00, Kommission -1.00, Schluss 2025-04-01) fließt in
+    # keinen Topf: sonst stünde in 2025/termingeschaefte/USD 360.00 / -5.00.
+    assert ergebnis.toepfe == _ERWARTETE_TOEPFE
 
 
 def test_basis_ungeklaert_direkt_und_nicht_in_summen():

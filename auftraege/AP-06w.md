@@ -56,7 +56,13 @@ Spaltennamen der Tabellen; Schlüsselwörter `sicht` und
   'roll_anzahl'), `schluessel` (Text), `sicht`, `anzahl_ketten`,
   `kommission_eur`, `brutto_eur`, `netto_eur` (Decimal, wirtschaftliche
   Sicht), `kommissionsanteil` (Decimal | None, 4 Stellen, HALF_UP),
-  `anzahl_ketten_kurs_fehlt` (int).
+  `anzahl_ketten_kurs_fehlt` (int), `anzahl_ketten_abgeschlossen` (int).
+  Eindeutig definiert (Freigabe 04.10.2026): `anzahl_ketten` = abgeschlossene
+  Ketten **mit** Kurs, das sind genau die, die in den Summen stehen;
+  `anzahl_ketten_kurs_fehlt` = abgeschlossene Ketten ohne vollständigen Kurs;
+  `anzahl_ketten_abgeschlossen` = beide zusammen. Offene Ketten stehen nur in
+  `KommissionsErgebnis.anzahl_ketten_gesamt`. Beispiel USX der Testwelt: K1+K5
+  → 2 / 1 (K4) / 3.
 - `KommissionsErgebnis`: `sicht`, `gruppen` (Tupel), `anzahl_ketten_gesamt`
   (inklusive offener und mangelbehafteter — die Abdeckung muss sichtbar
   bleiben).
@@ -102,7 +108,8 @@ Spaltennamen der Tabellen; Schlüsselwörter `sicht` und
 `journal kennzahlen` erhält `--kommission <datei>`: schreibt die Gruppen
 aller vier Dimensionen als **eine** CSV mit den Spalten `dimension`,
 `schluessel`, `sicht`, `anzahl_ketten`, `kommission_eur`, `brutto_eur`,
-`netto_eur`, `kommissionsanteil`, `anzahl_ketten_kurs_fehlt`. Geldbeträge
+`netto_eur`, `kommissionsanteil`, `anzahl_ketten_kurs_fehlt`,
+`anzahl_ketten_abgeschlossen`. Geldbeträge
 als Text mit Punkt (Decimal, kein float), `None` als leere Zelle — wie im
 Tranche-I-CSV.
 
@@ -142,7 +149,8 @@ Handwerte ohne Stufenfilter (Kettensicht):
   bleibt als Berichtsparameter.
 - **E2 — Strategie-Schlüssel ist `oa_strategie` mit Bucket '(ohne)'**;
   `strategy_id`/E13/E14 bleiben außen vor. Heute ein Bucket, bis der
-  OA-Import läuft.
+  OA-Import läuft — der Import auf dieser Datenbank ist eine eigene Aufgabe
+  des Nutzers (`optionapp_trades` leer), kein Teil dieses Pakets.
 - **E3 — Anteil als Betragsverhältnis** |Kommission|/|Brutto| (None bei
   Brutto 0); Vorzeichen stehen in den Summenfeldern daneben.
 - **E4 — Nur abgeschlossene Ketten in Summen**; offene und kursfehlende
