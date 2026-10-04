@@ -15,6 +15,8 @@ import pathlib
 import sys
 
 from analytics.kennzahlen import als_csv, kennzahlen_bericht
+from analytics.kommission import als_csv as kommission_als_csv
+from analytics.kommission import kommissions_bericht
 from analytics.steuer import als_csv as steuer_als_csv
 from ingest.flex import import_flex_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
@@ -95,6 +97,13 @@ def main(argv: list[str] | None = None) -> int:
         "--nur-stufe-a",
         action="store_true",
         help="Nur Ketten/Strukturen der Qualitätsstufe A (E6)",
+    )
+    kennzahl.add_argument(
+        "--kommission",
+        type=pathlib.Path,
+        default=None,
+        metavar="DATEI",
+        help="Zusätzlich die Kommissionsattribution als eigene CSV schreiben (AP-06, Tranche II)",
     )
     steuer = unterbefehle.add_parser(
         "steuer",
@@ -210,6 +219,22 @@ def main(argv: list[str] | None = None) -> int:
             f"{len(ergebnis.strukturen)} Strukturen, {len(ergebnis.fehler)} Fehler, "
             f"Summe netto EUR {ergebnis.summe_netto_eur}"
         )
+        if argumente.kommission is not None:
+            kommission = kommissions_bericht(
+                db_pfad,
+                sicht=argumente.sicht,
+                nur_qualitaetsstufe_a=argumente.nur_stufe_a,
+            )
+            # UTF-8 mit BOM wie der Kennzahlen-Bericht (Regel 13): Excel öffnet
+            # die Datei ohne Encoding-Rätsel; Zeilenende fest auf \n, damit die
+            # Datei auf jedem Betriebssystem bytgleich ausfällt (AP-06w, E6).
+            with open(argumente.kommission, "w", encoding="utf-8-sig", newline="\n") as datei:
+                datei.write(kommission_als_csv(kommission) + "\n")
+            print(
+                f"Kommissionsattribution nach {argumente.kommission}: "
+                f"{len(kommission.gruppen)} Gruppen, "
+                f"{kommission.anzahl_ketten_gesamt} Ketten gesamt"
+            )
     elif argumente.befehl == "steuer":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         ergebnis = steuer_bericht(db_pfad)
