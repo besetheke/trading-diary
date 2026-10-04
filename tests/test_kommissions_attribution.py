@@ -298,4 +298,6 @@ def test_cli_ohne_kommissions_option_schreibt_keine_zweite_datei(migrated_db, tm
     _bereite_db_vor(migrated_db)
     kennzahlen = tmp_path / "kennzahlen.csv"
     assert main(["kennzahlen", str(kennzahlen), "--db", str(migrated_db)]) == 0
-    assert [p.name for p in tmp_path.iterdir()] == ["kennzahlen.csv"]
+    # Nur Berichtsdateien (*.csv) zählen: die Fixture migrated_db legt die
+    # SQLite-Datei selbst in tmp_path ab (AP-06wvk).
+    assert sorted(p.name for p in tmp_path.glob("*.csv")) == ["kennzahlen.csv"]
