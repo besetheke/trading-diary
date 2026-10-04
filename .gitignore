@@ -14,3 +14,4 @@ files.zip
 .ruff_cache/
 node_modules/
 ui/dist/
+bericht_*.csv

@@ -2668,4 +2668,10 @@ bewerten spätestens, wenn (a) ein Commit mehrfach hintereinander scheitert,
 image is malformed`) oder (c) Tranche IV die Datenbank deutlich häufiger
 schreibt (Equity-Kurve, `metrics_daily`).
 
+**Zweitbeobachtung 04.10.2026:** Betroffen ist nicht nur SQLite. Ein
+`git commit` blieb beim Objekt-Rename hängen (`.git/objects/…/tmp_obj_*`
+ließe sich nicht umbenennen — Sync hält die Datei fest); der sofortige
+Wiederholungslauf war grün. Auch im Git-Betrieb gilt: nach kryptischem
+Fehler einmal wiederholen, bevor man sucht.
+
 
