@@ -2660,4 +2660,12 @@ betriebliche Risiko akzeptieren und nur die Häufigkeit flüchtiger
 Commit-Fehler beobachten. Ein Wiederholungslauf nach einem `disk I/O error`
 ist bis dahin die dokumentierte Erste-Hilfe.
 
+**Entschieden (vertagt, Nutzer 04.10.2026):** Der Betrieb läuft vorerst
+weiter auf dem Google-Drive-Volume; die Entscheidung fällt später. Erste
+Hilfe bleibt der Wiederholungslauf nach einem `disk I/O error`. Neu zu
+bewerten spätestens, wenn (a) ein Commit mehrfach hintereinander scheitert,
+(b) andere Schreibfehler auftreten (`database is locked`, `database disk
+image is malformed`) oder (c) Tranche IV die Datenbank deutlich häufiger
+schreibt (Equity-Kurve, `metrics_daily`).
+
 
