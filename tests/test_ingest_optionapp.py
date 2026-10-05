@@ -440,3 +440,33 @@ def test_produktcode_in_kleinbuchstaben_bleibt_ein_defekt(migrated_db):
     with pytest.raises(ValueError) as fehler:
         _importiere(migrated_db, "oa_produktcode_defekt_klein.xlsx")
     assert "5201" in str(fehler.value)
+
+
+# ---------------------------------------------------------------------------
+# Trade mit nur einem Leg (AP-13pp, OF-67)
+# ---------------------------------------------------------------------------
+# Der Anhang nannte zwei bis vier Legs, beobachtet an 244 Trades. Der
+# Gesamtexport 2026 enthält einen ausgeführten Trade mit einem Leg (1 von 1.383):
+# Die Untergrenze war eine Beobachtung, keine Regel (Plan §6.1: n-Leg-Strukturen,
+# Typ „Single"). Die Obergrenze vier bleibt.
+
+
+def test_trade_mit_einem_leg_wird_gelesen(migrated_db):
+    """Trade 5301: `-1xP5400 (260918)` — ein Short-Put, Menge 1, Strike 5400,
+    Verfall 18.09.2026; position 1."""
+    _importiere(migrated_db, "oa_ein_leg.xlsx")
+    trades = _trades(migrated_db)
+    legs = _legs(migrated_db, trades["5301"]["id"])
+    assert len(legs) == 1
+    assert (legs[0]["position"], legs[0]["richtung"], legs[0]["right"]) == (1, -1, "P")
+    assert legs[0]["strike"] == Decimal("5400")
+    assert legs[0]["expiry"] == date(2026, 9, 18)
+    assert legs[0]["menge"] == Decimal("1")
+
+
+def test_mehr_als_vier_legs_bleiben_ein_defekt(migrated_db):
+    """Gegenprobe: Fünf Legs (Trade 5401) brechen weiter ab; die Obergrenze
+    gehört nicht zur Lockerung."""
+    with pytest.raises(ValueError) as fehler:
+        _importiere(migrated_db, "oa_fuenf_legs_defekt.xlsx")
+    assert "5401" in str(fehler.value)

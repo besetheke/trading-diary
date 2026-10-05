@@ -342,6 +342,42 @@ PRODUKTCODE_DEFEKT_KLEIN = [
     ],
 ]
 
+# Ein Trade mit nur einem Leg (AP-13pp, OF-67): gemessen im Gesamtexport 2026
+# (ein ausgefuehrter SPX-Trade unter 1.383), Werte frei erfunden. Die
+# Untergrenze "zwei Legs" des Anhangs war eine Beobachtung, keine Regel.
+EIN_LEG = [
+    [
+        "2026/08/25 10:20:00",
+        "SPX: Single",
+        "Einzelleg [5301]",
+        "-1xP5400 (260918)",
+        "1/1",
+        6.5,
+        1.5,
+        "-",
+        "500,00 $",
+        "2026/09/18 22:00:00",
+        "CLOSED",
+    ],
+]
+
+# Fuenf Legs: Die Obergrenze vier bleibt (Gegenprobe zu EIN_LEG).
+FUENF_LEGS = [
+    [
+        "2026/08/25 10:20:00",
+        "SPX: IC",
+        "Zu viele Legs [5401]",
+        "-1xP5400 (260918) / 1xP5350 (260918) / -1xC5800 (260918) / 1xC5850 (260918) / 1xP5300 (260918)",
+        "1/1",
+        6.5,
+        1.5,
+        "-",
+        "500,00 $",
+        "2026/09/18 22:00:00",
+        "CLOSED",
+    ],
+]
+
 # `Name` ohne Klammernummer — ohne Schlüssel ist der Trade nicht verknüpfbar.
 OHNE_NUMMER = [
     [
@@ -413,3 +449,5 @@ if __name__ == "__main__":
     schreiben("oa_produktcode.xlsx", PRODUKTCODE)
     schreiben("oa_produktcode_defekt_recht.xlsx", PRODUKTCODE_DEFEKT_RECHT)
     schreiben("oa_produktcode_defekt_klein.xlsx", PRODUKTCODE_DEFEKT_KLEIN)
+    schreiben("oa_ein_leg.xlsx", EIN_LEG)
+    schreiben("oa_fuenf_legs_defekt.xlsx", FUENF_LEGS)

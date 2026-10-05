@@ -2722,3 +2722,16 @@ Zwei Dinge dazu:
    durch das günstige Modell — dasselbe Muster wie AP-13pl/q und pm/r.
    **Bis dahin lässt sich der Gesamtexport nicht laden** (Abbruch an dieser
    einen von 5.358 Zeilen, ohne etwas zu schreiben).
+
+## OF-67 · OA-Gesamtexport: Trade mit nur einem Leg
+
+Der echte Import (05.10.2026) brach an Zeile 2599 ab: `'Strikes' zerfällt in 1
+Legs, erwartet sind zwei bis vier`. Unter 1.383 ausgeführten Trades des
+Gesamtexports gibt es einen mit einem Leg. Die Untergrenze „zwei" war eine
+Beobachtung der ersten Referenzexporte (Anhang), keine fachliche Regel.
+**Behoben über AP-13pp (Abnahmebasis) und AP-13t (Parser)**; die Grenze lautet
+jetzt ein bis vier. Vorab mit einer Wegwerf-Grenze gegen eine temporäre
+Datenbank geprüft: Der gesamte Import läuft danach durch (5.358 Trades, 4.391
+Legs), keine weitere Zeile scheitert. Lehre: Meine Vorprüfung von OF-66 hat nur
+die Leg-Grammatik je Ausschnitt gemessen, nicht die Anzahl je Zelle; künftig
+gleich ein Probeimport in eine temporäre Datenbank statt einzelner Prüfwerte.
