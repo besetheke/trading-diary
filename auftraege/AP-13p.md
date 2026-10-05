@@ -56,7 +56,7 @@ Nur diese, keine weiteren.
    bleibt in beiden Fällen erhalten.
 4. **`Quantity`.** Verhältnis `n/m`; beide Zahlen getrennt speichern. Ihre
    Gleichheit wird nicht vorausgesetzt.
-5. **Leg-Grammatik.** `Strikes` zerfällt an ` / ` in zwei bis vier Legs, je
+5. **Leg-Grammatik.** `Strikes` zerfällt an ` / ` in ein bis vier Legs (AP-13pp, ursprünglich zwei bis vier), je
    Leg `[-]<Menge>x<C|P><Strike> (<JJMMTT>)`. Führendes Minus ist short
    (`richtung = -1`), sonst long (`+1`). Strike darf einen Dezimalteil
    tragen, auch wenn in den Referenzexporten keiner vorkam. Die Reihenfolge

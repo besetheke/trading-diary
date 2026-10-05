@@ -70,6 +70,10 @@ Beispiel: `-1xC751 (260831) / 1xP717 (260918)`
   Menge, Recht, Strike und Verfall bleiben maßgeblich, der Code geht nicht in die
   Leg-Identität ein (der Rohwert `roh` behält ihn). Kleinbuchstaben oder ein
   ungültiges Recht bleiben ein Defekt der Quelle.
+- **Auch ein Leg ist regulär (Gesamtexport 2026, AP-13pp, OF-67).** Unter 1.383
+  ausgeführten Trades 1 (ein Leg), 457 (zwei), 186 (drei), 739 (vier). Die
+  Untergrenze „zwei“ war eine Beobachtung an den ersten Referenzexporten, keine
+  Regel; die Obergrenze vier bleibt (kein Fall darüber).
 - Legs je Trade: beobachtet 2 (47 Fälle), 3 (26) und 4 (171). **Drei Legs sind ein
   regulärer Fall**, keine Anomalie — eine Typisierung, die nur Zwei-Leg-Verticals
   kennt, ist falsch.
