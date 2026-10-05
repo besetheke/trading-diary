@@ -2735,3 +2735,31 @@ Datenbank geprüft: Der gesamte Import läuft danach durch (5.358 Trades, 4.391
 Legs), keine weitere Zeile scheitert. Lehre: Meine Vorprüfung von OF-66 hat nur
 die Leg-Grammatik je Ausschnitt gemessen, nicht die Anzahl je Zelle; künftig
 gleich ein Probeimport in eine temporäre Datenbank statt einzelner Prüfwerte.
+
+## OF-68 · Kettensicht: Summen weichen von der Kontosicht ab (Folge von OF-52)
+
+Echtlauf 05.10.2026: Die Nettosumme der Kettensicht liegt rund 32.000 EUR
+(etwa 16 %) neben der Kontosicht (198.895 EUR). Plan §5 verlangt gleiche
+Summen. Rund 82 % der Differenz erklären die 205 umgeleiteten Ausführungen:
+Nach der OF-52-Entscheidung („Ausführung zählt doppelt") schließt eine solche
+Ausführung den alten Vorgang und eröffnet zugleich den eigenen; ihr Geldfluss
+wird zweimal gebucht, real nur einmal bezahlt. Die OA-Sicht lässt den alten
+Vorgang dagegen bis zu seinem eigenen Ende laufen. Die Empfehlung zu OF-52 war
+in diesem Punkt falsch gewichtet (Invariante nicht geprüft).
+
+**Bis zur Entscheidung:** Geld- und Kommissionsfragen auf der Kontosicht
+(`--sicht konto`); die Kettensicht gilt nur als Strategieansicht ohne
+belastbare Summe.
+
+**Optionen (Entscheidung steht aus):**
+
+- **A — Alter Vorgang bleibt offen.** Die umgeleitete Ausführung eröffnet nur
+  den neuen Vorgang; der alte läuft bis zu seinem eigenen Ende (wie OA).
+  Summen stimmen. Ändert die OF-52-Entscheidung, Korrekturpaket
+  (`aendert_tests: ja`, stark) plus Umsetzung.
+- **B — Abstimmungszeile.** Variante bleibt, die Doppelzählung wird im Bericht
+  als eigene Zeile ausgewiesen. Kein Eingriff in Tests, aber Summen je Gruppe
+  bleiben verzerrt.
+
+**Folgepaket:** AP-13z (OA-Strategie auch in die Kettensicht schreiben) erst
+nach der Entscheidung. Verwandt: OF-52, OF-61.
