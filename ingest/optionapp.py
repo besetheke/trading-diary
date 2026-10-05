@@ -314,10 +314,10 @@ def _legs_zerlegen(strikes: str, kontext: str) -> list[dict]:
     und des Leg-Ausschnitts ab.
     """
     teile = strikes.split(" / ")
-    if not 2 <= len(teile) <= 4:
+    if not 1 <= len(teile) <= 4:
         raise ValueError(
             f"{kontext}: 'Strikes' zerfällt in {len(teile)} Legs, erwartet sind "
-            "zwei bis vier (Anhang)"
+            "ein bis vier (Anhang)"
         )
     legs = []
     for position, ausschnitt in enumerate(teile, start=1):
