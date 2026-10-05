@@ -262,6 +262,86 @@ GRAMMATIK_DEFEKT = [
     ],
 ]
 
+# Eurex-Produktcode vor dem Recht (AP-13pn, OF-66): `-1xODAP P23000 (260918)`.
+# Gemessen im Gesamtexport 2026 (DAX-Trades der OptionApp), Werte frei erfunden.
+# `[5003]` mischt je Leg mit und ohne Code: Der Code ist je Leg optional.
+PRODUKTCODE = [
+    [
+        "2026/08/20 09:40:00",
+        "DAX: BPS",
+        "BPS D25/20 14DTE [5001]",
+        "-1xODAP P23000 (260918) / 1xODAP P22900 (260918)",
+        "1/1",
+        14.5,
+        2.5,
+        "-",
+        "1.200,00 $",
+        "2026/09/18 17:30:00",
+        "CLOSED",
+    ],
+    [
+        "2026/08/21 10:05:00",
+        "DAX: BCS",
+        "BCS D25/20 14DTE [5002]",
+        "-2xODAC C24500 (260918) / 2xODAC C24600 (260918)",
+        "2/2",
+        9.0,
+        1.0,
+        "-",
+        "-340,00 $",
+        "2026/09/18 17:30:00",
+        "EXPIRED",
+    ],
+    [
+        "2026/08/24 09:55:00",
+        "DAX: BPS",
+        "Gemischt [5003]",
+        "-1xODAP P23000 (260918) / 1xP22900 (260918)",
+        "1/1",
+        13.0,
+        3.0,
+        "-",
+        "500,00 $",
+        "2026/09/18 17:30:00",
+        "CLOSED",
+    ],
+]
+
+# Produktcode mit unbekanntem Recht: Der Code lockert nur die Grammatik, nicht
+# `C|P` — weiterhin ein Defekt der Quelle (Gegenprobe zu `PRODUKTCODE`).
+PRODUKTCODE_DEFEKT_RECHT = [
+    [
+        "2026/08/20 09:40:00",
+        "DAX: BPS",
+        "Kaputtes Recht [5101]",
+        "-1xODAP Z23000 (260918) / 1xODAP P22900 (260918)",
+        "1/1",
+        14.5,
+        2.5,
+        "-",
+        "100,00 $",
+        "2026/09/18 17:30:00",
+        "CLOSED",
+    ],
+]
+
+# Produktcode in Kleinbuchstaben: kein Eurex-Code, weiterhin ein Defekt.
+PRODUKTCODE_DEFEKT_KLEIN = [
+    [
+        "2026/08/20 09:40:00",
+        "DAX: BPS",
+        "Kleingeschrieben [5201]",
+        "-1xodap P23000 (260918) / 1xodap P22900 (260918)",
+        "1/1",
+        14.5,
+        2.5,
+        "-",
+        "100,00 $",
+        "2026/09/18 17:30:00",
+        "CLOSED",
+    ],
+]
+
 # `Name` ohne Klammernummer — ohne Schlüssel ist der Trade nicht verknüpfbar.
 OHNE_NUMMER = [
     [
@@ -330,3 +410,6 @@ if __name__ == "__main__":
     schreiben("oa_grammatik_defekt.xlsx", GRAMMATIK_DEFEKT)
     schreiben("oa_ohne_klammernummer.xlsx", OHNE_NUMMER)
     schreiben("oa_doppelte_nummer.xlsx", DOPPELTE_NUMMER)
+    schreiben("oa_produktcode.xlsx", PRODUKTCODE)
+    schreiben("oa_produktcode_defekt_recht.xlsx", PRODUKTCODE_DEFEKT_RECHT)
+    schreiben("oa_produktcode_defekt_klein.xlsx", PRODUKTCODE_DEFEKT_KLEIN)

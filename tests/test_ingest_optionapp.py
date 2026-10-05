@@ -378,3 +378,65 @@ def test_mehrere_stops_mit_unlesbarer_zeile_brechen_ab(migrated_db):
     with pytest.raises(ValueError) as fehler:
         _importiere(migrated_db, "oa_mehrstop_defekt.xlsx")
     assert "4201" in str(fehler.value)
+
+
+# ---------------------------------------------------------------------------
+# Eurex-Produktcode vor dem Recht (AP-13pn, OF-66)
+# ---------------------------------------------------------------------------
+# Der Gesamtexport 2026 enthält DAX-Trades der OptionApp, deren Legs vor dem
+# Recht einen Produktcode tragen: `-1xODAP P23000 (260918)`. Der Code lockert
+# nur die Grammatik; Richtung, Menge, Recht, Strike und Verfall bleiben die
+# maßgeblichen Merkmale, der Code selbst geht nicht in die Leg-Identität ein
+# (er bleibt im Rohwert `roh` erhalten). Fixtures: `oa_produktcode*.xlsx`,
+# erzeugt von `fixtures/optionapp/erzeugen.py` (nur die neuen Dateien).
+
+
+def test_leg_mit_produktcode_wird_wie_ein_leg_ohne_code_zerlegt(migrated_db):
+    """`-1xODAP P23000 (260918) / 1xODAP P22900 (260918)` (Trade 5001): zwei
+    Short/Long-Puts, je Menge 1, Strikes 23000/22900, Verfall 18.09.2026."""
+    _importiere(migrated_db, "oa_produktcode.xlsx")
+    trades = _trades(migrated_db)
+    legs = _legs(migrated_db, trades["5001"]["id"])
+    assert [leg["richtung"] for leg in legs] == [-1, 1]
+    assert [leg["right"] for leg in legs] == ["P", "P"]
+    assert [leg["strike"] for leg in legs] == [Decimal("23000"), Decimal("22900")]
+    assert [leg["expiry"] for leg in legs] == [date(2026, 9, 18)] * 2
+    assert [leg["menge"] for leg in legs] == [Decimal("1"), Decimal("1")]
+
+
+def test_produktcode_ist_nicht_teil_der_leg_identitaet_und_bleibt_im_rohwert(migrated_db):
+    """Trade 5002 trägt den Code `ODAC` an Calls, mit Menge 2: Das Recht kommt
+    aus `C`, nicht aus dem Code; der Rohwert des Legs behält den Code."""
+    _importiere(migrated_db, "oa_produktcode.xlsx")
+    trades = _trades(migrated_db)
+    legs = _legs(migrated_db, trades["5002"]["id"])
+    assert [leg["right"] for leg in legs] == ["C", "C"]
+    assert [leg["richtung"] for leg in legs] == [-1, 1]
+    assert [leg["menge"] for leg in legs] == [Decimal("2"), Decimal("2")]
+    assert legs[0]["roh"] == "-2xODAC C24500 (260918)"
+
+
+def test_produktcode_ist_je_leg_optional(migrated_db):
+    """Trade 5003: das erste Leg mit Code, das zweite ohne — beide werden
+    zerlegt."""
+    _importiere(migrated_db, "oa_produktcode.xlsx")
+    trades = _trades(migrated_db)
+    legs = _legs(migrated_db, trades["5003"]["id"])
+    assert [leg["strike"] for leg in legs] == [Decimal("23000"), Decimal("22900")]
+    assert [leg["richtung"] for leg in legs] == [-1, 1]
+
+
+def test_produktcode_lockert_nicht_das_recht(migrated_db):
+    """Mit Code bleibt `Z` ein ungültiges Recht: weiterhin ein Defekt der
+    Quelle, benannt mit der Nummer (5101)."""
+    with pytest.raises(ValueError) as fehler:
+        _importiere(migrated_db, "oa_produktcode_defekt_recht.xlsx")
+    assert "5101" in str(fehler.value)
+
+
+def test_produktcode_in_kleinbuchstaben_bleibt_ein_defekt(migrated_db):
+    """Ein Eurex-Produktcode steht in Großbuchstaben; `odap` ist keiner und
+    wird nicht still akzeptiert (Trade 5201)."""
+    with pytest.raises(ValueError) as fehler:
+        _importiere(migrated_db, "oa_produktcode_defekt_klein.xlsx")
+    assert "5201" in str(fehler.value)

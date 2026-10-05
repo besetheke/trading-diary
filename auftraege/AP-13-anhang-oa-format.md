@@ -63,6 +63,13 @@ Beispiel: `-1xC751 (260831) / 1xP717 (260918)`
   prüfen und bei Abweichung abbrechen, statt zu raten.
 - Beobachtet wurden nur ganzzahlige Strikes. Der Parser sollte dennoch einen
   optionalen Dezimalteil zulassen, weil Strike-Konventionen halbe Punkte kennen.
+- **Produktcode (Gesamtexport 2026, AP-13pn, OF-66).** DAX-Trades der OptionApp
+  tragen vor dem Recht einen Eurex-Produktcode: `-1xODAP P23000 (260918)`. Er
+  besteht aus drei bis sechs Großbuchstaben, gefolgt von einem Leerzeichen, und
+  ist je Leg optional. Er lockert nur diese Stelle der Grammatik; Richtung,
+  Menge, Recht, Strike und Verfall bleiben maßgeblich, der Code geht nicht in die
+  Leg-Identität ein (der Rohwert `roh` behält ihn). Kleinbuchstaben oder ein
+  ungültiges Recht bleiben ein Defekt der Quelle.
 - Legs je Trade: beobachtet 2 (47 Fälle), 3 (26) und 4 (171). **Drei Legs sind ein
   regulärer Fall**, keine Anomalie — eine Typisierung, die nur Zwei-Leg-Verticals
   kennt, ist falsch.
