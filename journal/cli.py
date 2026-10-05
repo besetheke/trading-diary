@@ -1,7 +1,7 @@
 """CLI des Journals (AP-02): ``journal import <datei>`` — seit AP-04p
 zusätzlich ``journal rebuild``, seit AP-04d ``journal
 kandidaten-ausschreiben`` und ``journal kandidaten-einlesen``, seit AP-06
-``journal kennzahlen``.
+``journal kennzahlen``, seit AP-13y ``journal import-optionapp``.
 
 Der Datenbankpfad kommt aus ``--db``, sonst aus der Umgebungsvariablen
 ``JOURNAL_DB``, sonst gilt ``journal.db`` (OF-06). Aufgerufen als
@@ -19,6 +19,7 @@ from analytics.kommission import als_csv as kommission_als_csv
 from analytics.kommission import kommissions_bericht
 from analytics.steuer import als_csv as steuer_als_csv
 from ingest.flex import import_flex_file
+from ingest.optionapp import import_optionapp_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.rebuild import rebuild
 from journal.steuer import steuer_bericht
@@ -36,6 +37,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     importer.add_argument("datei", type=pathlib.Path, help="Pfad zur Flex-XML-Datei")
     importer.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    oa_importer = unterbefehle.add_parser(
+        "import-optionapp",
+        help="OptionApp-Trade-Export idempotent in die Datenbank importieren (AP-13)",
+    )
+    oa_importer.add_argument("datei", type=pathlib.Path, help="Pfad zur XLSX-Exportdatei")
+    oa_importer.add_argument(
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
@@ -135,6 +146,20 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Import {argumente.datei.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
             f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
+        )
+    elif argumente.befehl == "import-optionapp":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = import_optionapp_file(db_pfad, argumente.datei)
+        except (FileNotFoundError, ValueError) as fehler:
+            # Defekt der Quelle: benannt abbrechen, kein Traceback — die
+            # Transaktion hat nichts geschrieben (AP-02, AP-13).
+            print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"OptionApp-Import {argumente.datei.name}: {ergebnis.zeilen_gesamt} "
+            f"Trades gelesen, {ergebnis.zeilen_neu} neu, "
+            f"{ergebnis.zeilen_uebersprungen} übersprungen"
         )
     elif argumente.befehl == "rebuild":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
