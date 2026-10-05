@@ -75,11 +75,13 @@ KOPFZEILE = (
     "Status",
 )
 
-# Je Leg: [-]<Menge>x<C|P><Strike> (<JJMMTT>) — Strike mit optionalem
-# Dezimalteil, weil Strike-Konventionen halbe Punkte kennen (Anhang).
-LEG_MUSTER = re.compile(
-    r"^(-?)(\d+)x([CP])(\d+(?:\.\d+)?) \((\d{6})\)$"
-)
+# Je Leg: [-]<Menge>x[<Produktcode> ]<C|P><Strike> (<JJMMTT>) — Strike mit
+# optionalem Dezimalteil, weil Strike-Konventionen halbe Punkte kennen
+# (Anhang). Vor dem Recht optional ein Eurex-Produktcode: drei bis sechs
+# Großbuchstaben und genau ein Leerzeichen, nicht-erfassend, damit die
+# Gruppen unverändert bleiben; der Code ist nicht Teil der Leg-Identität
+# und bleibt nur im Rohwert stehen (AP-13pn, OF-66).
+LEG_MUSTER = re.compile(r"^(-?)(\d+)x(?:[A-Z]{3,6} )?([CP])(\d+(?:\.\d+)?) \((\d{6})\)$")
 
 # Geplanter Leg bei laufenden Trades (Vertrag 15): wie ein Leg, aber mit
 # Restlaufzeit `<n>DTE` statt Verfallsdatum — nicht ausgeführt, wird nicht
