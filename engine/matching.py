@@ -175,6 +175,8 @@ def bilde_legs(
     executions: Iterable[Mapping],
     instruments: Mapping[int, Mapping],
     kapitalmassnahmen: Iterable[Mapping] = (),
+    erzwungene_eroeffnungen: Iterable[str] = (),
+    verfallene_conids: Iterable[int] = (),
 ) -> MatchingErgebnis:
     """Bilde aus Ausführungen geschlossene und offene Legs, FIFO je conid.
 
@@ -182,6 +184,16 @@ def bilde_legs(
     ``menge``, ``preis``, ``kommission``, ``handelszeit``, ``ereignistyp``),
     ``instruments`` ist nach ``conid`` verschlüsselt, ``kapitalmassnahmen``
     trägt ``conid``, ``typ``, ``stichtag``, ``faktor``.
+
+    Zwei optionale Zusätze für die Kettensicht (OF-68), beide ohne Wirkung im
+    Standard — ohne sie bleibt das Ergebnis bitgleich:
+
+    - ``erzwungene_eroeffnungen``: Ausführungs-IDs, die zwingend eröffnen und
+      nie schließen, auch gegen ein vorhandenes gegenläufiges Los.
+    - ``verfallene_conids``: Kontrakte, deren Verfall vor der letzten
+      Handelszeit des Eingabebestands liegt (die Menge bestimmt der Aufrufer,
+      hier nur die Engine); ihre verbliebenen gegenläufigen offenen Lose
+      werden am Ende FIFO gegeneinander geschlossen.
     """
     nicht_gematcht: list[NichtGematcht] = []
     buchungen: list[_Buchung] = []
@@ -205,6 +217,8 @@ def bilde_legs(
     for buchung in buchungen:
         je_conid.setdefault(buchung.conid, []).append(buchung)
 
+    erzwungen = frozenset(erzwungene_eroeffnungen)
+    verfallen = frozenset(verfallene_conids)
     legs: list[Leg] = []
     for conid in sorted(je_conid):
         sortierte = sorted(je_conid[conid], key=lambda b: (b.handelszeit, b.exec_id))
@@ -214,6 +228,8 @@ def bilde_legs(
                 sortierte,
                 instruments[conid]["multiplikator"],
                 synthetische_zugaenge,
+                erzwungen,
+                conid in verfallen,
             )
         )
 
@@ -464,20 +480,35 @@ def _fifo(
     buchungen: list[_Buchung],
     multiplikator: Decimal,
     synthetische_zugaenge: frozenset[str] = frozenset(),
+    erzwungene_eroeffnungen: frozenset[str] = frozenset(),
+    verfallen: bool = False,
 ) -> list[Leg]:
     """FIFO je conid: eine Gegenbewegung schließt das älteste Los zuerst.
 
     Was über den Bestand hinausgeht, kehrt die Position um und eröffnet neu —
-    es wird nicht verworfen. Der Bestand bleibt richtungsrein: eine
+    es wird nicht verworfen. Long- und Short-Lose werden getrennt geführt;
+    eine Ausführung schließt das älteste Los der Gegenrichtung, sonst eröffnet
+    sie. Ohne die Zusätze unten bleibt der Bestand richtungsrein — eine
     entgegengerichtete Ausführung verzehrt ihn vollständig, ehe sie eröffnet.
+
+    Zwei Zusätze für die Kettensicht (OF-68), beide ohne Wirkung im Standard:
+
+    - Ausführungen in ``erzwungene_eroeffnungen`` eröffnen zwingend: Sie
+      schließen nie, auch nicht gegen ein vorhandenes gegenläufiges Los.
+    - ``verfallen``: Verbliebene gegenläufige offene Lose werden am Ende FIFO
+      gegeneinander geschlossen (früheres Los eröffnet, späteres schließt) —
+      der Kontrakt ist verfallen, das Konto ist flach, keine Ausführung
+      trennt die Vorgänge mehr. Bekannte Grenze (AP-04sx): Das innere
+      Ergebnis eines ITM-Verfalls wird nicht auf die Vorgänge aufgeteilt.
     """
-    bestand: deque[_Lot] = deque()
+    bestand: dict[int, deque[_Lot]] = {1: deque(), -1: deque()}
     schluesse: list[_Schluss] = []
 
     for buchung in buchungen:
         rest = buchung.menge
-        while rest > 0 and bestand and bestand[0].buchung.richtung != buchung.richtung:
-            lot = bestand[0]
+        gegen = bestand[-buchung.richtung]
+        while rest > 0 and buchung.exec_id not in erzwungene_eroeffnungen and gegen:
+            lot = gegen[0]
             teil = min(rest, lot.restmenge)
             schluesse.append(
                 _Schluss(
@@ -493,13 +524,18 @@ def _fifo(
             lot.restmenge -= teil
             rest -= teil
             if lot.restmenge == 0:
-                bestand.popleft()
+                gegen.popleft()
         if rest > 0:
-            bestand.append(_Lot(buchung=buchung, restmenge=rest))
+            bestand[buchung.richtung].append(_Lot(buchung=buchung, restmenge=rest))
+
+    if verfallen:
+        _verfalls_schluesse(bestand, schluesse)
+
+    offene_lots = list(bestand[1]) + list(bestand[-1])
 
     # Der offene Rest einer Eröffnung ist deren letzte Teilmenge — der
     # Rundungsrest ihrer Kommission fällt damit auf den offenen Bestand.
-    for lot in bestand:
+    for lot in offene_lots:
         lot.buchung.teilmengen.append(lot.restmenge)
 
     anteile = {buchung.exec_id: _kommission_verteilen(buchung) for buchung in buchungen}
@@ -521,7 +557,7 @@ def _fifo(
         )
         for schluss in schluesse
     ]
-    for lot in bestand:
+    for lot in offene_lots:
         buchung = lot.buchung
         legs.append(
             Leg(
@@ -537,6 +573,44 @@ def _fifo(
             )
         )
     return legs
+
+
+def _verfalls_schluesse(bestand: dict[int, deque[_Lot]], schluesse: list[_Schluss]) -> None:
+    """Gegenläufige offene Lose FIFO gegeneinander schließen (OF-68).
+
+    Der Kontrakt ist verfallen, das Konto flach — keine Ausführung trennt die
+    Vorgänge mehr. Das zeitlich frühere Los eröffnet, das spätere schließt
+    (bei gleicher Zeit entscheidet die ``exec_id``, wie im FIFO insgesamt).
+    Teilmengen und Kommissionsverteilung wie bei jedem anderen Schluss:
+    Die Summe der Kommission bleibt exakt (Regel 5).
+    """
+    while bestand[1] and bestand[-1]:
+        lang, kurz = bestand[1][0], bestand[-1][0]
+        if (lang.buchung.handelszeit, lang.buchung.exec_id) <= (
+            kurz.buchung.handelszeit,
+            kurz.buchung.exec_id,
+        ):
+            offen, schluss = lang, kurz
+        else:
+            offen, schluss = kurz, lang
+        teil = min(offen.restmenge, schluss.restmenge)
+        schluesse.append(
+            _Schluss(
+                offen=offen.buchung,
+                schluss=schluss.buchung,
+                menge=teil,
+                index_offen=len(offen.buchung.teilmengen),
+                index_schluss=len(schluss.buchung.teilmengen),
+            )
+        )
+        offen.buchung.teilmengen.append(teil)
+        schluss.buchung.teilmengen.append(teil)
+        offen.restmenge -= teil
+        schluss.restmenge -= teil
+        if offen.restmenge == 0:
+            bestand[offen.buchung.richtung].popleft()
+        if schluss.restmenge == 0:
+            bestand[schluss.buchung.richtung].popleft()
 
 
 def _brutto_pnl(schluss: _Schluss, multiplikator: Decimal) -> Decimal:
