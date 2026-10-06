@@ -2773,3 +2773,9 @@ Kommission und offene Legs in beiden Sichten identisch. **Bekannte Grenze:**
 Bei ITM-Verfall wird das innere Ergebnis nicht auf die beiden Vorgänge
 aufgeteilt (Summe stimmt, Zuordnung je Kette nicht). Die EUR-Summe ist nach
 der Umsetzung nachzurechnen.
+
+**OF-68 behoben (06.10.2026, AP-04sy, Commit 2a8fb88).** Echtabgleich an einer
+Kopie von `journal.db`: realisiertes Brutto 244.622,27 und Kommission
+−82.311,20 in beiden Sichten gleich, offene Legs 294 = 294, **Summe netto EUR in
+beiden Sichten identisch** (198.895,02). Die Kettensicht hat 17.343, die
+Kontosicht 17.345 Legs (zwei Legs weniger durch die Verfallszusammenführung).
