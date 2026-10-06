@@ -106,80 +106,165 @@ def test_nicht_trade_ereignis_wird_nicht_als_umgeleitet_behandelt():
     assert kette == konto
 
 
-def test_umgeleitete_ausfuehrung_oeffnet_ihre_eigene_struktur_wenn_ein_freier_closer_existiert():
-    # B3 ist in der Kontosicht frei (offene Eröffnung, niemand schließt sie)
-    # -> sie darf B1s eigene Position in der Kettensicht schließen.
+def _vorkommen(legs) -> dict[str, int]:
+    zaehler: dict[str, int] = {}
+    for leg in legs:
+        zaehler[leg.open_exec_id] = zaehler.get(leg.open_exec_id, 0) + 1
+        if leg.close_exec_id:
+            zaehler[leg.close_exec_id] = zaehler.get(leg.close_exec_id, 0) + 1
+    return zaehler
+
+
+def _offene_menge(legs, executions, conid) -> Decimal:
+    """Vorzeichenbehaftete offene Menge je Kontrakt (BUY plus, SELL minus)."""
+    summe = Decimal("0")
+    for leg in legs:
+        if leg.conid == conid and leg.close_exec_id is None:
+            vorzeichen = 1 if executions[leg.open_exec_id]["side"] == "BUY" else -1
+            summe += vorzeichen * leg.menge
+    return summe
+
+
+# ---------------------------------------------------------------------------
+# AP-04sx (OF-68, Option A): Die umgeleitete Ausführung eröffnet ausschließlich
+# ihren eigenen Vorgang und schließt den alten NICHT. Der alte Vorgang bleibt
+# offen, bis seine eigene Schließung kommt. Jede Ausführung kommt genau einmal
+# vor — damit stimmen die Summen mit der Kontosicht überein (Plan §5).
+# ---------------------------------------------------------------------------
+
+
+def test_umgeleitete_ausfuehrung_eroeffnet_nur_den_eigenen_vorgang_und_laesst_den_alten_offen():
+    # Datenende 10.09. liegt vor dem Verfall (18.09.): nichts wird rechnerisch
+    # zusammengeführt.
     executions = {e["exec_id"]: e for e in [A1, B1, B2, B3]}
     konto = _konto(executions.values())
-    # Kontosicht-Handrechnung: A1(Sell 12.00)->B1(Buy 3.00) schließt,
-    # brutto = (12.00-3.00)*1*100 = 900.00. B3 (Sell 2.00) bleibt offen,
-    # niemand schließt sie auf conid 601. B2 (Sell 5.00) bleibt offen.
-    assert len(konto) == 3
-    a1_b1 = next(leg for leg in konto if leg.open_exec_id == "A1")
-    assert a1_b1.close_exec_id == "B1"
-    assert a1_b1.brutto_pnl == Decimal("900.00")
-    b3_leg = next(leg for leg in konto if leg.open_exec_id == "B3")
-    assert b3_leg.close_exec_id is None
+    # Kontosicht: A1(Sell 12.00)->B1(Buy 3.00) = (12.00-3.00)*1*100 = 900.00;
+    # B3 und B2 offen.
+    assert any(
+        leg.open_exec_id == "A1" and leg.close_exec_id == "B1"
+        and leg.brutto_pnl == Decimal("900.00")
+        for leg in konto
+    )
 
     kette = kettensicht_legs(konto, executions, INSTRUMENTE)
 
-    # A1->B1 bleibt unverändert (Regel „Ausführung zählt doppelt", OF-52).
-    assert a1_b1 in kette
-    # B3s eigene Kontosicht-Zeile (offen) entfällt - sie schließt jetzt B1.
-    assert b3_leg not in kette
-    b1_b3 = next(leg for leg in kette if leg.open_exec_id == "B1")
-    assert b1_b3.close_exec_id == "B3"
-    # Handrechnung: B1 (Buy 3.00) -> B3 (Sell 2.00), brutto =
-    # (2.00-3.00)*1*100 = -100.00 (ein verlustreicher Long Put).
-    assert b1_b3.brutto_pnl == Decimal("-100.00")
-    # B2 bleibt unberührt (anderer Kontrakt, nicht Teil der Umleitung).
-    b2_leg = next(leg for leg in kette if leg.open_exec_id == "B2")
-    assert b2_leg.close_exec_id is None
+    # A1->B1 gibt es in der Kettensicht nicht mehr; A1 bleibt offen.
+    assert not any(
+        leg.open_exec_id == "A1" and leg.close_exec_id == "B1" for leg in kette
+    )
+    a1 = next(leg for leg in kette if leg.open_exec_id == "A1")
+    assert a1.close_exec_id is None
+    assert a1.offen_ja_nein is True
+    assert a1.brutto_pnl is None
+    assert a1.menge == Decimal("1")
+    assert a1.kommission_gesamt == Decimal("-1.00")  # nur die eigene Kommission von A1
+    # B1 eröffnet den eigenen Vorgang und wird von B3 geschlossen:
+    # (2.00-3.00)*1*100 = -100.00; Kommission B1 + B3 = -2.00.
+    b1 = next(leg for leg in kette if leg.open_exec_id == "B1")
+    assert b1.close_exec_id == "B3"
+    assert b1.brutto_pnl == Decimal("-100.00")
+    assert b1.kommission_gesamt == Decimal("-2.00")
+    # B2 unberührt offen; B3 hat keine eigene Zeile mehr.
+    b2 = next(leg for leg in kette if leg.open_exec_id == "B2")
+    assert b2.close_exec_id is None
+    assert not any(leg.open_exec_id == "B3" for leg in kette)
     assert len(kette) == 3
 
 
-def test_umgeleitete_ausfuehrung_bleibt_offen_wenn_kein_freier_closer_existiert():
-    # B5 schließt B3 bereits in der Kontosicht (B3 ist dort NICHT mehr
-    # frei) - die Kettensicht darf B3 dann nicht zusätzlich B1 zuschlagen,
-    # sonst zählte B3 zweimal innerhalb DERSELBEN Sicht. B1 bleibt offen,
-    # statt eine mehrstufige Neuzuordnung zu versuchen (Vertrag, Grenzen).
+def test_nachfolgende_schliessung_wird_dem_alten_vorgang_zugeordnet():
+    # A1 offen (kurz), B1 eröffnet lang (umgeleitet). B3 (Sell) schließt B1,
+    # B5 (Buy, 20.09., nach dem Verfall von 601 am 18.09.) schließt A1.
     executions = {e["exec_id"]: e for e in [A1, B1, B3, B5]}
     konto = _konto(executions.values())
-    # Handrechnung: A1->B1 (900.00, wie oben), B3(Sell 2.00)->B5(Buy 1.50)
-    # schließt: brutto = (2.00-1.50)*1*100 = 50.00. Alles geschlossen.
-    assert all(leg.close_exec_id is not None for leg in konto)
+    # Kontosicht: A1->B1 = 900.00; B3(Sell 2.00)->B5(Buy 1.50) = 50.00.
+    assert sorted(leg.brutto_pnl for leg in konto) == [Decimal("50.00"), Decimal("900.00")]
 
     kette = kettensicht_legs(konto, executions, INSTRUMENTE)
 
-    # Alle Kontosicht-Legs bleiben erhalten (nichts wird verbraucht).
-    for leg in konto:
-        assert leg in kette
-    b1_leg = next(leg for leg in kette if leg.open_exec_id == "B1" and leg.close_exec_id is None)
-    assert b1_leg.brutto_pnl is None
-    assert len(kette) == len(konto) + 1
+    assert len(kette) == 2
+    b1 = next(leg for leg in kette if leg.open_exec_id == "B1")
+    # B1 (Buy 3.00) -> B3 (Sell 2.00): (2.00-3.00)*1*100 = -100.00
+    assert b1.close_exec_id == "B3"
+    assert b1.brutto_pnl == Decimal("-100.00")
+    a1 = next(leg for leg in kette if leg.open_exec_id == "A1")
+    # A1 (Sell 12.00) -> B5 (Buy 1.50): (1.50-12.00)*1*100*(-1) = 1050.00
+    assert a1.close_exec_id == "B5"
+    assert a1.brutto_pnl == Decimal("1050.00")
 
 
-def test_keine_mehrfachverwendung_in_der_kettensicht_ausser_der_umgeleiteten_ausfuehrung():
-    # Die Kettensicht darf innerhalb sich selbst keine Ausführung zweimal
-    # verwenden - außer der einen, bei der genau das Absicht ist: der
-    # umgeleiteten Eröffnung, die ihren alten Vorgang schließt UND ihren
-    # eigenen eröffnet (OF-52, „zählt doppelt"). B1 ist dieser einzige
-    # Sonderfall; A1/B2/B3 dürfen je nur einmal auftauchen.
+def test_summen_der_kettensicht_entsprechen_der_kontosicht():
+    # Plan §5. Handrechnung Brutto: Konto 900.00 + 50.00 = 950.00;
+    # Kette -100.00 + 1050.00 = 950.00. Kommission: vier Ausführungen
+    # zu je -1.00 = -4.00 in beiden Sichten.
+    executions = {e["exec_id"]: e for e in [A1, B1, B3, B5]}
+    konto = _konto(executions.values())
+
+    kette = kettensicht_legs(konto, executions, INSTRUMENTE)
+
+    assert sum((leg.brutto_pnl for leg in konto), Decimal("0")) == Decimal("950.00")
+    assert sum((leg.brutto_pnl for leg in kette), Decimal("0")) == Decimal("950.00")
+    assert sum((leg.kommission_gesamt for leg in konto), Decimal("0")) == Decimal("-4.00")
+    assert sum((leg.kommission_gesamt for leg in kette), Decimal("0")) == Decimal("-4.00")
+
+
+def test_jede_ausfuehrung_kommt_in_der_kettensicht_genau_einmal_vor():
+    # Ersetzt die frühere Mehrfachverwendungs-Erwartung (B1 zweimal).
+    for namen in ([A1, B1, B2, B3], [A1, B1, B3, B5]):
+        executions = {e["exec_id"]: e for e in namen}
+        konto = _konto(executions.values())
+
+        kette = kettensicht_legs(konto, executions, INSTRUMENTE)
+
+        assert _vorkommen(kette) == {e["exec_id"]: 1 for e in namen}
+
+
+def test_offene_menge_je_kontrakt_entspricht_der_kontosicht():
     executions = {e["exec_id"]: e for e in [A1, B1, B2, B3]}
     konto = _konto(executions.values())
 
     kette = kettensicht_legs(konto, executions, INSTRUMENTE)
 
-    vorkommen: dict[str, int] = {}
-    for leg in kette:
-        vorkommen[leg.open_exec_id] = vorkommen.get(leg.open_exec_id, 0) + 1
-        if leg.close_exec_id:
-            vorkommen[leg.close_exec_id] = vorkommen.get(leg.close_exec_id, 0) + 1
+    # 601: Konto offen = B3 (Sell) = -1; Kette offen = A1 (Sell) = -1 (B1 ist
+    # durch B3 geschlossen). 701: B2 (Sell) = -1 in beiden Sichten.
+    assert _offene_menge(konto, executions, 601) == Decimal("-1")
+    assert _offene_menge(kette, executions, 601) == Decimal("-1")
+    assert _offene_menge(konto, executions, 701) == Decimal("-1")
+    assert _offene_menge(kette, executions, 701) == Decimal("-1")
 
-    assert vorkommen["B1"] == 2  # schließt A1 UND eröffnet die eigene Struktur
-    assert vorkommen["A1"] == 1
-    assert vorkommen["B2"] == 1
-    assert vorkommen["B3"] == 1
+
+def test_ohne_eigene_schliessung_bleiben_beide_vorgaenge_vor_dem_verfall_offen():
+    # Nur A1 und B1; Datenende 05.09. < Verfall 18.09.: das Konto ist flach,
+    # die Kettensicht führt beide Vorgänge brutto weiter (offen, je 1).
+    executions = {e["exec_id"]: e for e in [A1, B1]}
+    konto = _konto(executions.values())
+
+    kette = kettensicht_legs(konto, executions, INSTRUMENTE)
+
+    assert len(kette) == 2
+    assert all(leg.close_exec_id is None and leg.brutto_pnl is None for leg in kette)
+    assert {leg.open_exec_id for leg in kette} == {"A1", "B1"}
+    # Nettobestand wie im (flachen) Konto: -1 + 1 = 0.
+    assert _offene_menge(kette, executions, 601) == Decimal("0")
+    assert _offene_menge(konto, executions, 601) == Decimal("0")
+
+
+def test_nach_dem_verfall_werden_gegenlaeufige_offene_vorgaenge_zusammengefuehrt():
+    # Wie oben, aber eine weitere Ausführung am 20.09. (Datenende) liegt nach
+    # dem Verfall von 601 (18.09.): A1 und B1 heben sich dann wie in der
+    # Kontosicht gegeneinander auf (A1->B1 = 900.00) — es gibt keine eigene
+    # Schließung mehr, die sie noch trennen könnte. Kein Geld geht verloren.
+    spaeter = _exec("X9", conid=701, side="SELL", preis="1.00",
+                    handelszeit=datetime(2026, 9, 20, 10, 0, 0),
+                    oa_trade="900", oa_order="1", oa_rolle="Open Order")
+    executions = {e["exec_id"]: e for e in [A1, B1, spaeter]}
+    konto = _konto(executions.values())
+
+    kette = kettensicht_legs(konto, executions, INSTRUMENTE)
+
+    assert kette == konto
+    leg = next(leg for leg in kette if leg.conid == 601)
+    assert (leg.open_exec_id, leg.close_exec_id) == ("A1", "B1")
+    assert leg.brutto_pnl == Decimal("900.00")
 
 
 def test_vorgang_b_wird_erst_in_der_kettensicht_zur_vollstaendigen_struktur():

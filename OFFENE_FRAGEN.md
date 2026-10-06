@@ -2763,3 +2763,13 @@ belastbare Summe.
 
 **Folgepaket:** AP-13z (OA-Strategie auch in die Kettensicht schreiben) erst
 nach der Entscheidung. Verwandt: OF-52, OF-61.
+
+**Entscheidung (06.10.2026): Option A.** Abnahmebasis AP-04sx (Tests
+berichtigt, Regel 1a), Umsetzung AP-04sy. Zusatzregel „Verfall": Nach dem
+Verfall werden gegenläufige offene Lose gegeneinander geschlossen, sonst
+blieben 189 Legs offen (13.639 USD brutto). Vorab an einer Kopie von
+`journal.db` mit einer Wegwerf-Umsetzung geprüft: realisiertes Brutto,
+Kommission und offene Legs in beiden Sichten identisch. **Bekannte Grenze:**
+Bei ITM-Verfall wird das innere Ergebnis nicht auf die beiden Vorgänge
+aufgeteilt (Summe stimmt, Zuordnung je Kette nicht). Die EUR-Summe ist nach
+der Umsetzung nachzurechnen.
