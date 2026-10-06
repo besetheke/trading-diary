@@ -587,7 +587,7 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     kette_legs = kettensicht_legs(
         matching.legs, exec_je_id, bestand.instrument_je_conid
     )
-    _sicht_schreiben(verbindung, "kette", kette_legs, bestand, set(), set())
+    kette_sicht = _sicht_schreiben(verbindung, "kette", kette_legs, bestand, set(), set())
 
     # -- Overrides anwenden (Vertrag 16–21); chain_overrides selbst wird nie
     #    geschrieben oder gelöscht (Regel 4).
@@ -614,6 +614,22 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         struktur_je_schluessel,
         struktur_id_je_schluessel,
         ketten_id_je_schluessel,
+        exec_je_id,
+        bestand.instrument_je_conid,
+    )
+
+    # -- OA-Abgleich auch für die Kettensicht (AP-13zk): dieselbe Funktion,
+    #    mit Ketten/Strukturen und ID-Zuordnungen der Kettensicht — der
+    #    Fingerabdruck prüft je Sicht gegen deren eigene Strukturen. Die
+    #    Zählwerte entfallen, RebuildErgebnis bleibt auf die Kontosicht
+    #    bezogen (Abnahmebasis AP-13z). Keine Overrides in der Kettensicht
+    #    (OF-61 bleibt offen).
+    oa_werte_schreiben(
+        verbindung,
+        kette_sicht.kette_je_schluessel,
+        kette_sicht.struktur_je_schluessel,
+        kette_sicht.struktur_id_je_schluessel,
+        kette_sicht.ketten_id_je_schluessel,
         exec_je_id,
         bestand.instrument_je_conid,
     )
