@@ -32,6 +32,14 @@ bliebe eine Zuordnung bestehen, deren OA-Trade nicht mehr importiert ist
 (``journal.campaigns_sicht``) — reine Anzeige: nichts wird klassifiziert,
 geschrieben oder still als ``independent`` einsortiert.
 
+**Overrides in beiden Sichten** (AP-04szk): Ein bestätigter
+``chain_overrides`` ist eine Aussage über das reale Geschehen („diese
+Struktur setzt jene Kette fort") und wird deshalb einmal gegeben — in der
+Kontosicht, wo der Nutzer ihn sieht. Die Kettensicht übernimmt ihn über die
+Naturschlüssel: Struktur und Zielkette müssen dort unter demselben Schlüssel
+existieren, sonst zählt der Override dort als „ohne Entsprechung" und bleibt
+folgenlos — keine Überlappungs-Heuristik.
+
 Dokumentierte Annahmen (Regel 10) — hier nur im Code festgehalten, weil die
 Abnahme Änderungen ausschließlich in ``journal/rebuild.py`` und
 ``journal/cli.py`` zulässt; für den Review notieren:
@@ -120,6 +128,11 @@ class RebuildErgebnis:
     chains_kette: int = 0
     legs_kette: int = 0
     chain_links_kette: int = 0
+    # AP-04szk: bestätigte Overrides, über die Naturschlüssel auch in der
+    # Kettensicht angewandt. „Ohne Entsprechung" heißt: Struktur oder Zielkette
+    # existiert dort unter anderem Schlüssel (umgeleitete Ausführungen).
+    overrides_kette_angewandt: int = 0
+    overrides_kette_ohne_entsprechung: int = 0
 
 
 @dataclass(frozen=True)
@@ -149,9 +162,9 @@ class Bestand:
 @dataclass(frozen=True)
 class _SichtErgebnis:
     """Rückgabe von ``_sicht_schreiben()`` (AP-04sw) — alles, was der
-    Aufrufer braucht, um auf dieser Sicht weiterzuarbeiten (Overrides,
-    OA-Abgleich, Campaign-Sichtbarkeit — allesamt nur für ``sicht='konto'``
-    aufgerufen, siehe Grenzen)."""
+    Aufrufer braucht, um auf dieser Sicht weiterzuarbeiten: Overrides und
+    OA-Abgleich für beide Sichten (AP-04szk/AP-13zk), Campaign-Sichtbarkeit
+    nur für ``sicht='konto'``."""
 
     struktur_id_je_schluessel: dict[str, int]
     ketten_id_je_schluessel: dict[str, int]
@@ -398,8 +411,8 @@ def _sicht_schreiben(
     ``sicht='kette'`` den Satz aus ``engine.kettensicht.kettensicht_legs()``.
 
     Overrides (``gesicherte_*_ids``) schützen nur die Kontosicht vor
-    Löschung — die Kettensicht kennt noch keinen Override-Mechanismus
-    (Grenze von AP-04s/AP-04sw).
+    Löschung — die Kettensicht bekommt die Bestätigungen erst danach, über
+    die Naturschlüssel übersetzt durch ``_rebuild_laufen()`` (AP-04szk).
     """
     sicht_legs = tuple(sicht_legs)
     legs_als_dict = [
@@ -601,6 +614,42 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         gesicherte_ketten_ids,
     )
 
+    # -- AP-04szk (OF-61): dieselben Bestätigungen auch in der Kettensicht.
+    #    Der Nutzer entscheidet in der Kontosicht; übersetzt wird über die
+    #    Naturschlüssel — Struktur und Zielkette müssen dort unter demselben
+    #    Schlüssel existieren. Fehlt einer von beiden (die Kettensicht hat
+    #    andere Strukturen, wo Ausführungen umgeleitet sind), zählt der
+    #    Override als „ohne Entsprechung" — gezählt, nicht angewandt, nie
+    #    ein Fehler. Keine Überlappungs-Heuristik.
+    konto_schluessel_je_struktur_id = {
+        sid: s for s, sid in struktur_id_je_schluessel.items()
+    }
+    konto_schluessel_je_ketten_id = {cid: k for k, cid in ketten_id_je_schluessel.items()}
+    uebersetzte: list[dict] = []
+    ohne_entsprechung = 0
+    for override in bestaetigungen:
+        struktur_id = kette_sicht.struktur_id_je_schluessel.get(
+            konto_schluessel_je_struktur_id.get(override["structure_id"])
+        )
+        chain_id = kette_sicht.ketten_id_je_schluessel.get(
+            konto_schluessel_je_ketten_id.get(override["chain_id"])
+        )
+        if struktur_id is None or chain_id is None:
+            ohne_entsprechung += 1
+            continue
+        uebersetzte.append(dict(structure_id=struktur_id, chain_id=chain_id))
+
+    overrides_kette_angewandt, _ = _overrides_anwenden(
+        verbindung,
+        uebersetzte,
+        kette_sicht.glieder_je_kette,
+        kette_sicht.struktur_id_je_schluessel,
+        kette_sicht.ketten_id_je_schluessel,
+        kette_sicht.struktur_je_schluessel,
+        {o["chain_id"] for o in uebersetzte},
+        sicht="kette",
+    )
+
     # -- assignment_links (Vertrag 22): nicht-manuelle Zeilen neu schreiben.
     _assignment_links_neu_schreiben(verbindung, ketten_ergebnis, exec_je_id)
 
@@ -622,8 +671,9 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     #    mit Ketten/Strukturen und ID-Zuordnungen der Kettensicht — der
     #    Fingerabdruck prüft je Sicht gegen deren eigene Strukturen. Die
     #    Zählwerte entfallen, RebuildErgebnis bleibt auf die Kontosicht
-    #    bezogen (Abnahmebasis AP-13z). Keine Overrides in der Kettensicht
-    #    (OF-61 bleibt offen).
+    #    bezogen (Abnahmebasis AP-13z). Wie dort laufen die Overrides der
+    #    Kettensicht (AP-04szk) vorher, damit Ketten, die sie löschen
+    #    (Vertrag 19), nicht mehr beschrieben werden.
     oa_werte_schreiben(
         verbindung,
         kette_sicht.kette_je_schluessel,
@@ -677,6 +727,8 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         structures_kette=_anzahl_je_sicht(verbindung, structures, "kette"),
         chains_kette=_anzahl_je_sicht(verbindung, chains, "kette"),
         chain_links_kette=_anzahl_je_sicht(verbindung, chain_links, "kette"),
+        overrides_kette_angewandt=overrides_kette_angewandt,
+        overrides_kette_ohne_entsprechung=ohne_entsprechung,
     )
 
 
@@ -722,10 +774,13 @@ def _overrides_anwenden(
     ketten_id_je_schluessel: dict[str, int],
     struktur_je_schluessel: dict[str, Struktur],
     gesicherte_ketten_ids: set[int],
+    sicht: str = "konto",
 ) -> tuple[int, list[tuple[object, object]]]:
     """Wendet chain_overrides an: Struktur in die Zielkette hängen, erkennung
     'manuell', betroffene Ketten neu nummerieren und Kennzahlen nachziehen
-    (Vertrag 17/18). Liefert (Anzahl angewandt, Liste verwaister)."""
+    (Vertrag 17/18). ``sicht`` landet in den neu geschriebenen chain_links —
+    die Kettensicht ruft mit übersetzten Overrides (AP-04szk). Liefert
+    (Anzahl angewandt, Liste verwaister)."""
     schluessel_je_struktur_id = {sid: s for s, sid in struktur_id_je_schluessel.items()}
     schluessel_je_ketten_id = {cid: k for k, cid in ketten_id_je_schluessel.items()}
 
@@ -799,6 +854,7 @@ def _overrides_anwenden(
                     sequenz=position,
                     verknuepfungstyp="open" if position == 1 else "roll",
                     erkennung=erkennung,
+                    sicht=sicht,
                 )
             )
 
