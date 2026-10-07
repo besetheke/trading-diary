@@ -2779,3 +2779,23 @@ Kopie von `journal.db`: realisiertes Brutto 244.622,27 und Kommission
 −82.311,20 in beiden Sichten gleich, offene Legs 294 = 294, **Summe netto EUR in
 beiden Sichten identisch** (198.895,02). Die Kettensicht hat 17.343, die
 Kontosicht 17.345 Legs (zwei Legs weniger durch die Verfallszusammenführung).
+
+## OF-69 · Wirtschaftliche EUR-Rechnung ignoriert den Abrechnungskurs bei Barausgleich
+
+Beim Nachrechnen der Kommissionsanteile je Strategie (07.10.2026) fiel auf, dass
+Kette 9091 (Short Put, zugeteilt) in den Legs −959 USD zeigt, in der
+wirtschaftlichen EUR-Rechnung aber +333 EUR. Ursache: Bei Barausgleich trägt
+die Zuteilungszeile den Preis 0, der Abrechnungskurs steht in `schlusskurs`
+(OF-25); `engine/matching.py` nutzt ihn, `analytics/kennzahlen.py` und
+`analytics/kommission.py` nicht. Meine Abnahmebasis von AP-06v/06w hat den
+Fall nicht abgedeckt (kein Zuteilungsfall mit Barausgleich in der Testwelt).
+
+Auswirkung am Echtbestand (Kopie): Summe netto EUR **198.895 → 163.546**;
+IB-basierte Summe unverändert 182.402. Die Barausgleich-Ketten (3.777) haben
+danach einen „Währungseffekt" von −149 insgesamt; der verbleibende Effekt
+(−18.856) liegt fast vollständig in den 319 Ketten mit Aktienbein (Lieferung +
+STK) und ist dort ein echter Kurseffekt der Haltedauer. Unberührt: Steuer
+(AP-10), Legs, USD-Werte, alle Brutto/Netto-Spalten in Kontraktwährung.
+Alle bisher genannten Kommissionsanteile je Strategie mit Zuteilungen
+(`Default`, `FKK10`) waren verzerrt und sind zu verwerfen.
+**Behebung:** AP-06x (Abnahmebasis, fertig), AP-06xk (Umsetzung, Auftrag fehlt noch).
