@@ -29,7 +29,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 
-from analytics.kennzahlen import STUFEN_RANG
+from analytics.kennzahlen import STUFEN_RANG, bewerte_barausgleich
 from journal.db import create_db_engine
 from journal.schema import (
     chain_links,
@@ -208,6 +208,9 @@ def kommissions_attribution(
         raise ValueError(
             f"Unbekannte sicht {sicht!r} — erlaubt sind 'kette' und 'konto' (AP-06w, Regel 1)"
         )
+    # OF-69 (AP-06xk): Barausgleich-Zuteilungen und -Ausübungen zum
+    # Abrechnungskurs bewerten — dieselbe Stelle wie in Tranche I.
+    ausfuehrungs_zeilen = bewerte_barausgleich(ausfuehrungs_zeilen, instrumenten_zeilen)
     exec_je_id = {z["exec_id"]: z for z in ausfuehrungs_zeilen}
     mult_je_conid = {z["conid"]: z["multiplikator"] for z in instrumenten_zeilen}
     kette_je_id = {z["chain_id"]: z for z in ketten_zeilen}
@@ -400,13 +403,19 @@ def kommissions_bericht(
                     executions.c.kommission,
                     executions.c.buchungskurs,
                     executions.c.qualitaetsstufe,
+                    executions.c.ereignistyp,
+                    executions.c.schlusskurs,
                 )
             ).mappings()
         ]
         instrumenten_zeilen = [
             dict(z)
             for z in verbindung.execute(
-                select(instruments.c.conid, instruments.c.multiplikator)
+                select(
+                instruments.c.conid,
+                instruments.c.multiplikator,
+                instruments.c.abwicklungsart,
+            )
             ).mappings()
         ]
     return kommissions_attribution(

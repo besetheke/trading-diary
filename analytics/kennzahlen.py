@@ -50,6 +50,13 @@ STUFEN_RANG = {"A": 0, "B": 1, "C": 2}
 # Kursquelle verwechselbar.
 QUELLE_ABGELEITET = "abgeleitet_letzte_ausfuehrung"
 
+# OF-69 (AP-06x): Bei Zuteilung oder Ausübung einer Option mit Barausgleich
+# trägt die Ereigniszeile den Preis 0 — der Abrechnungskurs steht in
+# ``schlusskurs``. ``bewerte_barausgleich`` setzt ihn an einer Stelle ein,
+# von Kennzahlen und Kommissionsattribution gemeinsam genutzt (AP-06xk).
+BARAUSGLEICH_EREIGNISSE = frozenset({"assignment", "exercise"})
+BARAUSGLEICH_ART = "barausgleich"
+
 _VORZEICHEN = {"SELL": 1, "BUY": -1}
 _NULL = Decimal("0")
 _VIER_STELLEN = Decimal("0.0001")
@@ -253,6 +260,41 @@ def _quote(zaehler: int, nenner: int) -> Decimal | None:
     )
 
 
+def bewerte_barausgleich(
+    ausfuehrungs_zeilen: list[dict], instrumenten_zeilen: list[dict]
+) -> list[dict]:
+    """Bewertet Barausgleich-Ereignisse zum Abrechnungskurs (OF-69, AP-06x).
+
+    Gibt die Ausführungszeilen zurück, in denen betroffene Zeilen mit ihrem
+    ``schlusskurs`` bewertet werden statt mit dem ``preis``: ``ereignistyp``
+    'assignment' oder 'exercise' und ein Instrument mit ``abwicklungsart``
+    'barausgleich'. Alles andere bleibt beim ``preis`` — gewöhnlicher Handel
+    auch mit gesetztem ``schlusskurs``, Lieferung, Aktienzeilen. Fehlt der
+    ``schlusskurs`` einer betroffenen Zeile: ``ValueError``, der die
+    Ausführung nennt — kein Raten. Fehlen die Schlüssel (alte Aufrufer),
+    gilt das bisherige Verhalten. Die Eingabezeilen werden nicht verändert;
+    nur ersetzte Zeilen entstehen als Kopie (AP-06xk).
+    """
+    art_je_conid = {z["conid"]: z.get("abwicklungsart") for z in instrumenten_zeilen}
+    bewertet: list[dict] = []
+    for zeile in ausfuehrungs_zeilen:
+        if zeile.get("ereignistyp") not in BARAUSGLEICH_EREIGNISSE:
+            bewertet.append(zeile)
+            continue
+        if art_je_conid.get(zeile["conid"]) != BARAUSGLEICH_ART:
+            bewertet.append(zeile)
+            continue
+        schlusskurs = zeile.get("schlusskurs")
+        if schlusskurs is None:
+            raise ValueError(
+                f"Ausführung {zeile['exec_id']!r}: Zuteilung oder Ausübung "
+                "eines Barausgleich-Instruments ohne schlusskurs — kein "
+                "Raten (AP-06x, OF-69)"
+            )
+        bewertet.append({**zeile, "preis": schlusskurs})
+    return bewertet
+
+
 def kennzahlen_auswertung(
     ketten_zeilen: list[dict],
     struktur_zeilen: list[dict],
@@ -276,6 +318,9 @@ def kennzahlen_auswertung(
             f"Unbekannte sicht {sicht!r} — erlaubt sind 'kette' und 'konto' "
             "(AP-06v, Regel 1)"
         )
+    # OF-69 (AP-06xk): Barausgleich-Zuteilungen und -Ausübungen zum
+    # Abrechnungskurs bewerten — vor jeder Verwendung der Preise.
+    ausfuehrungs_zeilen = bewerte_barausgleich(ausfuehrungs_zeilen, instrumenten_zeilen)
     exec_je_id = {z["exec_id"]: z for z in ausfuehrungs_zeilen}
     mult_je_conid = {z["conid"]: z["multiplikator"] for z in instrumenten_zeilen}
     kette_je_id = {z["chain_id"]: z for z in ketten_zeilen}
@@ -607,13 +652,19 @@ def kennzahlen_bericht(
                     executions.c.buchungskurs,
                     executions.c.handelszeit,
                     executions.c.qualitaetsstufe,
+                    executions.c.ereignistyp,
+                    executions.c.schlusskurs,
                 )
             ).mappings()
         ]
         instrumenten_zeilen = [
             dict(z)
             for z in verbindung.execute(
-                select(instruments.c.conid, instruments.c.multiplikator)
+                select(
+                    instruments.c.conid,
+                    instruments.c.multiplikator,
+                    instruments.c.abwicklungsart,
+                )
             ).mappings()
         ]
 
