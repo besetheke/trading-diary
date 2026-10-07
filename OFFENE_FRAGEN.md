@@ -2799,3 +2799,12 @@ STK) und ist dort ein echter Kurseffekt der Haltedauer. Unberührt: Steuer
 Alle bisher genannten Kommissionsanteile je Strategie mit Zuteilungen
 (`Default`, `FKK10`) waren verzerrt und sind zu verwerfen.
 **Behebung:** AP-06x (Abnahmebasis, fertig), AP-06xk (Umsetzung, Auftrag fehlt noch).
+
+**OF-61 entschieden (07.10.2026):** Overrides werden einmal in der Kontosicht
+gegeben und per Naturschlüssel in die Kettensicht übersetzt; fehlt dort einer
+der beiden Schlüssel (umgeleitete Ausführungen), zählt der Override als „ohne
+Entsprechung" und wird nicht geraten. Abnahmebasis AP-04sz, Umsetzung AP-04szk.
+Am Echtbestand gibt es derzeit 0 bestätigte Overrides; die Wirkung zeigt sich
+erst, wenn die 677 offenen Rollkandidaten durchgesehen werden. Die Degradation
+in Tranche III muss weiterhin ausweisen, wie viele Ketten wegen fehlender
+Entsprechung nicht erfasst sind.
