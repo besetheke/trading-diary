@@ -5,6 +5,15 @@ Zwei Kandidatenregeln als reine Funktion über bereits gebildete Ketten
 einen Iron Condor ergeben könnten — und der **Financing-Kandidat** — eine
 neue Kette als mögliche Gegenfinanzierung eines Rolls.
 
+Die Regeln folgen der Praxis des Nutzers (AP-05r, OF-71): Der IC-Kandidat
+läuft über irgendein Gliederpaar mit gemeinsamer Expiry und überlappendem
+Glied-Intervall — nicht nur über die letzten Glieder, denn wer beide
+Seiten dauerhaft hält und einzeln rollt, hat selten am Ende dieselbe
+Expiry. Ein „Doppel-Roll“ — beide Seiten in wenigen Minuten neu
+aufgebaut — ist keine Gegenfinanzierung und wird herausgefiltert. Jeder
+Kandidat trägt ``abstand`` und ``ueberlappung`` als Ranggrößen für die
+Durchsicht; hier wird nicht danach sortiert.
+
 Beides sind **Vorschläge, keine Tatsachen** (Plan §6, Block B, Regel 5
 sinngemäß): nichts wird entschieden, nichts gespeichert, nichts
 klassifiziert. Ob eine Kette „die IC-Seite" ist oder die Gegenfinanzierung,
@@ -21,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from engine.chains import Chain
+from engine.structures import Structure
 
 # Entscheidung 3 in auftraege/AP-05v.md: „im zeitlichen Umfeld eines Rolls"
 # ohne Zahl im Plan. Gemessen am echten Bestand (nur Zählwerte, Regel 2)
@@ -30,8 +40,18 @@ from engine.chains import Chain
 # OFFENE_FRAGEN.md festgehalten. Benannter Modulwert, keine Zahl im Code.
 FINANCING_FENSTER = timedelta(hours=24)
 
-# Ende einer offenen Kette im Intervallvergleich (Entscheidung 1):
-# ``beendet_am = None`` heißt „bis auf Weiteres", zählt also als unbegrenzt.
+# AP-05r, Regel 2 (Nutzerangaben 08.10.2026, OF-71): Zu Beginn — und nach
+# einem Take Profit — rollt oder setzt der Nutzer häufig beide Seiten neu
+# auf, alles in wenigen Minuten. Eine Gegenseite-Kette, die so kurz nach
+# dem Ende einer gleichseitigen Vorgängerkette eröffnet wird, ist
+# Fortsetzung oder Wiedereinstieg der eigenen Seite, nicht die
+# Gegenfinanzierung eines Rolls der anderen Seite. 15 Minuten,
+# einschließlich der Grenze; benannter Modulwert, keine Zahl im Code.
+DOPPEL_ROLL_FENSTER = timedelta(minutes=15)
+
+# Ende einer offenen Kette oder Struktur im Intervallvergleich
+# (Entscheidung 1): ``beendet_am``/``geschlossen_am`` gleich ``None``
+# heißt „bis auf Weiteres", zählt also als unbegrenzt.
 _UNBEGRENZT = datetime.max
 
 
@@ -43,11 +63,20 @@ class CampaignKandidat:
     chronologisch früher eröffnete der beiden Ketten (``eroeffnet_am``, bei
     Gleichstand der Naturschlüssel); bei ``"financing"`` ist das genau die
     Bestandskette mit dem Roll — das ergibt sich zwangsläufig aus der Regel.
+
+    ``abstand`` und ``ueberlappung`` (AP-05r, Regel 3) sind Ranggrößen für
+    die Durchsicht, kein Sortierkriterium hier: ``abstand`` ist bei ``"ic"``
+    der Betrag zwischen den beiden Ketten-Eröffnungen, bei ``"financing"``
+    der Betrag zwischen dem frühesten Roll der Bestandskette und der
+    Eröffnung der Gegenseite. ``ueberlappung`` ist die gemeinsame Zeit der
+    beiden Ketten — ``None``, wenn beide offen (unbegrenzt) sind.
     """
 
     typ: str
     kette_a: Chain
     kette_b: Chain
+    abstand: timedelta | None = None
+    ueberlappung: timedelta | None = None
 
 
 def _naturschluessel(kette: Chain) -> str:
@@ -65,20 +94,14 @@ def _seite_gegenlaeufig(a: Chain, b: Chain) -> bool:
     return {a.seite, b.seite} == {"Call", "Put"}
 
 
-def _intervalle_ueberlappen(a: Chain, b: Chain) -> bool:
-    """Überlappen ``[eroeffnet_am, beendet_am oder unbegrenzt)`` beider
-    Ketten (Vertrag 4, Entscheidung 1)? Eine Kette schließt per Definition
-    genau einmal, „keine zwischenzeitliche Schließung" ist damit automatisch
-    erfüllt — der Intervallvergleich trägt die ganze Bedingung."""
-    a_ende = a.beendet_am if a.beendet_am is not None else _UNBEGRENZT
-    b_ende = b.beendet_am if b.beendet_am is not None else _UNBEGRENZT
-    return a.eroeffnet_am < b_ende and b.eroeffnet_am < a_ende
-
-
-def _erste_expiry(kette: Chain):
-    """Expiry des letzten Glieds — der Zustand, der gerade gilt (Vertrag 4,
-    Entscheidung 2), nicht die Historie der Kette."""
-    return kette.glieder[-1].structure.expiry
+def _intervall(struktur: Structure) -> tuple[datetime, datetime]:
+    """``[eroeffnet_am, geschlossen_am oder unbegrenzt)`` — das Intervall
+    eines Glieds (AP-05r, Regel 1); offen zählt wie bei der Kette als
+    unbegrenzt (Entscheidung 1)."""
+    return (
+        struktur.eroeffnet_am,
+        _UNBEGRENZT if struktur.geschlossen_am is None else struktur.geschlossen_am,
+    )
 
 
 def _erster_roll_zeitpunkt(kette: Chain) -> datetime | None:
@@ -94,23 +117,69 @@ def _erster_roll_zeitpunkt(kette: Chain) -> datetime | None:
 
 
 def _ic_kandidat(a: Chain, b: Chain) -> bool:
-    return (
-        a.underlying == b.underlying
-        and _seite_gegenlaeufig(a, b)
-        and _erste_expiry(a) is not None
-        and _erste_expiry(a) == _erste_expiry(b)
-        and _intervalle_ueberlappen(a, b)
-    )
+    """AP-05r, Regel 1: Zwei Ketten sind ein IC-Kandidat, wenn es je Kette
+    ein Glied gibt, die dieselbe (nicht leere) Expiry tragen und deren
+    Glied-Intervalle überlappen — das ersetzt den Vergleich der letzten
+    Glieder (Vertrag 4, Entscheidung 2)."""
+    if a.underlying != b.underlying or not _seite_gegenlaeufig(a, b):
+        return False
+    for glied_a in a.glieder:
+        expiry = glied_a.structure.expiry
+        if expiry is None:  # leere Expiry (Aktie, Future) trägt nichts bei
+            continue
+        beginn_a, ende_a = _intervall(glied_a.structure)
+        for glied_b in b.glieder:
+            if glied_b.structure.expiry != expiry:
+                continue
+            beginn_b, ende_b = _intervall(glied_b.structure)
+            if beginn_a < ende_b and beginn_b < ende_a:
+                return True
+    return False
 
 
-def _financing_kandidat(a: Chain, b: Chain) -> bool:
+def _financing_roll_zeitpunkt(a: Chain, b: Chain) -> datetime | None:
+    """Frühester Rollzeitpunkt der Bestandskette ``a``, wenn (a, b) ein
+    Financing-Kandidat ist (AP-05v, Vertrag 5), sonst ``None``. Der
+    zurückgegebene Zeitpunkt ist zugleich der Bezugspunkt des ``abstand``
+    (AP-05r, Regel 3)."""
     roll_zeitpunkt = _erster_roll_zeitpunkt(a)
-    return (
+    if (
         roll_zeitpunkt is not None
         and a.underlying == b.underlying
         and _seite_gegenlaeufig(a, b)
         and abs(b.eroeffnet_am - roll_zeitpunkt) <= FINANCING_FENSTER
-    )
+    ):
+        return roll_zeitpunkt
+    return None
+
+
+def _doppel_roll(b: Chain, ketten: list[Chain]) -> bool:
+    """AP-05r, Regel 2: Ist die Gegenseite-Kette ``b`` die Fortsetzung oder
+    der Wiedereinstieg der eigenen Seite — es gibt eine andere Kette ``c``
+    mit demselben Basiswert und derselben Seite wie ``b``, die mit
+    ``0 <= b.eroeffnet_am - c.beendet_am <= DOPPEL_ROLL_FENSTER`` vor ``b``
+    endete —, ist das Paar kein Financing-Kandidat. Die Prüfung läuft über
+    **alle** übergebenen Ketten, nicht nur über das Paar."""
+    for c in ketten:
+        if c is b or c.underlying != b.underlying or c.seite != b.seite:
+            continue
+        if c.beendet_am is None:
+            continue  # eine offene Kette endete nicht
+        if timedelta(0) <= b.eroeffnet_am - c.beendet_am <= DOPPEL_ROLL_FENSTER:
+            return True
+    return False
+
+
+def _ueberlappung(a: Chain, b: Chain) -> timedelta | None:
+    """Gemeinsame Zeit der beiden Ketten (AP-05r, Regel 3): vom späteren
+    Beginn bis zum früheren Ende, mindestens 0. Beide Ketten offen heißt
+    unbegrenzt — ``None``."""
+    a_ende = _UNBEGRENZT if a.beendet_am is None else a.beendet_am
+    b_ende = _UNBEGRENZT if b.beendet_am is None else b.beendet_am
+    if a_ende == _UNBEGRENZT and b_ende == _UNBEGRENZT:
+        return None
+    gemeinsam = min(a_ende, b_ende) - max(a.eroeffnet_am, b.eroeffnet_am)
+    return max(gemeinsam, timedelta(0))
 
 
 def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]:
@@ -119,7 +188,9 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
 
     Reine Funktion: das Ergebnis hängt nicht von der Reihenfolge der
     Eingabe ab — sortiert nach ``typ`` (``"financing"`` vor ``"ic"``), dann
-    Naturschlüssel von ``kette_a``, dann von ``kette_b``.
+    Naturschlüssel von ``kette_a``, dann von ``kette_b``. Die Ranggrößen
+    ``abstand``/``ueberlappung`` gehen nicht in die Reihenfolge ein;
+    sortiert wird erst in der Durchsicht (AP-05r, Regel 3).
     """
     # Dieselbe Kette zweimal in der Eingabe wäre derselbe Naturschlüssel;
     # sie erzeugt keinen Kandidaten gegen sich selbst.
@@ -134,19 +205,31 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
             fruehere, spaetere = _chronologisch(a, b)
             if _ic_kandidat(a, b):
                 kandidaten.append(
-                    CampaignKandidat(typ="ic", kette_a=fruehere, kette_b=spaetere)
+                    CampaignKandidat(
+                        typ="ic",
+                        kette_a=fruehere,
+                        kette_b=spaetere,
+                        abstand=abs(spaetere.eroeffnet_am - fruehere.eroeffnet_am),
+                        ueberlappung=_ueberlappung(fruehere, spaetere),
+                    )
                 )
             # A ist die Bestandskette mit dem Roll (Vertrag 5) — sie ist
             # kette_a, unabhängig davon, in welcher Reihenfolge das Paar
             # hier anliegt; deshalb der zweite Durchlauf mit getauschten
-            # Rollen.
-            if _financing_kandidat(b, a):
+            # Rollen. Ein Doppel-Roll auf der Gegenseite (AP-05r, Regel 2)
+            # filtert das Paar heraus.
+            for bestand, gegenseite in ((b, a), (a, b)):
+                roll_zeitpunkt = _financing_roll_zeitpunkt(bestand, gegenseite)
+                if roll_zeitpunkt is None or _doppel_roll(gegenseite, ketten):
+                    continue
                 kandidaten.append(
-                    CampaignKandidat(typ="financing", kette_a=b, kette_b=a)
-                )
-            if _financing_kandidat(a, b):
-                kandidaten.append(
-                    CampaignKandidat(typ="financing", kette_a=a, kette_b=b)
+                    CampaignKandidat(
+                        typ="financing",
+                        kette_a=bestand,
+                        kette_b=gegenseite,
+                        abstand=abs(gegenseite.eroeffnet_am - roll_zeitpunkt),
+                        ueberlappung=_ueberlappung(bestand, gegenseite),
+                    )
                 )
 
     kandidaten.sort(
