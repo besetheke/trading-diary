@@ -139,6 +139,113 @@ def _beteiligt(
         ) from None
 
 
+@dataclass(frozen=True)
+class LegSeite:
+    """Eine eröffnete oder geschlossene Seite eines Legs — die Bestandteile
+    der EUR-Rechnung (AP-06xr), noch ohne Formel. Die Zusammensetzung bleibt
+    eigene Rechnung der Aufrufer: Kennzahlen addieren je Seite
+    (Prämie + Kommission) × Kurs, die Kommissionsattribution hält Brutto und
+    Kommission als getrennte Summen × Kurs. Nicht zu einer Formel
+    verschmelzen — Decimal rundet an der 28. Stelle, die Berichtssummen
+    stünden sonst im letzten Zeichen anders.
+    """
+
+    ausfuehrung: dict           # Ausführungszeile (bereits barausgleich-bewertet)
+    vorzeichen: int             # Seitenvorzeichen: SELL +1, BUY −1
+    menge: Decimal              # vorzeichenlose Leg-Menge (AP-03, Regel 1 / OF-13)
+    menge_vorzeichen: int       # Vorzeichen der gespeicherten Leg-Menge (+1 oder −1)
+    multiplikator: Decimal
+    kommissionsanteil: Decimal  # Kommission × menge / Gesamtmenge der Ausführung
+    buchungskurs: Decimal
+
+
+def leg_seiten(
+    legs: list[dict], exec_je_id: dict, mult_je_conid: dict, *, vertrag: str
+) -> list[LegSeite] | None:
+    """Gemeinsame Zerlegung einer Leg-Liste in ihre Seiten (AP-06xr): die
+    Vorstufe beider EUR-Rechnungen, benutzt von ``_wirtschaftlich`` (AP-06v)
+    und ``_eur_teile`` (AP-06w).
+
+    Alle bisherigen Prüfungen, in der bisherigen Reihenfolge: je Leg zuerst
+    (Eröffnung vor Schließung) die Ausführung auffindbar und ihr buchungskurs
+    vorhanden — fehlt ein Kurs, gibt es ``None`` für die ganze Kette (E4,
+    kein stiller Ersatzkurs) —, danach je Seite das Seitenvorzeichen, das
+    Instrument und die von 0 verschiedene Ausführungsmenge. Die Fehlertexte
+    nennen den jeweiligen Vertrag (``vertrag``, etwa ``"AP-06v"``), weil die
+    Abnahmebasen sie prüfen.
+
+    ``menge_vorzeichen`` trägt das Vorzeichen der gespeicherten Leg-Menge
+    (IB Flex: SELL negativ) getrennt mit: ``_wirtschaftlich`` setzt es an
+    den Kommissionsanteil; die Multiplikation mit ±1 ist in Decimal exakt,
+    das Ergebnis bleibt stellenidentisch zur direkten Rechnung mit der
+    vorzeichenbehafteten Menge.
+    """
+    for leg in legs:
+        for schluessel in ("open_exec_id", "close_exec_id"):
+            if leg[schluessel] is None:
+                continue
+            try:
+                a = exec_je_id[leg[schluessel]]
+            except KeyError as e:
+                raise ValueError(
+                    f"Ausführung {e.args[0]!r} ist in einem Leg referenziert, "
+                    "aber nicht unter den Ausführungszeilen — kein Raten "
+                    f"({vertrag}, Regel 3)"
+                ) from None
+            if a["buchungskurs"] is None:
+                return None
+    seiten: list[LegSeite] = []
+    for leg in legs:
+        # Regel 5 (kein float): Leg-Mengen können als int ankommen — hier
+        # normalisieren, nicht bei jeder Rechnung.
+        leg_menge = (
+            leg["menge"] if isinstance(leg["menge"], Decimal) else Decimal(leg["menge"])
+        )
+        anteil = abs(leg_menge)
+        menge_vorzeichen = -1 if leg_menge < _NULL else 1
+        for schluessel in ("open_exec_id", "close_exec_id"):
+            exec_id = leg[schluessel]
+            if exec_id is None:
+                continue
+            a = exec_je_id[exec_id]
+            vorzeichen = _VORZEICHEN.get(a["side"])
+            if vorzeichen is None:
+                raise ValueError(
+                    f"Ausführung {exec_id}: unbekannte Seite {a['side']!r} — "
+                    f"kein Vorzeichen ableitbar ({vertrag}, Regel 3)"
+                )
+            try:
+                multiplikator = mult_je_conid[a["conid"]]
+            except KeyError:
+                raise ValueError(
+                    f"Ausführung {exec_id}: kein Instrument zu conid {a['conid']} "
+                    f"— kein Multiplikator ableitbar ({vertrag}, Regel 3)"
+                ) from None
+            gesamtmenge = abs(a["menge"])
+            if gesamtmenge == _NULL:
+                raise ValueError(
+                    f"Ausführung {exec_id}: menge 0 — kein Kommissionsanteil "
+                    f"ableitbar ({vertrag}, Regel 3; AP-03, Regel 5)"
+                )
+            kommissionsanteil = (
+                a["kommission"] * (anteil / gesamtmenge)
+                if a["kommission"] is not None
+                else _NULL
+            )
+            seiten.append(
+                LegSeite(
+                    ausfuehrung=a,
+                    vorzeichen=vorzeichen,
+                    menge=anteil,
+                    menge_vorzeichen=menge_vorzeichen,
+                    multiplikator=multiplikator,
+                    kommissionsanteil=kommissionsanteil,
+                    buchungskurs=a["buchungskurs"],
+                )
+            )
+    return seiten
+
+
 def _wirtschaftlich(
     legs: list[dict], exec_je_id: dict, mult_je_conid: dict
 ) -> Decimal | None:
@@ -165,61 +272,22 @@ def _wirtschaftlich(
 
     E4: fehlt ein Kurs einer beteiligten Ausführung, gibt es keinen Wert —
     None, kein Ersatzkurs.
+
+    AP-06xr: Prüfung und Zerlegung liegen in ``leg_seiten``; diese Funktion
+    behält ihre Formel — der Kommissionsanteil läuft hier (historisch so,
+    bewusst erhalten) mit der vorzeichenbehafteten Leg-Menge, eingesetzt als
+    ``kommissionsanteil × menge_vorzeichen`` (in Decimal exakt).
     """
-    for leg in legs:
-        for schluessel in ("open_exec_id", "close_exec_id"):
-            if leg[schluessel] is None:
-                continue
-            try:
-                a = exec_je_id[leg[schluessel]]
-            except KeyError as e:
-                raise ValueError(
-                    f"Ausführung {e.args[0]!r} ist in einem Leg referenziert, "
-                    "aber nicht unter den Ausführungszeilen — kein Raten "
-                    "(AP-06v, Regel 3)"
-                ) from None
-            if a["buchungskurs"] is None:
-                return None
+    seiten = leg_seiten(legs, exec_je_id, mult_je_conid, vertrag="AP-06v")
+    if seiten is None:
+        return None
     summe = _NULL
-    for leg in legs:
-        # Regel 5 (kein float): Leg-Mengen können als int ankommen — hier
-        # normalisieren, nicht bei jeder Rechnung.
-        leg_menge = (
-            leg["menge"] if isinstance(leg["menge"], Decimal) else Decimal(leg["menge"])
-        )
-        for schluessel in ("open_exec_id", "close_exec_id"):
-            exec_id = leg[schluessel]
-            if exec_id is None:
-                continue
-            a = exec_je_id[exec_id]
-            vorzeichen = _VORZEICHEN.get(a["side"])
-            if vorzeichen is None:
-                raise ValueError(
-                    f"Ausführung {exec_id}: unbekannte Seite {a['side']!r} — "
-                    "kein Vorzeichen ableitbar (AP-06v, Regel 3)"
-                )
-            try:
-                multiplikator = mult_je_conid[a["conid"]]
-            except KeyError:
-                raise ValueError(
-                    f"Ausführung {exec_id}: kein Instrument zu conid {a['conid']} "
-                    "— kein Multiplikator ableitbar (AP-06v, Regel 3)"
-                ) from None
-            gesamtmenge = abs(a["menge"])
-            if gesamtmenge == _NULL:
-                raise ValueError(
-                    f"Ausführung {exec_id}: menge 0 — kein Kommissionsanteil "
-                    "ableitbar (AP-06v, Regel 3; AP-03, Regel 5)"
-                )
-            kommission = (
-                a["kommission"] * (leg_menge / gesamtmenge)
-                if a["kommission"] is not None
-                else _NULL
-            )
-            summe += (
-                vorzeichen * a["preis"] * abs(leg_menge) * multiplikator
-                + kommission
-            ) * a["buchungskurs"]
+    for seite in seiten:
+        kommission = seite.kommissionsanteil * seite.menge_vorzeichen
+        summe += (
+            seite.vorzeichen * seite.ausfuehrung["preis"] * seite.menge * seite.multiplikator
+            + kommission
+        ) * seite.buchungskurs
     return summe
 
 

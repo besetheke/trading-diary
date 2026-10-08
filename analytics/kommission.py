@@ -29,7 +29,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 
-from analytics.kennzahlen import STUFEN_RANG, bewerte_barausgleich
+from analytics.kennzahlen import STUFEN_RANG, bewerte_barausgleich, leg_seiten
 from journal.db import create_db_engine
 from journal.schema import (
     chain_links,
@@ -44,7 +44,6 @@ from journal.schema import (
 # OA-Import läuft (optionapp_trades ist leer, AP-13 Teil 1).
 OHNE_STRATEGIE = "(ohne)"
 
-_VORZEICHEN = {"SELL": 1, "BUY": -1}
 _NULL = Decimal("0")
 _VIER_STELLEN = Decimal("0.0001")
 _ZWEI_STELLEN = Decimal("0.01")
@@ -108,59 +107,27 @@ def _eur_teile(
     derselben Ausführung läuft mit demselben Kurs, anteilig nach Leg-Menge
     zur Gesamtmenge der Ausführung (AP-03, Regel 5). Fehlt ein Kurs (E4):
     None — kein Wert, keine Summe, kein stiller Kurs 1.
+
+    AP-06xr: Prüfung und Zerlegung liegen in ``leg_seiten`` (aus Tranche I
+    importiert, wie ``STUFEN_RANG`` und ``bewerte_barausgleich``); diese
+    Funktion behält ihre Formel — Brutto und Kommission als getrennte
+    Summen, je × Kurs, nicht vor der Multiplikation addiert (Decimal rundet
+    an der 28. Stelle, die Summen stünden sonst im letzten Zeichen anders).
     """
-    for leg in legs:
-        for schluessel in ("open_exec_id", "close_exec_id"):
-            if leg[schluessel] is None:
-                continue
-            try:
-                a = exec_je_id[leg[schluessel]]
-            except KeyError as e:
-                raise ValueError(
-                    f"Ausführung {e.args[0]!r} ist in einem Leg referenziert, "
-                    "aber nicht unter den Ausführungszeilen — kein Raten "
-                    "(AP-06w, Regel 3)"
-                ) from None
-            if a["buchungskurs"] is None:
-                return None
+    seiten = leg_seiten(legs, exec_je_id, mult_je_conid, vertrag="AP-06w")
+    if seiten is None:
+        return None
     brutto = _NULL
     kommission = _NULL
-    for leg in legs:
-        # Regel 5 (kein float): Leg-Mengen können als int ankommen — hier
-        # normalisieren, nicht bei jeder Rechnung.
-        leg_menge = leg["menge"] if isinstance(leg["menge"], Decimal) else Decimal(leg["menge"])
-        anteil_menge = abs(leg_menge)
-        for schluessel in ("open_exec_id", "close_exec_id"):
-            exec_id = leg[schluessel]
-            if exec_id is None:
-                continue
-            a = exec_je_id[exec_id]
-            vorzeichen = _VORZEICHEN.get(a["side"])
-            if vorzeichen is None:
-                raise ValueError(
-                    f"Ausführung {exec_id}: unbekannte Seite {a['side']!r} — "
-                    "kein Vorzeichen ableitbar (AP-06w, Regel 3)"
-                )
-            try:
-                multiplikator = mult_je_conid[a["conid"]]
-            except KeyError:
-                raise ValueError(
-                    f"Ausführung {exec_id}: kein Instrument zu conid {a['conid']} "
-                    "— kein Multiplikator ableitbar (AP-06w, Regel 3)"
-                ) from None
-            gesamtmenge = abs(a["menge"])
-            if gesamtmenge == _NULL:
-                raise ValueError(
-                    f"Ausführung {exec_id}: menge 0 — kein Kommissionsanteil "
-                    "ableitbar (AP-06w, Regel 3; AP-03, Regel 5)"
-                )
-            exec_anteil = (
-                a["kommission"] * (anteil_menge / gesamtmenge)
-                if a["kommission"] is not None
-                else _NULL
-            )
-            brutto += vorzeichen * a["preis"] * anteil_menge * multiplikator * a["buchungskurs"]
-            kommission += exec_anteil * a["buchungskurs"]
+    for seite in seiten:
+        brutto += (
+            seite.vorzeichen
+            * seite.ausfuehrung["preis"]
+            * seite.menge
+            * seite.multiplikator
+            * seite.buchungskurs
+        )
+        kommission += seite.kommissionsanteil * seite.buchungskurs
     return brutto, kommission
 
 
