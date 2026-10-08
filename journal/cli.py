@@ -14,6 +14,8 @@ import os
 import pathlib
 import sys
 
+from analytics.degradation import als_csv as degradation_als_csv
+from analytics.degradation import degradations_bericht
 from analytics.kennzahlen import als_csv, kennzahlen_bericht
 from analytics.kommission import als_csv as kommission_als_csv
 from analytics.kommission import kommissions_bericht
@@ -115,6 +117,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         metavar="DATEI",
         help="Zusätzlich die Kommissionsattribution als eigene CSV schreiben (AP-06, Tranche II)",
+    )
+    kennzahl.add_argument(
+        "--degradation",
+        type=pathlib.Path,
+        default=None,
+        metavar="DATEI",
+        help="Zusätzlich die Roll-Degradation als eigene CSV schreiben "
+        "(AP-06, Tranche III; nur mit --sicht kette)",
     )
     steuer = unterbefehle.add_parser(
         "steuer",
@@ -223,6 +233,17 @@ def main(argv: list[str] | None = None) -> int:
         print("Jetzt `journal rebuild` ausführen, damit die Entscheidungen wirksam werden.")
     elif argumente.befehl == "kennzahlen":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        if argumente.degradation is not None and argumente.sicht != "kette":
+            # E8 (AP-06d): Degradation nur auf der Kettensicht — Abbruch VOR
+            # jeder Ausgabe: keine Datei, auch nicht die Kennzahlen-CSV,
+            # und kein Schreibzugriff auf die Datenbank.
+            print(
+                f"Degradation fehlgeschlagen: --degradation läuft nur auf der "
+                f"Kettensicht, --sicht {argumente.sicht} ist damit unvereinbar "
+                "(AP-06d, E8)",
+                file=sys.stderr,
+            )
+            return 1
         try:
             ergebnis = kennzahlen_bericht(
                 db_pfad,
@@ -259,6 +280,22 @@ def main(argv: list[str] | None = None) -> int:
                 f"Kommissionsattribution nach {argumente.kommission}: "
                 f"{len(kommission.gruppen)} Gruppen, "
                 f"{kommission.anzahl_ketten_gesamt} Ketten gesamt"
+            )
+        if argumente.degradation is not None:
+            # E8: die Degradations-CSV schreiben — dass --sicht hier 'kette'
+            # ist, hat der Wächter oben vor jeder Ausgabe sichergestellt.
+            degradation = degradations_bericht(
+                db_pfad, nur_qualitaetsstufe_a=argumente.nur_stufe_a
+            )
+            # UTF-8 mit BOM wie der Kennzahlen-Bericht (Regel 13): Excel öffnet
+            # die Datei ohne Encoding-Rätsel; Zeilenende fest auf \n, damit die
+            # Datei auf jedem Betriebssystem bytgleich ausfällt (AP-06w, E6).
+            with open(argumente.degradation, "w", encoding="utf-8-sig", newline="\n") as datei:
+                datei.write(degradation_als_csv(degradation) + "\n")
+            print(
+                f"Degradation nach {argumente.degradation}: "
+                f"{len(degradation.gruppen)} Gruppen, "
+                f"{degradation.abdeckung[0].offene_kandidaten} offene Kandidaten"
             )
     elif argumente.befehl == "steuer":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")

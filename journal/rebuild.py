@@ -240,6 +240,70 @@ def rebuild(
         engine.dispose()
 
 
+def offene_rollkandidaten(
+    db_pfad: str | pathlib.Path, *, busy_timeout_ms: int = STANDARD_BUSY_TIMEOUT_MS
+) -> int:
+    """Zählt die offenen Rollkandidaten, ohne etwas zu schreiben (AP-06dk).
+
+    Liefert dieselbe Zahl wie ``RebuildErgebnis.kandidaten_offen``: Rechnen
+    über ``bestand_berechnen()`` und ``_offene_kandidaten()`` — der Lesepfad,
+    den auch die Durchsicht nutzt (AP-04d, Vertrag 10), kein vollständiger
+    Rebuild mit Rücknahme. Die ID-Zuordnungen stammen aus den vorhandenen
+    Kontosicht-Zeilen (``structures``/``chains``/``chain_links`` mit
+    ``sicht='konto'``): Nach einem ``rebuild`` stehen sie auf dem Stand, den
+    ``_rebuild_laufen()`` benutzt hat, angewandte Overrides eingerechnet.
+    Die abgeleiteten Tabellen bleiben unangetastet.
+    """
+    engine = create_db_engine(db_pfad, busy_timeout_ms=busy_timeout_ms)
+    try:
+        with engine.connect() as verbindung:
+            bestand = bestand_berechnen(verbindung)
+            overrides = [
+                dict(z) for z in verbindung.execute(select(chain_overrides)).mappings()
+            ]
+            struktur_id_je_schluessel = {
+                z["natur_schluessel"]: z["structure_id"]
+                for z in verbindung.execute(
+                    select(structures.c.natur_schluessel, structures.c.structure_id).where(
+                        structures.c.sicht == "konto"
+                    )
+                ).mappings()
+            }
+            ketten_id_je_schluessel = {
+                z["natur_schluessel"]: z["chain_id"]
+                for z in verbindung.execute(
+                    select(chains.c.natur_schluessel, chains.c.chain_id).where(
+                        chains.c.sicht == "konto"
+                    )
+                ).mappings()
+            }
+            # Glieder je Kette wie in _rebuild_laufen(): Naturschlüssel der
+            # Struktur plus Erkennung — der Stand NACH angewandten Overrides,
+            # so wie ihn _offene_kandidaten() sieht.
+            ketten_schluessel_je_id = {cid: k for k, cid in ketten_id_je_schluessel.items()}
+            struktur_schluessel_je_id = {
+                sid: s for s, sid in struktur_id_je_schluessel.items()
+            }
+            glieder_je_kette: dict[str, list[list]] = {}
+            for zeile in verbindung.execute(
+                select(
+                    chain_links.c.chain_id, chain_links.c.structure_id, chain_links.c.erkennung
+                ).where(chain_links.c.sicht == "konto")
+            ).mappings():
+                glieder_je_kette.setdefault(
+                    ketten_schluessel_je_id[zeile["chain_id"]], []
+                ).append([struktur_schluessel_je_id[zeile["structure_id"]], zeile["erkennung"]])
+            return _offene_kandidaten(
+                bestand.ketten_ergebnis,
+                overrides,
+                glieder_je_kette,
+                struktur_id_je_schluessel,
+                ketten_id_je_schluessel,
+            )
+    finally:
+        engine.dispose()
+
+
 # ---------------------------------------------------------------------------
 # Bausteine
 # ---------------------------------------------------------------------------
