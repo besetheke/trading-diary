@@ -2845,3 +2845,39 @@ sobald die Rollkandidaten durchgesehen sind.
 Kontosicht (1.972 gegen 2.028); Ursache offen (vermutlich andere
 Strukturbildung bei umgeleiteten Ausführungen, OF-68) — zu untersuchen, bevor
 die Kurve als endgültig gilt.
+
+## OF-71 · AP-05: Kandidatenregeln nach der Praxis; Ablehnung und Bestätigung offen
+
+Nutzerangaben (08.10.2026): Spreads auf beiden Seiten werden oft dauerhaft
+gehalten und einzeln gerollt (DAX meist freitags, etwa 7 DTE), auch unsymmetrisch
+— wirtschaftlich ein Iron Condor, auch wenn die Seiten getrennt aufgesetzt
+sind; ein IC in einem Trade ist bereits eine Kette und braucht keinen
+Kandidaten. Gegenfinanzierung meist innerhalb weniger Minuten; zu Beginn werden
+oft beide Seiten gerollt oder nach einem Take Profit neu aufgesetzt.
+
+Messung am Echtbestand (Kopie, 08.10.2026, nur Zählwerte): bisher 3.755
+Kandidaten (IC 3.237, Financing 518). Financing nach Abstand: ≤5 min 62, ≤15 min
+34, ≤1 h 65, ≤6 h 190, ≤24 h 167; davon 26 mit einer eigenen Vorgängerkette
+derselben Seite ≤15 min vorher (Doppel-Roll/Wiedereinstieg). IC: 604 mit
+Eröffnungsabstand ≤5 min; Überlappung <1 Tag 2.435, 1–7 Tage 402, >7 Tage 400.
+
+**Entschieden (Nutzerfreigabe „wie vorgeschlagen"):**
+1. IC über irgendein Glied mit gleicher Expiry statt über die letzte Expiry.
+2. Doppel-Roll-Filter (15 Minuten, einschließlich) beim Financing.
+3. Ranggrößen `abstand`/`ueberlappung` am Kandidaten; die Durchsicht sortiert.
+→ Abnahmebasis AP-05r, Umsetzung AP-05rk. Danach (neues Paket, AP-05d):
+Persistenz der Entscheidung und Durchsicht-Datei.
+
+**Noch zu entscheiden bzw. empfohlen für AP-05d:** Ablehnung als eigene Tabelle
+(OF-54, Empfehlung b); Bestätigung legt eine Kampagne an oder ergänzt eine
+bestehende, bei zwei verschiedenen Kampagnen benannter Abbruch (kein
+automatisches Zusammenführen); `ic_leg` für beide Ketten, bei Financing
+`financing` für die neue Kette und der Typ der Bestandskette in der Datei
+vorbelegt und änderbar; Altbestand vor 2026 nicht erzwungen, AP-11 liefert die
+Absicht künftig an der Quelle.
+
+**Vorbehalt des Nutzers:** Die Praxis ist Routine und nie hundertprozentig
+stringent (Delta 10 aufsetzen, bei 2 EUR Take Profit, neu aufsetzen, auf beiden
+Seiten; rollen, wenn nötig, notfalls finanzieren). Wie viel Erkenntnis aus der
+Kampagnen-Klassifikation entsteht, wird nach dem ersten Einsatz bewertet. Die
+Kernfragen (Kosten, Rolls, Strategien) hängen nicht daran.
