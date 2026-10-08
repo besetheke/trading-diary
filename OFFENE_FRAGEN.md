@@ -2808,3 +2808,40 @@ Am Echtbestand gibt es derzeit 0 bestätigte Overrides; die Wirkung zeigt sich
 erst, wenn die 677 offenen Rollkandidaten durchgesehen werden. Die Degradation
 in Tranche III muss weiterhin ausweisen, wie viele Ketten wegen fehlender
 Entsprechung nicht erfasst sind.
+
+## OF-70 · Roll-Degradation (AP-06 Tranche III): Entscheidungen und erster Echtlauf
+
+Entscheidungen E1–E8 stehen in `auftraege/AP-06d.md` (Kettensicht, Gruppen
+0/1/2/3+, Modi `belegt` und `belegt_bestaetigt`, Abdeckung, offene Kandidaten
+gehen nie ein, aber ihre Ketten werden nicht ausgeschlossen). Abnahmebasis
+AP-06d, Umsetzung AP-06dk.
+
+**Erster Echtlauf (Wegwerf-Umsetzung auf einer Kopie von `journal.db`,
+08.10.2026, 5:50 Minuten, nur zur Einordnung):**
+
+| Rolls | Ketten | Summe netto EUR | Ø je Kette | Trefferquote |
+|---|---|---|---|---|
+| 0 | 5.935 | +224.411 | +37,81 | 70,4 % |
+| 1 | 674 | −10.646 | −15,80 | 64,4 % |
+| 2 | 233 | +10.492 | +45,03 | 60,5 % |
+| 3+ | 177 | −60.710 | −343,00 | 53,1 % |
+
+Die Trefferquote fällt monoton mit der Roll-Anzahl; die Plan-Aussage „Ketten
+ohne Roll schneiden am besten ab" gilt für Summe und Trefferquote. Der
+Durchschnitt ist **nicht** monoton (Gruppe 2 liegt über Gruppe 0 und 1):
+Zwei Rolls sind häufig ein geplanter Zyklus, drei und mehr sind überwiegend
+Rettungsversuche. Ketten mit Rolls sind nicht zufällig gewählt — wer rollt,
+hatte meist schon ein Problem; die Kurve zeigt den Zusammenhang, nicht die
+Wirkung des Rollens.
+
+**Abdeckung:** alle 7.019 abgeschlossenen Ketten sind zugelassen (derzeit
+0 bestätigte Overrides, deshalb sind beide Modi gleich); Rollverknüpfungen
+1.894, offene Kandidaten 677 → 73,7 %. Die 677 sind Kandidaten**paare**, bei
+Mehrdeutigkeit werden mehrere Fortsetzungen je schließender Position
+angeboten; die Roll-Abdeckung ist deshalb eine **Untergrenze**. Sie steigt,
+sobald die Rollkandidaten durchgesehen sind.
+
+**Bekannt:** Die Kettensicht hat 56 Rollverknüpfungen weniger als die
+Kontosicht (1.972 gegen 2.028); Ursache offen (vermutlich andere
+Strukturbildung bei umgeleiteten Ausführungen, OF-68) — zu untersuchen, bevor
+die Kurve als endgültig gilt.
