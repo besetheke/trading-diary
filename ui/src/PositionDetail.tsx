@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiFehler, fehlerText, holeAusfuehrungen, holeKette, holeStruktur } from './api'
 import type { Ausfuehrung, KetteDetail, Kettenglied, StrukturDetail } from './api'
+import Journal from './Journal'
 import { datum, geld, zeit } from './format'
 
 // Bezeichner aus der Datenbank, deutsch gelesen — ein unbekannter Schlüssel
@@ -156,6 +157,9 @@ export default function PositionDetail(): JSX.Element {
           <GliedKarte key={glied.struktur.structure_id} glied={glied} />
         ))}
       </ol>
+
+      {/* AP-08j: Journal der Kette — unterhalb aller bestehenden Inhalte. */}
+      <Journal scopeTyp="chain" scopeId={String(nummer)} />
     </section>
   )
 }

@@ -125,10 +125,19 @@ export function fehlerText(ursache: unknown): string {
   return String(ursache)
 }
 
-async function hole(pfad: string): Promise<unknown> {
+// AP-08j: Senden für das Journal — dieselbe Fehlerbehandlung wie der Abruf:
+// 404 und 422 werden mit dem Meldungstext der API sichtbar, nie verschluckt.
+async function schicke(methode: string, pfad: string, koerper?: unknown): Promise<unknown> {
   let antwort: Response
   try {
-    antwort = await fetch(pfad, { headers: { Accept: 'application/json' } })
+    antwort = await fetch(pfad, {
+      method: methode,
+      headers:
+        koerper === undefined
+          ? { Accept: 'application/json' }
+          : { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: koerper === undefined ? undefined : JSON.stringify(koerper),
+    })
   } catch (ursache) {
     throw new Error(
       `Die API unter ${pfad.split('?')[0]} antwortet nicht — läuft der Server?`,
@@ -145,7 +154,13 @@ async function hole(pfad: string): Promise<unknown> {
     }
     throw new ApiFehler(antwort.status, text)
   }
+  // 204 (Notiz gelöscht) hat keinen Körper.
+  if (antwort.status === 204) return null
   return antwort.json()
+}
+
+async function hole(pfad: string): Promise<unknown> {
+  return schicke('GET', pfad)
 }
 
 export interface KettenAbfrage {
@@ -180,4 +195,129 @@ export function holeStruktur(structureId: number): Promise<StrukturDetail> {
 
 export function holeAusfuehrungen(structureId: number): Promise<Ausfuehrung[]> {
   return hole(`/strukturen/${structureId}/ausfuehrungen`) as Promise<Ausfuehrung[]>
+}
+
+// AP-07t, Tagesübersicht und Kalender (AP-08j): gleiche Grundregel wie oben —
+// Geld bleibt Zeichenkette, Reihenfolge wie geliefert, nichts gerechnet.
+
+export interface TagesKette {
+  chain_id: number
+  natur_schluessel: string
+  underlying: string
+  asset_class: string
+  seite: string | null
+  anzahl_rolls: number
+  endzustand: string | null
+  eroeffnet_am: string
+  beendet_am: string | null
+}
+
+export interface TagesRoll {
+  chain_id: number
+  structure_id: number
+  underlying: string
+  sequenz: number
+  eroeffnet_am: string
+}
+
+export interface TagesRealisiert {
+  waehrung: string
+  sicht: string
+  anzahl_strukturen: number
+  brutto: string
+  kommission: string
+  netto: string
+}
+
+export interface Tagesuebersicht {
+  datum: string
+  sicht: string
+  eroeffnet: TagesKette[]
+  beendet: TagesKette[]
+  rolls: TagesRoll[]
+  realisiert: TagesRealisiert[]
+}
+
+export interface KalenderRealisiert {
+  waehrung: string
+  sicht: string
+  netto: string
+}
+
+export interface Kalendertag {
+  datum: string
+  eroeffnet: number
+  beendet: number
+  rolls: number
+  realisiert: KalenderRealisiert[]
+}
+
+export interface Monatskalender {
+  monat: string
+  sicht: string
+  tage: Kalendertag[]
+}
+
+// AP-07j, Journal (AP-08j): Notizen und Tags eines Bereichs. Der Text bleibt
+// unverändert — Leerraum inklusive; Zeitstempel sind Zeichenketten der API.
+
+export interface Notiz {
+  id: number
+  scope_typ: string
+  scope_id: string
+  text: string
+  erstellt_am: string
+  geaendert_am: string | null
+}
+
+export interface JournalInhalt {
+  scope_typ: string
+  scope_id: string
+  notizen: Notiz[]
+  tags: string[]
+}
+
+export interface Schlagwort {
+  name: string
+  anzahl: number
+}
+
+export function holeTag(datum: string): Promise<Tagesuebersicht> {
+  return hole(`/tage/${datum}`) as Promise<Tagesuebersicht>
+}
+
+export function holeKalender(monat: string): Promise<Monatskalender> {
+  return hole(`/kalender?monat=${encodeURIComponent(monat)}`) as Promise<Monatskalender>
+}
+
+export function holeJournal(scopeTyp: string, scopeId: string): Promise<JournalInhalt> {
+  return hole(`/journal/${scopeTyp}/${encodeURIComponent(scopeId)}`) as Promise<JournalInhalt>
+}
+
+export function legeNotizAn(scopeTyp: string, scopeId: string, text: string): Promise<Notiz> {
+  return schicke('POST', `/journal/${scopeTyp}/${encodeURIComponent(scopeId)}/notizen`, {
+    text,
+  }) as Promise<Notiz>
+}
+
+export function aendereNotiz(id: number, text: string): Promise<Notiz> {
+  return schicke('PUT', `/journal/notizen/${id}`, { text }) as Promise<Notiz>
+}
+
+export function loescheNotiz(id: number): Promise<null> {
+  return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
+}
+
+export function ersetzeTags(
+  scopeTyp: string,
+  scopeId: string,
+  tags: string[],
+): Promise<JournalInhalt> {
+  return schicke('PUT', `/journal/${scopeTyp}/${encodeURIComponent(scopeId)}/tags`, {
+    tags,
+  }) as Promise<JournalInhalt>
+}
+
+export function holeAlleSchlagwoerter(): Promise<Schlagwort[]> {
+  return hole('/tags') as Promise<Schlagwort[]>
 }

@@ -321,3 +321,143 @@ details.drilldown summary {
   font-weight: 600;
   padding: 0.3rem 0;
 }
+
+/* AP-08j: Kopf-Navigation, Tages- und Kalenderansicht, Journal-Baustein — im
+   Stil der bestehenden Ansichten: weiße Kästen, graue Beschriftung. */
+
+header nav.hauptnav {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.95rem;
+}
+
+p.sicht {
+  color: var(--grau);
+  font-size: 0.9rem;
+  margin: 0.2rem 0 0;
+}
+
+nav.tageswahl,
+nav.monatswahl {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+
+nav.monatswahl label {
+  font-size: 0.8rem;
+  color: var(--grau);
+}
+
+nav.monatswahl input {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--rand);
+  background: #fff;
+  color: var(--tinte);
+}
+
+p.leer {
+  color: var(--grau);
+  margin: 0.3rem 0 1rem;
+}
+
+/* Mehrere Währungen einer Zelle stehen untereinander, nie in einer Summe. */
+td.realisiert span {
+  display: block;
+}
+
+section.journal {
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.9rem 1.25rem 1.1rem;
+  margin: 2rem 0 0;
+}
+
+section.journal h3 {
+  margin: 0 0 0.4rem;
+}
+
+section.journal h4 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.95rem;
+  color: var(--grau);
+}
+
+section.journal .meldung {
+  color: #a33a2a;
+  margin: 0.3rem 0;
+}
+
+section.journal form,
+section.journal .zeile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+section.journal label {
+  width: 100%;
+  font-size: 0.8rem;
+  color: var(--grau);
+}
+
+section.journal textarea,
+section.journal input {
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--rand);
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+section.journal textarea {
+  min-height: 3.6rem;
+}
+
+ul.schlagwoerter {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
+  padding: 0;
+}
+
+ul.schlagwoerter li {
+  border: 1px solid var(--rand);
+  background: #efece7;
+  border-radius: 999px;
+  padding: 0.05rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+ul.notizen {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+}
+
+ul.notizen li {
+  border: 1px solid var(--rand);
+  padding: 0.5rem 0.9rem 0.6rem;
+  margin: 0.45rem 0;
+}
+
+ul.notizen .zeitstempel {
+  color: var(--grau);
+  font-size: 0.8rem;
+  margin: 0 0 0.2rem;
+}
+
+/* Der Notiztext bleibt unverändert — Zeilenumbrüche und Leerraum gehören
+   dazu und werden angezeigt, nicht plattgedrückt. */
+ul.notizen .notiztext {
+  margin: 0 0 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
