@@ -2904,3 +2904,15 @@ steht — ein Wegwerf-Lauf mit einer Bestätigung und anschließendem Rebuild
 (`overrides_angewandt 1`, `verwaist 0`) bestätigt, dass es heute richtig läuft.
 Der vorhandene Test prüft das nur schwach. **Behebung:** kleine Härtung in
 AP-05dk (Sichtfilter ergänzen, bestehende Tests unverändert grün).
+
+## OF-73 · Reihenfolge: zuerst der MVP mit dem täglichen Journal
+
+Entscheidung des Nutzers (09.10.2026): Das Ausfüllen der Listen (Rollkandidaten
+AP-04d, Campaign-Kandidaten AP-05d) wird zurückgestellt, bis der MVP stabil
+läuft und das tägliche Journal mit den Basisfunktionen benutzbar ist. Die
+Werkzeuge dafür sind gebaut und abgenommen (`kandidaten-*`, `kampagnen-*`) und
+warten. Der MVP-Schnitt (Plan M4): AP-07 Rest und AP-08 Rest in dieser
+Reihenfolge — **AP-07j** (Notizen, Tags, Tagesjournal; `scope_typ = 'tag'` ist
+der Handelstag), danach Tagesübersicht und Kennzahlen-Endpunkte, dann die
+Oberfläche dazu (AP-08j). Die Rest-Analytik (Equity/Drawdown, DTE-Band, Breite)
+folgt danach.
