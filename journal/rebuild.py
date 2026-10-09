@@ -78,7 +78,9 @@ from journal.oa_persistenz import oa_werte_schreiben
 from journal.preise import nettopraemie
 from journal.schema import (
     assignment_links,
+    campaign_ablehnungen,
     campaign_links,
+    campaigns,
     chain_links,
     chain_overrides,
     chains,
@@ -640,6 +642,21 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
     bestaetigungen = [o for o in overrides if o["urteil"] == "bestaetigt"]
     gesicherte_struktur_ids = {o["structure_id"] for o in overrides}
     gesicherte_ketten_ids = {o["chain_id"] for o in overrides}
+    # AP-05d (Regel 4): Die Kampagnen-Klassifikation sind ebenso Benutzerdaten
+    # mit Fremdschlüsseln auf chains — die Ketten aus campaign_links und
+    # campaign_ablehnungen zählen wie die der Overrides zu den gesicherten,
+    # sonst bräche der Rebuild ab, sobald eine klassifizierte Kette
+    # verschwindet. Hier einmal gelesen; die Kandidaten-Zählung unten nutzt
+    # dieselben Zeilen wieder.
+    kampagnen_links = [
+        dict(z) for z in verbindung.execute(select(campaign_links)).mappings()
+    ]
+    ablehnungen = [
+        dict(z) for z in verbindung.execute(select(campaign_ablehnungen)).mappings()
+    ]
+    gesicherte_ketten_ids |= {z["chain_id"] for z in kampagnen_links}
+    gesicherte_ketten_ids |= {z["chain_id_a"] for z in ablehnungen}
+    gesicherte_ketten_ids |= {z["chain_id_b"] for z in ablehnungen}
 
     # -- Schreiben (Vertrag 6). legs und chain_links sind vollständiger
     #    Austausch (Vertrag 14/15) und gehen zuerst weg — sie halten die
@@ -756,12 +773,20 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         ketten_id_je_schluessel,
     )
 
+    # -- Kampagnen-Zeiten nachziehen (AP-05d): underlying, eroeffnet_am und
+    #    beendet_am jeder Kampagne sind aus ihren Ketten abgeleitet — bei
+    #    jedem Lauf neu bestimmt, aus den Kontosicht-Zeilen. netto_pnl_eur
+    #    bleibt unberührt (kein Euro-Betrag ohne FX-Umrechnung, AP-04v,
+    #    Entscheidung 2).
+    _kampagnen_zeiten_nachziehen(verbindung)
+
     # -- Campaign-Kandidaten (AP-05sk): wie viele noch keine gemeinsame
     #    Kampagne haben — reine Anzeige, kein Schreiben. Ein Kandidat gilt
     #    als entschieden, wenn beide Ketten bereits derselben campaign_id
-    #    zugeordnet sind (unabhängig vom beziehungstyp).
+    #    zugeordnet sind (unabhängig vom beziehungstyp) — oder, seit AP-05d,
+    #    wenn das Paar in campaign_ablehnungen steht.
     kampagnen_je_chain_id: dict[int, set[int]] = {}
-    for zeile in verbindung.execute(select(campaign_links)).mappings():
+    for zeile in kampagnen_links:
         kampagnen_je_chain_id.setdefault(zeile["chain_id"], set()).add(
             zeile["campaign_id"]
         )
@@ -773,6 +798,7 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         campaign_kandidaten(kette_je_schluessel.values()),
         kampagnen_je_chain_id,
         chain_id_je_objekt,
+        abgelehnt={(z["chain_id_a"], z["chain_id_b"], z["typ"]) for z in ablehnungen},
     )
 
     return RebuildErgebnis(
@@ -794,6 +820,46 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         overrides_kette_angewandt=overrides_kette_angewandt,
         overrides_kette_ohne_entsprechung=ohne_entsprechung,
     )
+
+
+def _kampagnen_zeiten_nachziehen(verbindung: Connection) -> None:
+    """AP-05d: ``underlying``/``eroeffnet_am``/``beendet_am`` jeder Kampagne
+    aus ihren Ketten (Kontosicht) neu bestimmen — früheste Eröffnung,
+    ``beendet_am`` leer, solange eine Kette offen ist, sonst die späteste
+    Schließung.
+
+    Ein campaign_links auf eine Kette ohne Kontosicht-Zeile bliebe folgenlos;
+    eine Kampagne ohne jede Kontosicht-Kette wird nicht angefasst (keine
+    still erfundenen Zeiten). ``netto_pnl_eur`` bleibt unberührt. Bei
+    unterschiedlichen Underlyings der Ketten — über ``independent``
+    möglich — gewinnt das alphabetisch erste: deterministisch, ohne die
+    Daten zu mischen (Annahme, Regel 10).
+    """
+    ketten_zeile_je_id = {
+        z["chain_id"]: z
+        for z in verbindung.execute(
+            select(chains).where(chains.c.sicht == "konto")
+        ).mappings()
+    }
+    ketten_je_kampagne: dict[int, list[dict]] = {}
+    for zeile in verbindung.execute(select(campaign_links)).mappings():
+        kette = ketten_zeile_je_id.get(zeile["chain_id"])
+        if kette is not None:
+            ketten_je_kampagne.setdefault(zeile["campaign_id"], []).append(kette)
+    for campaign_id, ketten in ketten_je_kampagne.items():
+        verbindung.execute(
+            update(campaigns)
+            .where(campaigns.c.campaign_id == campaign_id)
+            .values(
+                underlying=min(k["underlying"] for k in ketten),
+                eroeffnet_am=min(k["eroeffnet_am"] for k in ketten),
+                beendet_am=(
+                    None
+                    if any(k["beendet_am"] is None for k in ketten)
+                    else max(k["beendet_am"] for k in ketten)
+                ),
+            )
+        )
 
 
 def _offene_kandidaten(

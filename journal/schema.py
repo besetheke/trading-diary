@@ -731,6 +731,23 @@ campaign_overrides = Table(
     Column("erstellt_am", DateTime, nullable=False),
 )
 
+# AP-05d: Die Ablehnung eines Campaign-Kandidaten ist ebenso eine Entscheidung
+# des Nutzers wie die Bestätigung (Plan §6, Block B, Regel 2) — ohne sie erschiene
+# jedes abgelehnte Paar bei der nächsten Durchsicht erneut. `chain_id_a` ist die
+# früher eröffnete bzw. bei `financing` die Bestandskette (wie
+# `CampaignKandidat.kette_a`); die IDs sind Kontosicht-Ketten.
+campaign_ablehnungen = Table(
+    "campaign_ablehnungen",
+    metadata,
+    Column("chain_id_a", ForeignKey("chains.chain_id"), primary_key=True),
+    Column("chain_id_b", ForeignKey("chains.chain_id"), primary_key=True),
+    # ic / financing
+    Column("typ", Text, nullable=False, primary_key=True),
+    Column("notiz", Text, nullable=True),
+    Column("erstellt_am", DateTime, nullable=False),
+    CheckConstraint("typ IN ('ic', 'financing')", name="ck_campaign_ablehnungen_typ"),
+)
+
 # Brücke zum Options Roller (§4.1): Absicht (Roller) gegen Ergebnis (Journal).
 roller_link = Table(
     "roller_link",

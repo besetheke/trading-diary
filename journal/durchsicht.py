@@ -148,13 +148,17 @@ def _gruppen_bilden(verbindung) -> dict[str, list[dict]]:
     struktur_id_je_schluessel = {
         z["natur_schluessel"]: z["structure_id"]
         for z in verbindung.execute(
-            select(structures.c.structure_id, structures.c.natur_schluessel)
+            select(structures.c.structure_id, structures.c.natur_schluessel).where(
+                structures.c.sicht == "konto"
+            )
         ).mappings()
     }
     ketten_id_je_schluessel = {
         z["natur_schluessel"]: z["chain_id"]
         for z in verbindung.execute(
-            select(chains.c.chain_id, chains.c.natur_schluessel)
+            select(chains.c.chain_id, chains.c.natur_schluessel).where(
+                chains.c.sicht == "konto"
+            )
         ).mappings()
     }
     kette_je_struktur = {
@@ -332,13 +336,17 @@ def _urteile_schreiben(verbindung, zeilen: list[dict], *, ueberschreiben: bool,
     struktur_id_je_schluessel = {
         z["natur_schluessel"]: z["structure_id"]
         for z in verbindung.execute(
-            select(structures.c.structure_id, structures.c.natur_schluessel)
+            select(structures.c.structure_id, structures.c.natur_schluessel).where(
+                structures.c.sicht == "konto"
+            )
         ).mappings()
     }
     ketten_id_je_schluessel = {
         z["natur_schluessel"]: z["chain_id"]
         for z in verbindung.execute(
-            select(chains.c.chain_id, chains.c.natur_schluessel)
+            select(chains.c.chain_id, chains.c.natur_schluessel).where(
+                chains.c.sicht == "konto"
+            )
         ).mappings()
     }
     schluessel_je_ketten_id = {cid: s for s, cid in ketten_id_je_schluessel.items()}

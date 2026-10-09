@@ -23,6 +23,7 @@ from analytics.steuer import als_csv as steuer_als_csv
 from ingest.flex import import_flex_file
 from ingest.optionapp import import_optionapp_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
+from journal.kampagnen_durchsicht import kampagnen_ausschreiben, kampagnen_urteile_einlesen
 from journal.rebuild import rebuild
 from journal.steuer import steuer_bericht
 
@@ -85,6 +86,33 @@ def main(argv: list[str] | None = None) -> int:
         help="Gespeicherte Entscheidungen ändern, statt bei Widerspruch abzubrechen",
     )
     einleser.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    kampagnen_ausschreiber = unterbefehle.add_parser(
+        "kampagnen-ausschreiben",
+        help="Offene Campaign-Kandidaten als XLSX ausschreiben (AP-05d)",
+    )
+    kampagnen_ausschreiber.add_argument(
+        "datei", type=pathlib.Path, help="Pfad zur Zieldatei (darf nicht bestehen)"
+    )
+    kampagnen_ausschreiber.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    kampagnen_einleser = unterbefehle.add_parser(
+        "kampagnen-einlesen",
+        help="Kampagnen-Klassifikationen aus einer ausgeschriebenen Datei übernehmen (AP-05d)",
+    )
+    kampagnen_einleser.add_argument("datei", type=pathlib.Path, help="Pfad zur Kandidatendatei")
+    kampagnen_einleser.add_argument(
+        "--ueberschreiben",
+        action="store_true",
+        help="Gespeicherte Entscheidungen ändern, statt bei Widerspruch abzubrechen",
+    )
+    kampagnen_einleser.add_argument(
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
@@ -227,6 +255,40 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Einlesen {argumente.datei.name}: {ergebnis.neu_bestaetigt} neu "
             f"bestätigt, {ergebnis.neu_abgelehnt} neu abgelehnt, "
+            f"{ergebnis.unveraendert} unverändert, {ergebnis.geaendert} geändert, "
+            f"{ergebnis.unentschieden} unentschieden"
+        )
+        print("Jetzt `journal rebuild` ausführen, damit die Entscheidungen wirksam werden.")
+    elif argumente.befehl == "kampagnen-ausschreiben":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = kampagnen_ausschreiben(db_pfad, argumente.datei)
+        except (FileExistsError, ValueError) as fehler:
+            # Bestehende Datei oder ungültiges Ziel: benannt abbrechen, kein
+            # Traceback — es wurde nichts geschrieben (AP-05d).
+            print(f"Ausschreiben fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"Ausgeschrieben nach {argumente.datei}: {ergebnis.gruppen} Gruppen, "
+            f"{ergebnis.kandidaten} Kandidaten"
+        )
+    elif argumente.befehl == "kampagnen-einlesen":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            ergebnis = kampagnen_urteile_einlesen(
+                db_pfad, argumente.datei, ueberschreiben=argumente.ueberschreiben
+            )
+        except ValueError as fehler:
+            # Widerspruch in der Datei oder den gespeicherten Entscheidungen:
+            # benannt abbrechen, kein Traceback — die kurze Transaktion hat
+            # nichts geschrieben (AP-05d).
+            print(f"Einlesen fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"Einlesen {argumente.datei.name}: {ergebnis.neu_bestaetigt} neu "
+            f"bestätigt, {ergebnis.neu_abgelehnt} neu abgelehnt, "
+            f"{ergebnis.kampagnen_neu} Kampagnen neu, "
+            f"{ergebnis.verknuepfungen_neu} Verknüpfungen neu, "
             f"{ergebnis.unveraendert} unverändert, {ergebnis.geaendert} geändert, "
             f"{ergebnis.unentschieden} unentschieden"
         )
