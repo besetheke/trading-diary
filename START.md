@@ -105,3 +105,59 @@ setzen:
 ```
 attrib +R fixtures\golden\*.* /S
 ```
+
+## Nächtlicher Abruf (Flex Web Service)
+
+`journal abrufen` holt das Statement über den Flex Web Service (Protokoll
+Version 3), speichert es im Zielordner, importiert es wie `journal import` und
+baut mit `--rebuild` die Ketten neu auf. Die Zugangsdaten kommen ausschließlich
+aus der Umgebung — der Token steht nie auf der Kommandozeile, nie in einer
+Ausgabe, nie im Protokoll:
+
+| Variable | Bedeutung |
+| --- | --- |
+| `FLEX_TOKEN` | Token der Flex-Query (Pflicht) |
+| `FLEX_QUERY_ID` | Query-ID (Pflicht, falls nicht `--query-id`) |
+| `FLEX_ZIEL` | Zielordner für die Statements (Pflicht, falls nicht `--ziel`) |
+| `FLEX_BACKUP_ZIEL` | nur `nachtlauf.cmd`: Ordner der Datenbank-Sicherung |
+
+Statements enthalten Kontodaten: Der Zielordner liegt außerhalb des
+Repositories — Ziele im Projektverzeichnis werden abgelehnt (Ausnahme
+`fixtures/golden/`). Jede Datei heißt `flex_<Datum>_<Prüfsumme>.xml`; ein
+erneuter Abruf desselben Inhalts schreibt nichts, sondern verwendet die
+vorhandene Datei. Solange die Gegenstelle das Statement erzeugt (`ErrorCode`
+1019), wartet der Abruf 10 s und holt erneut — höchstens zwölfmal.
+
+### Zugangsdaten ablegen
+
+`%USERPROFILE%\.trading-journal\flex.cmd` — außerhalb des Repositories, keine
+Sicherung dieser Datei (Muster, keine echten Werte):
+
+```
+@echo off
+set "FLEX_TOKEN=<Token der Flex-Query>"
+set "FLEX_QUERY_ID=<Query-ID>"
+set "FLEX_ZIEL=D:\Trading\flex"
+set "FLEX_BACKUP_ZIEL=D:\Trading\backup"
+```
+
+### Probelauf von Hand
+
+```
+.venv\Scripts\python.exe -m journal abrufen --ziel D:\Trading\flex
+```
+
+### Aufgabe in der Windows-Aufgabenplanung (Beispiel)
+
+Einrichtung einmal von Hand; Pfade anpassen — bei Leerzeichen im Pfad braucht
+`/TR` innere Anführungszeichen:
+
+```
+schtasks /Create /TN "Trading-Journal Nachtlauf" /TR "\"G:\<Projektordner>\nachtlauf.cmd\"" /SC DAILY /ST 04:30
+```
+
+`nachtlauf.cmd` liest `flex.cmd`, ruft `journal abrufen --rebuild` auf, schreibt
+das Protokoll nach `%USERPROFILE%\.trading-journal\logs\nachtlauf-<Datum>.log`,
+sichert bei gesetztem `FLEX_BACKUP_ZIEL` die Datenbank per `backup.cmd` und
+behält dort die 14 neuesten Sicherungen (`journal-<Datum>.db`).
+

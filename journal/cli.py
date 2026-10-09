@@ -1,7 +1,8 @@
 """CLI des Journals (AP-02): ``journal import <datei>`` — seit AP-04p
 zusätzlich ``journal rebuild``, seit AP-04d ``journal
 kandidaten-ausschreiben`` und ``journal kandidaten-einlesen``, seit AP-06
-``journal kennzahlen``, seit AP-13y ``journal import-optionapp``.
+``journal kennzahlen``, seit AP-13y ``journal import-optionapp``, seit
+AP-02a2k ``journal abrufen`` (nächtlicher Abruf der Flex-Query).
 
 Der Datenbankpfad kommt aus ``--db``, sonst aus der Umgebungsvariablen
 ``JOURNAL_DB``, sonst gilt ``journal.db`` (OF-06). Aufgerufen als
@@ -20,6 +21,7 @@ from analytics.kennzahlen import als_csv, kennzahlen_bericht
 from analytics.kommission import als_csv as kommission_als_csv
 from analytics.kommission import kommissions_bericht
 from analytics.steuer import als_csv as steuer_als_csv
+from ingest import flex_abruf
 from ingest.flex import import_flex_file
 from ingest.optionapp import import_optionapp_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
@@ -50,6 +52,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     oa_importer.add_argument("datei", type=pathlib.Path, help="Pfad zur XLSX-Exportdatei")
     oa_importer.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    abrufer = unterbefehle.add_parser(
+        "abrufen",
+        help="Flex-Statement über den Flex Web Service abrufen, speichern und "
+        "importieren (AP-02a2)",
+    )
+    abrufer.add_argument(
+        "--ziel",
+        type=pathlib.Path,
+        default=None,
+        help="Zielordner für das Statement (Default: Umgebungsvariable FLEX_ZIEL; "
+        "liegt nie im Projektverzeichnis)",
+    )
+    abrufer.add_argument(
+        "--query-id",
+        default=None,
+        help="Query-ID der Flex-Query (Default: Umgebungsvariable FLEX_QUERY_ID)",
+    )
+    abrufer.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Nach dem Import Legs, Strukturen und Ketten neu aufbauen",
+    )
+    abrufer.add_argument(
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
@@ -199,6 +228,80 @@ def main(argv: list[str] | None = None) -> int:
             f"Trades gelesen, {ergebnis.zeilen_neu} neu, "
             f"{ergebnis.zeilen_uebersprungen} übersprungen"
         )
+    elif argumente.befehl == "abrufen":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        # Zugangsdaten → Ziel → Abruf → Speichern → Import → Rebuild: in
+        # dieser Reihenfolge (Vertrag). Der Token kommt nur aus der
+        # Umgebung — nie als Argument, nie in einer Ausgabe.
+        token = os.environ.get("FLEX_TOKEN", "")
+        if not token:
+            print("Abruf fehlgeschlagen: FLEX_TOKEN ist nicht gesetzt.", file=sys.stderr)
+            return 1
+        query_id = argumente.query_id or os.environ.get("FLEX_QUERY_ID", "")
+        if not query_id:
+            print(
+                "Abruf fehlgeschlagen: keine Query-ID (--query-id oder FLEX_QUERY_ID).",
+                file=sys.stderr,
+            )
+            return 1
+        ziel = argumente.ziel or os.environ.get("FLEX_ZIEL", "")
+        if not ziel:
+            print(
+                "Abruf fehlgeschlagen: kein Zielordner (--ziel oder FLEX_ZIEL) — "
+                "Statements enthalten Kontodaten und gehören außerhalb des Repos.",
+                file=sys.stderr,
+            )
+            return 1
+        ziel_pfad = pathlib.Path(ziel)
+        try:
+            flex_abruf.ziel_pruefen(ziel_pfad)
+            # standard_transport wird bei jedem Aufruf im Modul nachgeschlagen
+            # (Vertrag) — so ersetzen es die Tests per monkeypatch.
+            xml = flex_abruf.abrufen(
+                token, query_id, transport=flex_abruf.standard_transport
+            )
+            pfad = flex_abruf.statement_speichern(xml, ziel_pfad)
+        except (flex_abruf.AbrufFehler, ValueError) as fehler:
+            print(f"Abruf fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(f"Abruf: Statement nach {pfad}")
+        try:
+            ergebnis = import_flex_file(db_pfad, pfad)
+        except (FileNotFoundError, ValueError) as fehler:
+            # Die Datei bleibt zur Prüfung liegen; ein Rebuild folgt nicht
+            # (Vertrag AP-02a2).
+            print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        print(
+            f"Import {pfad.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
+            f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
+        )
+        if argumente.rebuild:
+            try:
+                lauf = rebuild(db_pfad)
+            except ValueError as fehler:
+                # Widerspruch in den Daten oder den Overrides: benannt
+                # abbrechen — die kurze Transaktion hat nichts geschrieben.
+                print(f"Rebuild fehlgeschlagen: {fehler}", file=sys.stderr)
+                return 1
+            print(
+                f"Rebuild {db_pfad}: {lauf.legs} Legs, {lauf.structures} Strukturen, "
+                f"{lauf.chains} Ketten, {lauf.chain_links} Kettenglieder, "
+                f"{lauf.nicht_strukturiert} unstrukturiert; "
+                f"Overrides: {lauf.overrides_angewandt} angewandt, "
+                f"{lauf.overrides_verwaist} verwaist; "
+                f"{lauf.kandidaten_offen} offene Rollkandidaten; "
+                f"OA-Abgleich: {lauf.oa_zugeordnet} zugeordnet, "
+                f"{lauf.oa_fehler} ohne eindeutige Kette; "
+                f"{lauf.campaign_kandidaten_offen} offene Campaign-Kandidaten"
+            )
+            if lauf.overrides_verwaist > 0:
+                # Vertrag 20 (AP-04v): Verwaistes wird nie übergangen.
+                print(
+                    "Verwaiste Overrides benannt (siehe Standardfehlerausgabe).",
+                    file=sys.stderr,
+                )
+                return 1
     elif argumente.befehl == "rebuild":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         try:
