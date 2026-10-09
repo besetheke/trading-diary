@@ -163,12 +163,31 @@ async function hole(pfad: string): Promise<unknown> {
   return schicke('GET', pfad)
 }
 
+// AP-07s: Sortierbare Spalten und Richtungen — dieselben Aufzählungen wie die
+// API (Literal-Typen dort). Alles andere antwortete 422; die Oberfläche wählt
+// nur aus diesen Werten.
+export type Sortierspalte =
+  | 'eroeffnet_am'
+  | 'beendet_am'
+  | 'underlying'
+  | 'asset_class'
+  | 'seite'
+  | 'anzahl_rolls'
+  | 'endzustand'
+  | 'oa_strategie'
+
+export type Richtung = 'asc' | 'desc'
+
 export interface KettenAbfrage {
   basiswert?: string
   anlageklasse?: string
   endzustand?: string
   min_rolls?: number
   max_rolls?: number
+  // AP-07s/AP-08s: Sortierung auf dem Server, vor dem Blättern. Die
+  // Oberfläche sortiert nie selbst — sie schickt nur Spalte und Richtung mit.
+  sortierung?: Sortierspalte
+  richtung?: Richtung
   limit: number
   offset: number
 }
@@ -180,6 +199,8 @@ export function holeKetten(abfrage: KettenAbfrage): Promise<KettenListe> {
   if (abfrage.endzustand) zusaetze.set('endzustand', abfrage.endzustand)
   if (abfrage.min_rolls !== undefined) zusaetze.set('min_rolls', String(abfrage.min_rolls))
   if (abfrage.max_rolls !== undefined) zusaetze.set('max_rolls', String(abfrage.max_rolls))
+  if (abfrage.sortierung !== undefined) zusaetze.set('sortierung', abfrage.sortierung)
+  if (abfrage.richtung !== undefined) zusaetze.set('richtung', abfrage.richtung)
   zusaetze.set('limit', String(abfrage.limit))
   zusaetze.set('offset', String(abfrage.offset))
   return hole(`/ketten?${zusaetze.toString()}`) as Promise<KettenListe>

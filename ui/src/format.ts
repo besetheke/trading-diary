@@ -6,6 +6,12 @@ export function zeit(iso: string | null): string {
   return iso ? iso.replace('T', ' ') : '—'
 }
 
+// AP-08s: Datum und Uhrzeit in einer Zeile, ohne Sekunden (JJJJ-MM-TT HH:MM)
+// — nur geschnitten, nie umgerechnet; die volle Zeit bleibt im title.
+export function zeitKurz(iso: string | null): string {
+  return iso ? iso.replace('T', ' ').slice(0, 16) : '—'
+}
+
 export function datum(iso: string | null): string {
   return iso ? iso.slice(0, 10) : '—'
 }
