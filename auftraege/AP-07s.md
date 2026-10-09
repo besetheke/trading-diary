@@ -10,7 +10,7 @@ aendert_tests: ja
 
 Vorbereitungspaket nach Plan §11.2. **Es implementiert nichts**; die Umsetzung
 ist AP-07sk (günstiges Modell). Neue Testdatei `tests/test_api_sortierung.py`
-(21 Läufe in 12 Testfunktionen); `tests/test_api_lesen.py` bleibt unverändert und
+(18 Läufe); `tests/test_api_lesen.py` bleibt unverändert und
 grün.
 
 Anlass (Rückmeldung des Nutzers, 09.10.2026): In der Positionsliste muss die
