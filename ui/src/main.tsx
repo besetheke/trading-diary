@@ -41,14 +41,17 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
           </p>
           <nav className="hauptnav">
             <Link to="/">Positionen</Link>
-            <Link to="/kalender">Kalender</Link>
+            <Link to="/monat">Kalender</Link>
             <Link to={`/tag/${heuteDatum()}`}>Heute</Link>
           </nav>
         </header>
         <main>
           <Routes>
             <Route path="/" element={<Positionen />} />
-            <Route path="/kalender" element={<Kalender />} />
+            {/* AP-08j2: /kalender ist der API-Endpunkt (AP-07t). Die Seite
+                heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
+                erreichen und nicht den JSON-Fehler 422 des Endpunkts. */}
+            <Route path="/monat" element={<Kalender />} />
             <Route path="/positionen/:chainId" element={<PositionDetail />} />
             <Route path="/tag/:datum" element={<Tag />} />
             <Route path="*" element={<Unbekannt />} />

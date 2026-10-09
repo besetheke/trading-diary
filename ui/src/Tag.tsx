@@ -102,7 +102,7 @@ export default function Tag(): JSX.Element {
       <section className="hinweis">
         <p>Diese Adresse nennt kein Datum der Form JJJJ-MM-TT.</p>
         <p>
-          <Link to="/kalender">Zum Kalender</Link>
+          <Link to="/monat">Zum Kalender</Link>
         </p>
       </section>
     )
@@ -111,7 +111,7 @@ export default function Tag(): JSX.Element {
   return (
     <section>
       <nav className="zurueck">
-        <Link to="/kalender">← Zum Kalender</Link>
+        <Link to="/monat">← Zum Kalender</Link>
       </nav>
       <h2>Handelstag {datumText}</h2>
       <p className="sicht">Kontosicht — Beträge unverändert, wie die API sie liefert.</p>

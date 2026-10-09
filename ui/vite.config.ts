@@ -11,6 +11,13 @@ export default defineConfig({
       '/ketten': 'http://localhost:8000',
       '/strukturen': 'http://localhost:8000',
       '/openapi.json': 'http://localhost:8000',
+      // AP-08j2: Lese- und Journal-Wege der API (AP-07t, AP-07jk). Der
+      // Proxy greift nur für Anfragen mit diesen Anfängen — die Kalender-
+      // Seite heißt deshalb /monat und bleibt beim Entwicklungsserver.
+      '/tage': 'http://localhost:8000',
+      '/kalender': 'http://localhost:8000',
+      '/journal': 'http://localhost:8000',
+      '/tags': 'http://localhost:8000',
     },
   },
 })
