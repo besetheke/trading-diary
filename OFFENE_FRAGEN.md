@@ -2916,3 +2916,18 @@ Reihenfolge — **AP-07j** (Notizen, Tags, Tagesjournal; `scope_typ = 'tag'` ist
 der Handelstag), danach Tagesübersicht und Kennzahlen-Endpunkte, dann die
 Oberfläche dazu (AP-08j). Die Rest-Analytik (Equity/Drawdown, DTE-Band, Breite)
 folgt danach.
+
+## OF-74 · Automatischer Abruf: Protokoll des Flex Web Service nicht gegen die Gegenstelle erprobt
+
+Der Abruf (AP-02a2/AP-02a2k) folgt dem Flex Web Service in Version 3 nach
+meiner Kenntnis der IBKR-Dokumentation: zweistufig (`SendRequest` liefert
+`ReferenceCode` und `Url`, `GetStatement` liefert das Statement oder meldet mit
+`ErrorCode 1019`, dass es noch erzeugt wird). Basisadresse
+`https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService`.
+**Annahme (Regel 10):** Die Fehlercodes außer 1019 werden nicht gedeutet, nur
+benannt; ein erneuter Abruf bei Ratenbegrenzung ist Sache des nächsten
+Nachtlaufs. Die Abnahme ist gegen erfundene Antworten erfolgt; **der erste
+echte Abruf mit dem Token des Nutzers ist die Probe.** Weicht die echte
+Antwort ab (anderes Element, andere Adresse), ist das ein kleiner
+Korrekturauftrag am Transport bzw. an `BASIS_URL`, nicht an der Logik.
+Noch beim Nutzer: Flex-Query nach §6.2 anpassen, Token im IBKR-Portal anlegen.
