@@ -35,7 +35,7 @@ import os
 import pathlib
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -60,6 +60,24 @@ from journal.schema import (
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
 SICHT = "konto"
+
+# AP-07s: Sortierbare Spalten der Kettenliste — nur echte Spalten der Tabelle
+# ``chains``. Abgeleitete Werte (``struktur_summe_netto``, Preise) sind nicht
+# sortierbar: Sie werden je Seite zusammengestellt, eine Sortierung über die
+# aktuelle Seite wäre irreführend. Die ``Literal``-Typen tragen die Aufzählung
+# ins OpenAPI-Schema und lehnen alles andere mit 422 ab (Regel „nichts
+# zurechtbiegen"); Groß-/Kleinschreibung bleibt bedeutungstragend.
+Sortierspalte = Literal[
+    "eroeffnet_am",
+    "beendet_am",
+    "underlying",
+    "asset_class",
+    "seite",
+    "anzahl_rolls",
+    "endzustand",
+    "oa_strategie",
+]
+Richtung = Literal["asc", "desc"]
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +723,8 @@ def erzeuge_app(
         max_rolls: Annotated[int | None, Query(ge=0)] = None,
         eroeffnet_ab: date | None = None,
         eroeffnet_bis: date | None = None,
+        sortierung: Sortierspalte = "eroeffnet_am",
+        richtung: Richtung = "desc",
         limit: Annotated[int, Query(ge=1, le=500)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> KettenListeAntwort:
@@ -733,12 +753,24 @@ def erzeuge_app(
             gesamt = verbindung.execute(
                 select(func.count()).select_from(chains).where(*bedingungen)
             ).scalar_one()
+            # AP-07s: Die Sortierspalte wird über die Tabelle nachgeschlagen
+            # (``chains.c[...]``) — der Name ist als ``Literal`` geprüft, SQL
+            # wird nie aus der Eingabe zusammengesetzt.
+            sortier_spalte = chains.c[sortierung]
             zeilen = verbindung.execute(
                 select(chains)
                 .where(*bedingungen)
-                # Vertrag 4: das Neueste zuerst, bei Gleichstand nach
-                # chain_id aufsteigend (OF-44) — deterministisch.
-                .order_by(chains.c.eroeffnet_am.desc(), chains.c.chain_id)
+                # Vertrag 4 und AP-07s: Vorgabe bleibt Eröffnung absteigend.
+                # Leere Werte stehen in beiden Richtungen zuletzt (offene
+                # Ketten haben kein Ende, Aktienketten keine Seite); bei
+                # Gleichstand entscheidet die aufsteigende chain_id — so bleibt
+                # die Reihenfolge deterministisch und das Blättern liefert
+                # nichts doppelt und lässt nichts aus.
+                .order_by(
+                    sortier_spalte.is_(None),
+                    sortier_spalte.desc() if richtung == "desc" else sortier_spalte.asc(),
+                    chains.c.chain_id,
+                )
                 .limit(limit)
                 .offset(offset)
             ).mappings().all()
