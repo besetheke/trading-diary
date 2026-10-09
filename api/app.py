@@ -33,7 +33,7 @@ Dokumentierte Annahmen (Regel 10, OF-44):
 
 import os
 import pathlib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
@@ -232,6 +232,84 @@ JOURNAL_BEREICHE = ("campaign", "chain", "structure", "tag")
 
 
 # ---------------------------------------------------------------------------
+# Tagesübersicht und Kalender (AP-07t): was ``journal rebuild`` geschrieben
+# hat, je Handelstag aufbereitet — immer lesend, immer aktiv.
+# ---------------------------------------------------------------------------
+
+
+class TagKetteAntwort(BaseModel):
+    """Eine Kette in der Tagesliste (AP-07t)."""
+
+    chain_id: int
+    natur_schluessel: str
+    underlying: str
+    asset_class: str
+    seite: str | None
+    anzahl_rolls: int
+    endzustand: str | None
+    eroeffnet_am: datetime
+    beendet_am: datetime | None
+
+
+class TagRollAntwort(BaseModel):
+    """Ein Roll-Glied, dessen Struktur an dem Tag eröffnet wurde (AP-07t)."""
+
+    chain_id: int
+    structure_id: int
+    underlying: str
+    sequenz: int
+    eroeffnet_am: datetime
+
+
+class TagRealisiertAntwort(BaseModel):
+    """Realisiertes Ergebnis einer Währung an einem Tag (AP-07t)."""
+
+    waehrung: str
+    sicht: str
+    anzahl_strukturen: int
+    brutto: str
+    kommission: str
+    netto: str
+
+
+class TagAntwort(BaseModel):
+    """Die Tagesübersicht — vier Listen, leer, nie 404 (AP-07t)."""
+
+    datum: date
+    sicht: str
+    eroeffnet: list[TagKetteAntwort]
+    beendet: list[TagKetteAntwort]
+    rolls: list[TagRollAntwort]
+    realisiert: list[TagRealisiertAntwort]
+
+
+class KalenderRealisiertAntwort(BaseModel):
+    """Realisiertes Netto einer Währung an einem Kalendertag (AP-07t)."""
+
+    waehrung: str
+    sicht: str
+    netto: str
+
+
+class KalenderTagAntwort(BaseModel):
+    """Ein Tag mit Ereignissen im Monatsüberblick (AP-07t)."""
+
+    datum: date
+    eroeffnet: int
+    beendet: int
+    rolls: int
+    realisiert: list[KalenderRealisiertAntwort]
+
+
+class KalenderAntwort(BaseModel):
+    """Der Monatsüberblick — nur Tage mit Ereignissen, aufsteigend."""
+
+    monat: str
+    sicht: str
+    tage: list[KalenderTagAntwort]
+
+
+# ---------------------------------------------------------------------------
 # Umsetzung der Zeilen
 # ---------------------------------------------------------------------------
 
@@ -354,6 +432,72 @@ def _text_pruefen(text: str) -> None:
         raise HTTPException(
             status_code=422, detail="Der Text braucht mindestens ein Zeichen außer Leerraum"
         )
+
+
+def _tag_kette_als_dict(k) -> dict:
+    """Spaltenwerte einer Kettenzeile für die Tagesliste (AP-07t)."""
+    return dict(
+        chain_id=k["chain_id"],
+        natur_schluessel=k["natur_schluessel"],
+        underlying=k["underlying"],
+        asset_class=k["asset_class"],
+        seite=k["seite"],
+        anzahl_rolls=k["anzahl_rolls"],
+        endzustand=k["endzustand"],
+        eroeffnet_am=k["eroeffnet_am"],
+        beendet_am=k["beendet_am"],
+    )
+
+
+def _null(wert: Decimal | None) -> Decimal:
+    """Leere Geldfelder zählen beim Summieren als 0 (AP-07t) — geschlossene
+    Strukturen tragen immer Werte, die Ausnahme ist rein defensiv."""
+    return Decimal(0) if wert is None else wert
+
+
+def _realisiert_je_waehrung(
+    verbindung: Connection, anfang: datetime, ende: datetime
+) -> dict[str, dict]:
+    """Summen der im halboffenen Fenster ``[anfang, ende)`` geschlossenen
+    Strukturen der Kontosicht, je Währung (AP-07t).
+
+    Die Sichtspalte liegt auf ``chain_links``, nicht auf ``structures``;
+    der ``exists``-Zusatz hält Strukturen der Kettensicht heraus — dieselbe
+    Technik wie bei der Bereichsprüfung des Journals.
+    """
+    zeilen = verbindung.execute(
+        select(
+            structures.c.waehrung,
+            structures.c.brutto_pnl,
+            structures.c.kommission,
+            structures.c.netto_pnl,
+        ).where(
+            structures.c.geschlossen_am >= anfang,
+            structures.c.geschlossen_am < ende,
+            exists(
+                select(chain_links.c.chain_id).where(
+                    chain_links.c.structure_id == structures.c.structure_id,
+                    chain_links.c.sicht == SICHT,
+                )
+            ),
+        )
+    ).all()
+    summen: dict[str, dict] = {}
+    for waehrung, brutto, kommission, netto in zeilen:
+        eintrag = summen.setdefault(
+            waehrung,
+            dict(
+                anzahl=0,
+                brutto=Decimal(0),
+                kommission=Decimal(0),
+                netto=Decimal(0),
+            ),
+        )
+        eintrag["anzahl"] += 1
+        eintrag["brutto"] += _null(brutto)
+        eintrag["kommission"] += _null(kommission)
+        eintrag["netto"] += _null(netto)
+    return summen
 
 
 def _struktur_als_dict(s) -> dict:
@@ -728,6 +872,185 @@ def erzeuge_app(
             )
             for z in zeilen
         ]
+
+    # -----------------------------------------------------------------------
+    # Tagesübersicht und Kalender (AP-07t): rein lesend, ohne Schalter immer
+    # aktiv — das Schema der Standard-API bleibt ausschließlich ``get``. Auch
+    # diese Routen stehen vor der Rückfall-Route der Oberfläche.
+    # -----------------------------------------------------------------------
+
+    @applikation.get("/tage/{datum}", response_model=TagAntwort)
+    def tag_lesen(datum: date) -> TagAntwort:
+        """Was an einem Handelstag passiert ist (AP-07t): eröffnete und
+        beendete Ketten, Rolls und das realisierte Ergebnis je Währung.
+
+        Ein Tag ist das Kalenderdatum der Zeitstempel, die Tagesgrenze das
+        halboffene Intervall ``[00:00, nächster Tag 00:00)``.
+        """
+        anfang = datetime(datum.year, datum.month, datum.day)
+        ende = anfang + timedelta(days=1)
+        with engine.connect() as verbindung:
+            eroeffnet = verbindung.execute(
+                select(chains)
+                .where(
+                    chains.c.sicht == SICHT,
+                    chains.c.eroeffnet_am >= anfang,
+                    chains.c.eroeffnet_am < ende,
+                )
+                .order_by(chains.c.eroeffnet_am, chains.c.chain_id)
+            ).mappings().all()
+            beendet = verbindung.execute(
+                select(chains)
+                .where(
+                    chains.c.sicht == SICHT,
+                    chains.c.beendet_am >= anfang,
+                    chains.c.beendet_am < ende,
+                )
+                .order_by(chains.c.beendet_am, chains.c.chain_id)
+            ).mappings().all()
+            roll_zeilen = verbindung.execute(
+                select(
+                    chain_links.c.chain_id,
+                    chain_links.c.structure_id,
+                    chain_links.c.sequenz,
+                    structures.c.underlying,
+                    structures.c.eroeffnet_am,
+                )
+                .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+                .where(
+                    chain_links.c.sicht == SICHT,
+                    chain_links.c.verknuepfungstyp == "roll",
+                    structures.c.eroeffnet_am >= anfang,
+                    structures.c.eroeffnet_am < ende,
+                )
+                .order_by(structures.c.eroeffnet_am, chain_links.c.chain_id)
+            ).mappings().all()
+            summen = _realisiert_je_waehrung(verbindung, anfang, ende)
+        return TagAntwort(
+            datum=datum,
+            sicht=SICHT,
+            eroeffnet=[TagKetteAntwort(**_tag_kette_als_dict(k)) for k in eroeffnet],
+            beendet=[TagKetteAntwort(**_tag_kette_als_dict(k)) for k in beendet],
+            rolls=[
+                TagRollAntwort(
+                    chain_id=z["chain_id"],
+                    structure_id=z["structure_id"],
+                    underlying=z["underlying"],
+                    sequenz=z["sequenz"],
+                    eroeffnet_am=z["eroeffnet_am"],
+                )
+                for z in roll_zeilen
+            ],
+            realisiert=[
+                TagRealisiertAntwort(
+                    waehrung=waehrung,
+                    sicht=SICHT,
+                    anzahl_strukturen=eintrag["anzahl"],
+                    brutto=format(eintrag["brutto"], "f"),
+                    kommission=format(eintrag["kommission"], "f"),
+                    netto=format(eintrag["netto"], "f"),
+                )
+                for waehrung, eintrag in sorted(summen.items())
+            ],
+        )
+
+    @applikation.get("/kalender", response_model=KalenderAntwort)
+    def kalender(monat: Annotated[str, Query()]) -> KalenderAntwort:
+        """Monatsüberblick (AP-07t): nur Tage mit Ereignissen, aufsteigend —
+        Anzahlen der Eröffnungen, Beendigungen und Rolls, realisiertes Netto
+        je Währung. ``monat`` ist ``JJJJ-MM``, alles andere ist 422."""
+        teile = monat.split("-")
+        if (
+            len(teile) != 2
+            or len(teile[0]) != 4
+            or len(teile[1]) != 2
+            or not teile[0].isdigit()
+            or not teile[1].isdigit()
+        ):
+            raise HTTPException(status_code=422, detail=f"Kein Monat JJJJ-MM: {monat!r}")
+        jahr, monat_nummer = int(teile[0]), int(teile[1])
+        if not 1 <= monat_nummer <= 12:
+            raise HTTPException(status_code=422, detail=f"Kein Monat JJJJ-MM: {monat!r}")
+        anfang = datetime(jahr, monat_nummer, 1)
+        ende = (
+            datetime(jahr + 1, 1, 1)
+            if monat_nummer == 12
+            else datetime(jahr, monat_nummer + 1, 1)
+        )
+        ereignisse: dict[date, dict] = {}
+
+        def eintrag_fuer(tag_datum: date) -> dict:
+            return ereignisse.setdefault(
+                tag_datum, dict(eroeffnet=0, beendet=0, rolls=0, realisiert={})
+            )
+
+        with engine.connect() as verbindung:
+            for zeitpunkt in verbindung.execute(
+                select(chains.c.eroeffnet_am).where(
+                    chains.c.sicht == SICHT,
+                    chains.c.eroeffnet_am >= anfang,
+                    chains.c.eroeffnet_am < ende,
+                )
+            ).scalars():
+                eintrag_fuer(zeitpunkt.date())["eroeffnet"] += 1
+            for zeitpunkt in verbindung.execute(
+                select(chains.c.beendet_am).where(
+                    chains.c.sicht == SICHT,
+                    chains.c.beendet_am >= anfang,
+                    chains.c.beendet_am < ende,
+                )
+            ).scalars():
+                eintrag_fuer(zeitpunkt.date())["beendet"] += 1
+            for zeitpunkt in verbindung.execute(
+                select(structures.c.eroeffnet_am)
+                .join(chain_links, chain_links.c.structure_id == structures.c.structure_id)
+                .where(
+                    chain_links.c.sicht == SICHT,
+                    chain_links.c.verknuepfungstyp == "roll",
+                    structures.c.eroeffnet_am >= anfang,
+                    structures.c.eroeffnet_am < ende,
+                )
+            ).scalars():
+                eintrag_fuer(zeitpunkt.date())["rolls"] += 1
+            for geschlossen_am, waehrung, netto in verbindung.execute(
+                select(
+                    structures.c.geschlossen_am,
+                    structures.c.waehrung,
+                    structures.c.netto_pnl,
+                ).where(
+                    structures.c.geschlossen_am >= anfang,
+                    structures.c.geschlossen_am < ende,
+                    exists(
+                        select(chain_links.c.chain_id).where(
+                            chain_links.c.structure_id == structures.c.structure_id,
+                            chain_links.c.sicht == SICHT,
+                        )
+                    ),
+                )
+            ).all():
+                realisiert = eintrag_fuer(geschlossen_am.date())["realisiert"]
+                realisiert[waehrung] = realisiert.get(waehrung, Decimal(0)) + _null(netto)
+        return KalenderAntwort(
+            monat=monat,
+            sicht=SICHT,
+            tage=[
+                KalenderTagAntwort(
+                    datum=tag_datum,
+                    eroeffnet=eintrag["eroeffnet"],
+                    beendet=eintrag["beendet"],
+                    rolls=eintrag["rolls"],
+                    realisiert=[
+                        KalenderRealisiertAntwort(
+                            waehrung=waehrung,
+                            sicht=SICHT,
+                            netto=format(netto, "f"),
+                        )
+                        for waehrung, netto in sorted(eintrag["realisiert"].items())
+                    ],
+                )
+                for tag_datum, eintrag in sorted(ereignisse.items())
+            ],
+        )
 
     # -----------------------------------------------------------------------
     # Journal (AP-07j): Notizen und Tags — nur auf Wunsch aktiv
