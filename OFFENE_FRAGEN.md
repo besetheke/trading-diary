@@ -2881,3 +2881,26 @@ stringent (Delta 10 aufsetzen, bei 2 EUR Take Profit, neu aufsetzen, auf beiden
 Seiten; rollen, wenn nötig, notfalls finanzieren). Wie viel Erkenntnis aus der
 Kampagnen-Klassifikation entsteht, wird nach dem ersten Einsatz bewertet. Die
 Kernfragen (Kosten, Rolls, Strategien) hängen nicht daran.
+
+**AP-05d (09.10.2026):** Persistenz der Klassifikation als Datei-Rundreise
+(`kampagnen-ausschreiben`/`kampagnen-einlesen`), Abnahmebasis AP-05d, Umsetzung
+AP-05dk. Entscheidungen aus OF-54/OF-71 umgesetzt: Ablehnung in eigener Tabelle
+`campaign_ablehnungen`, keine automatische Zusammenführung zweier Kampagnen,
+Typ je Kette in der Datei vorbelegt. **Annahme (Regel 10):** Bei einem
+Financing-Kandidaten ist die Bestandskette mit `ic_leg` vorbelegt, die neue
+Kette mit `financing`; `contract_roll` und `independent` sind eintragbar. Ob
+das der Absicht des Nutzers entspricht, zeigt sich beim ersten Durchgehen.
+Die Klassifikation hängt an **Kontosicht**-Ketten; eine Übersetzung in die
+Kettensicht folgt erst, wenn die Kampagnen-Auswertung (AP-06) sie braucht.
+
+## OF-72 · Durchsicht der Rollkandidaten: Naturschlüssel ohne Sichtfilter
+
+Beim Lesen von `journal/durchsicht.py` (09.10.2026) fiel auf, dass
+`_gruppen_bilden` und `_urteile_schreiben` Naturschlüssel in `structures` und
+`chains` ohne `sicht = 'konto'` nachschlagen. Seit AP-04sw gibt es jeden
+Schlüssel zweimal. Es funktioniert nur, weil die Zeilen in der Reihenfolge des
+Unique-Index (Naturschlüssel, Sicht) zurückkommen und die Kontosicht zuletzt
+steht — ein Wegwerf-Lauf mit einer Bestätigung und anschließendem Rebuild
+(`overrides_angewandt 1`, `verwaist 0`) bestätigt, dass es heute richtig läuft.
+Der vorhandene Test prüft das nur schwach. **Behebung:** kleine Härtung in
+AP-05dk (Sichtfilter ergänzen, bestehende Tests unverändert grün).
