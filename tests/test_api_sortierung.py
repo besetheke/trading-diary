@@ -93,8 +93,11 @@ def test_anzahl_rolls_absteigend_die_gerollte_kette_zuerst(klient):
 
 
 def test_anlageklasse_und_seite(klient):
-    assert [k["asset_class"] for k in _treffer(klient, sortierung="asset_class", richtung="asc")] == [
-        "OPT", "OPT", "OPT", "STK", "STK"]
+    klassen = [
+        k["asset_class"]
+        for k in _treffer(klient, sortierung="asset_class", richtung="asc")
+    ]
+    assert klassen == ["OPT", "OPT", "OPT", "STK", "STK"]
     for richtung in ("asc", "desc"):
         seiten = [k["seite"] for k in _treffer(klient, sortierung="seite", richtung=richtung)]
         gefuellt = [s for s in seiten if s is not None]
