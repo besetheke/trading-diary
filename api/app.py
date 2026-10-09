@@ -40,12 +40,22 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.engine import Connection
 
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
-from journal.schema import chain_links, chains, executions, legs, structures
+from journal.schema import (
+    campaigns,
+    chain_links,
+    chains,
+    entity_tags,
+    executions,
+    journal_entries,
+    legs,
+    structures,
+    tags,
+)
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
@@ -172,6 +182,56 @@ class KettenListeAntwort(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Journal (AP-07j): Notizen und Tags — Benutzerdaten, überleben jeden Rebuild
+# ---------------------------------------------------------------------------
+
+
+class NotizAntwort(BaseModel):
+    """Eine Journal-Notiz (AP-07j, Tabelle)."""
+
+    id: int
+    scope_typ: str
+    scope_id: str
+    text: str
+    erstellt_am: datetime
+    geaendert_am: datetime | None
+
+
+class JournalAntwort(BaseModel):
+    """Notizen und Tags eines Bereichs (AP-07j, Tabelle)."""
+
+    scope_typ: str
+    scope_id: str
+    notizen: list[NotizAntwort]
+    tags: list[str]
+
+
+class NotizEingabe(BaseModel):
+    """Text einer neuen oder geänderten Notiz — er bleibt unverändert."""
+
+    text: str
+
+
+class TagsEingabe(BaseModel):
+    """Namen der Tags, die die Zuordnung des Bereichs vollständig ersetzen."""
+
+    tags: list[str]
+
+
+class TagEintrag(BaseModel):
+    """Ein Tag mit der Zahl seiner Zuordnungen (AP-07j, ``GET /tags``)."""
+
+    name: str
+    anzahl: int
+
+
+# AP-07j, Entscheidung „Bereiche": ``tag`` ist der Handelstag und braucht kein
+# vorhandenes Objekt — das ist das tägliche Journal; chain/structure/campaign
+# verlangen die numerische ID und Existenz in der Kontosicht bzw. campaigns.
+JOURNAL_BEREICHE = ("campaign", "chain", "structure", "tag")
+
+
+# ---------------------------------------------------------------------------
 # Umsetzung der Zeilen
 # ---------------------------------------------------------------------------
 
@@ -181,6 +241,119 @@ def _als_text(wert: Decimal | None) -> str | None:
 
     Leer bleibt leer — nie ``"0"``, nie ``None`` als Zahl (Vertrag 13)."""
     return None if wert is None else str(wert)
+
+
+def _journal_bereich_pruefen(
+    verbindung: Connection, scope_typ: str, scope_id: str
+) -> None:
+    """Prüft den Bereich vor jedem Zugriff (AP-07j): 422 für einen unbekannten
+    Bereich, eine nicht numerische ID oder ein ungültiges Datum; 404 für ein
+    fehlendes Objekt.
+
+    Ketten und Strukturen müssen in der **Kontosicht** existieren — die
+    Sichtspalte liegt auf ``chains`` und ``chain_links``, nicht auf
+    ``structures``; eine Struktur zählt deshalb nur, wenn die Kontosicht
+    sie verknüpft.
+    """
+    if scope_typ not in JOURNAL_BEREICHE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unbekannter Bereich {scope_typ!r}: "
+            "chain, structure, campaign oder tag",
+        )
+    if scope_typ == "tag":
+        try:
+            date.fromisoformat(scope_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=422, detail=f"Kein Datum JJJJ-MM-TT: {scope_id!r}"
+            ) from None
+        return
+    try:
+        nummer = int(scope_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail=f"Keine numerische Kennung: {scope_id!r}"
+        ) from None
+    if scope_typ == "chain":
+        vorhanden = verbindung.execute(
+            select(chains.c.chain_id).where(
+                chains.c.chain_id == nummer, chains.c.sicht == SICHT
+            )
+        ).scalar_one_or_none()
+    elif scope_typ == "structure":
+        vorhanden = verbindung.execute(
+            select(structures.c.structure_id).where(
+                structures.c.structure_id == nummer,
+                exists(
+                    select(chain_links.c.chain_id).where(
+                        chain_links.c.structure_id == structures.c.structure_id,
+                        chain_links.c.sicht == SICHT,
+                    )
+                ),
+            )
+        ).scalar_one_or_none()
+    else:
+        vorhanden = verbindung.execute(
+            select(campaigns.c.campaign_id).where(campaigns.c.campaign_id == nummer)
+        ).scalar_one_or_none()
+    if vorhanden is None:
+        benennung = {"chain": "Kette", "structure": "Struktur", "campaign": "Kampagne"}
+        raise HTTPException(
+            status_code=404, detail=f"{benennung[scope_typ]} {nummer} nicht gefunden"
+        )
+
+
+def _journal_laden(
+    verbindung: Connection, scope_typ: str, scope_id: str
+) -> JournalAntwort:
+    """Notizen und Tags eines Bereichs (AP-07j): Notizen neueste zuerst, bei
+    Gleichstand die größere ``id``; Tags alphabetisch ohne Beachtung der
+    Schreibweise, in der Schreibweise der Tabelle."""
+    notiz_zeilen = verbindung.execute(
+        select(journal_entries)
+        .where(
+            journal_entries.c.scope_typ == scope_typ,
+            journal_entries.c.scope_id == scope_id,
+        )
+        .order_by(journal_entries.c.erstellt_am.desc(), journal_entries.c.id.desc())
+    ).mappings().all()
+    tag_namen = verbindung.execute(
+        select(tags.c.name)
+        .join(entity_tags, entity_tags.c.tag_id == tags.c.id)
+        .where(
+            entity_tags.c.scope_typ == scope_typ,
+            entity_tags.c.scope_id == scope_id,
+        )
+        .order_by(func.lower(tags.c.name), tags.c.name)
+    ).scalars().all()
+    return JournalAntwort(
+        scope_typ=scope_typ,
+        scope_id=scope_id,
+        notizen=[
+            NotizAntwort(
+                id=z["id"],
+                scope_typ=z["scope_typ"],
+                scope_id=z["scope_id"],
+                text=z["text"],
+                erstellt_am=z["erstellt_am"],
+                geaendert_am=z["geaendert_am"],
+            )
+            for z in notiz_zeilen
+        ],
+        tags=list(tag_namen),
+    )
+
+
+def _text_pruefen(text: str) -> None:
+    """Mindestens ein Zeichen außer Leerraum, sonst 422 (AP-07j).
+
+    Der Text selbst bleibt unverändert — Leerzeichen und Zeilenumbrüche
+    werden weder beim Anlegen noch beim Ändern angetastet."""
+    if not text.strip():
+        raise HTTPException(
+            status_code=422, detail="Der Text braucht mindestens ein Zeichen außer Leerraum"
+        )
 
 
 def _struktur_als_dict(s) -> dict:
@@ -346,7 +519,10 @@ def _ketten_zuschuesse(
 
 
 def erzeuge_app(
-    db_pfad: str | pathlib.Path, *, ui_verzeichnis: str | pathlib.Path | None = None
+    db_pfad: str | pathlib.Path,
+    *,
+    ui_verzeichnis: str | pathlib.Path | None = None,
+    mit_journal: bool = False,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
 
@@ -356,6 +532,10 @@ def erzeuge_app(
     Ohne Angabe wird ``ui/dist`` neben der Datenbankdatei gesucht (OF-45) —
     fehlt es dort, bleibt die Anwendung reine API, und die Wurzel sagt, was
     fehlt (Vertrag 4).
+
+    ``mit_journal`` schaltet die Journal-Routen dazu (AP-07j): Ohne den
+    Schalter bleibt das OpenAPI-Schema ausschließlich lesend. Das Modulobjekt
+    ``app`` startet mit Journal — die Oberfläche braucht es.
     """
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
 
@@ -550,6 +730,161 @@ def erzeuge_app(
         ]
 
     # -----------------------------------------------------------------------
+    # Journal (AP-07j): Notizen und Tags — nur auf Wunsch aktiv
+    # (``mit_journal``), sonst bliebe das OpenAPI-Schema nicht ausschließlich
+    # lesend (Vertrag 2). Die Routen stehen vor der Rückfall-Route der
+    # Oberfläche, sonst finge diese sie ab. Jeder Aufruf schreibt in einer
+    # kurzen Transaktion (Regel 9) und nur in ``journal_entries``, ``tags``,
+    # ``entity_tags``; die Zeitstempel kommen vom Server (AP-07j).
+    # -----------------------------------------------------------------------
+
+    if mit_journal:
+
+        @applikation.get("/journal/{scope_typ}/{scope_id}", response_model=JournalAntwort)
+        def journal_lesen(scope_typ: str, scope_id: str) -> JournalAntwort:
+            """Notizen und Tags eines Bereichs — neueste Notiz zuerst."""
+            with engine.connect() as verbindung:
+                _journal_bereich_pruefen(verbindung, scope_typ, scope_id)
+                return _journal_laden(verbindung, scope_typ, scope_id)
+
+        @applikation.post(
+            "/journal/{scope_typ}/{scope_id}/notizen",
+            response_model=NotizAntwort,
+            status_code=201,
+        )
+        def notiz_anlegen(
+            scope_typ: str, scope_id: str, eingabe: NotizEingabe
+        ) -> NotizAntwort:
+            """Neue Notiz — der Text bleibt unverändert, Zeilen inklusive."""
+            _text_pruefen(eingabe.text)
+            jetzt = datetime.now()
+            with engine.begin() as verbindung:
+                _journal_bereich_pruefen(verbindung, scope_typ, scope_id)
+                notiz_id = verbindung.execute(
+                    insert(journal_entries).values(
+                        scope_typ=scope_typ,
+                        scope_id=scope_id,
+                        text=eingabe.text,
+                        erstellt_am=jetzt,
+                    )
+                ).inserted_primary_key[0]
+            return NotizAntwort(
+                id=notiz_id,
+                scope_typ=scope_typ,
+                scope_id=scope_id,
+                text=eingabe.text,
+                erstellt_am=jetzt,
+                geaendert_am=None,
+            )
+
+        @applikation.put("/journal/notizen/{notiz_id}", response_model=NotizAntwort)
+        def notiz_aendern(notiz_id: int, eingabe: NotizEingabe) -> NotizAntwort:
+            """Text einer Notiz ersetzen; ``erstellt_am`` bleibt,
+            ``geaendert_am`` wird gesetzt."""
+            _text_pruefen(eingabe.text)
+            jetzt = datetime.now()
+            with engine.begin() as verbindung:
+                zeile = verbindung.execute(
+                    select(journal_entries).where(journal_entries.c.id == notiz_id)
+                ).mappings().one_or_none()
+                if zeile is None:
+                    raise HTTPException(status_code=404, detail="Notiz nicht gefunden")
+                verbindung.execute(
+                    update(journal_entries)
+                    .where(journal_entries.c.id == notiz_id)
+                    .values(text=eingabe.text, geaendert_am=jetzt)
+                )
+            return NotizAntwort(
+                id=notiz_id,
+                scope_typ=zeile["scope_typ"],
+                scope_id=zeile["scope_id"],
+                text=eingabe.text,
+                erstellt_am=zeile["erstellt_am"],
+                geaendert_am=jetzt,
+            )
+
+        @applikation.delete("/journal/notizen/{notiz_id}", status_code=204)
+        def notiz_loeschen(notiz_id: int) -> None:
+            """Notiz auf ausdrücklichen Wunsch entfernen (AP-07j: Nutzer-Handlung
+            an eigenen Daten, Regel 4)."""
+            with engine.begin() as verbindung:
+                ergebnis = verbindung.execute(
+                    delete(journal_entries).where(journal_entries.c.id == notiz_id)
+                )
+                if ergebnis.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Notiz nicht gefunden")
+
+        @applikation.put(
+            "/journal/{scope_typ}/{scope_id}/tags", response_model=JournalAntwort
+        )
+        def tags_ersetzen(
+            scope_typ: str, scope_id: str, eingabe: TagsEingabe
+        ) -> JournalAntwort:
+            """Tag-Zuordnung des Bereichs vollständig ersetzen (AP-07j).
+
+            Namen werden getrimmt; gleiche Namen ohne Beachtung der
+            Schreibweise zählen einmal (erste Schreibweise der Anfrage), ein
+            bereits vorhandener Tag behält **seine** Schreibweise. Tags werden
+            nie gelöscht — nur Zuordnungen.
+            """
+            namen: list[str] = []
+            gesehene: set[str] = set()
+            for rohname in eingabe.tags:
+                name = rohname.strip()
+                if not name:
+                    raise HTTPException(status_code=422, detail="Tag-Name ohne Inhalt")
+                if name.lower() not in gesehene:
+                    gesehene.add(name.lower())
+                    namen.append(name)
+            with engine.begin() as verbindung:
+                _journal_bereich_pruefen(verbindung, scope_typ, scope_id)
+                tag_ids: list[int] = []
+                for name in namen:
+                    tag_id = verbindung.execute(
+                        select(tags.c.id).where(func.lower(tags.c.name) == name.lower())
+                    ).scalar_one_or_none()
+                    if tag_id is None:
+                        tag_id = verbindung.execute(
+                            insert(tags).values(name=name)
+                        ).inserted_primary_key[0]
+                    tag_ids.append(tag_id)
+                verbindung.execute(
+                    delete(entity_tags).where(
+                        entity_tags.c.scope_typ == scope_typ,
+                        entity_tags.c.scope_id == scope_id,
+                    )
+                )
+                if tag_ids:
+                    verbindung.execute(
+                        insert(entity_tags),
+                        [
+                            {
+                                "tag_id": tag_id,
+                                "scope_typ": scope_typ,
+                                "scope_id": scope_id,
+                            }
+                            for tag_id in tag_ids
+                        ],
+                    )
+                antwort = _journal_laden(verbindung, scope_typ, scope_id)
+            return antwort
+
+        @applikation.get("/tags", response_model=list[TagEintrag])
+        def tags_alle() -> list[TagEintrag]:
+            """Alle Tags mit der Zahl ihrer Zuordnungen — alphabetisch ohne
+            Beachtung der Schreibweise; ein unbenutzter Tag bleibt mit 0."""
+            with engine.connect() as verbindung:
+                zeilen = verbindung.execute(
+                    select(tags.c.name, func.count(entity_tags.c.tag_id).label("anzahl"))
+                    .select_from(
+                        tags.outerjoin(entity_tags, entity_tags.c.tag_id == tags.c.id)
+                    )
+                    .group_by(tags.c.id, tags.c.name)
+                    .order_by(func.lower(tags.c.name), tags.c.name)
+                ).all()
+            return [TagEintrag(name=name, anzahl=anzahl) for name, anzahl in zeilen]
+
+    # -----------------------------------------------------------------------
     # Statische Auslieferung der Oberfläche (AP-08l, Vertrag 1–5)
     #
     # Diese Route steht absichtlich ganz am Ende: Erst die API-Routen, dann
@@ -601,5 +936,6 @@ def erzeuge_app(
 
 
 # Vertrag 1: Modulobjekt mit dem Pfad wie die CLI — Umgebungsvariable
-# JOURNAL_DB, sonst journal.db (OF-06).
-app = erzeuge_app(os.environ.get("JOURNAL_DB", "journal.db"))
+# JOURNAL_DB, sonst journal.db (OF-06). Mit Journal (AP-07j): Die Oberfläche
+# des täglichen Journals braucht die schreibenden Routen.
+app = erzeuge_app(os.environ.get("JOURNAL_DB", "journal.db"), mit_journal=True)
