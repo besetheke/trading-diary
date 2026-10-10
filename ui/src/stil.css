@@ -189,6 +189,12 @@ button[type='button'] {
   margin: 0.25rem 0;
 }
 
+/* CLI-Befehle im Leer-Zustand (z. B. kampagnen-ausschreiben): leicht
+   kleiner, damit der Monospace-Block nicht aus dem Fließtext fällt. */
+.hinweis code {
+  font-size: 0.9em;
+}
+
 /* Kopf der Detailansicht */
 .zurueck {
   margin-top: 1.25rem;

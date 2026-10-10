@@ -181,8 +181,21 @@ export default function Kampagnen(): JSX.Element {
         <p className="laedt">Lade Kampagnen …</p>
       ) : liste.gesamt === 0 ? (
         <section className="hinweis">
-          <p>Keine Kampagnen{basiswert ? ` für ${basiswert}` : ''}.</p>
-          <p>Bestätigt wird über die Dateirundreise der CLI.</p>
+          <p>
+            {basiswert
+              ? `Keine bestätigte Kampagne für ${basiswert}.`
+              : 'Noch keine bestätigte Kampagne.'}
+          </p>
+          {/* Die Seite ist nicht kaputt: Kandidaten entstehen außerhalb ihrer
+              (Plan §6, Block B, Regel 2). Ohne den Befehl wirkt sie tot. */}
+          <p>
+            Kampagnen werden über die CLI-Rundreise bestätigt:{' '}
+            <code>journal kampagnen-ausschreiben</code> schreibt die offenen
+            Kandidaten aus, nach dem Urteil liest{' '}
+            <code>journal kampagnen-einlesen</code> sie ein, und{' '}
+            <code>journal rebuild</code> macht die Entscheidungen wirksam —
+            erst danach erscheinen sie hier.
+          </p>
         </section>
       ) : (
         <table className="positionen kampagnen">
