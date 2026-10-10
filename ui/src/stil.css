@@ -749,3 +749,15 @@ ul.diagramm-legende {
 table.bestandteile {
   max-width: 24rem;
 }
+
+/* AP-08g2: Ein-/Auszahlungen im Kopf der Kosten-Seite — Kapitalbewegung,
+   kein Ertrag; der Eintrag bleibt abgesetzt. */
+dl.kopf div.abgesetzt dt {
+  color: var(--grau);
+  font-style: italic;
+}
+
+/* Breite Monats-×-Kategorien-Tabelle der Kosten-Seite — etwas enger. */
+table.kosten {
+  font-size: 0.85rem;
+}

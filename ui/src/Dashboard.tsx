@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { fehlerText, holeEquity, holeNav } from './api'
-import type { Equity, Nav, NavTag } from './api'
+import { fehlerText, holeEquity, holeKapital, holeNav } from './api'
+import type { Equity, Kapital, Nav, NavTag } from './api'
 import Betrag from './Betrag'
 import Balken from './diagramm/Balken'
 import Flaeche from './diagramm/Flaeche'
@@ -18,6 +18,8 @@ import { useZeitraum } from './zeitraum'
 // AP-08h: Abschnitt „Kontowert laut IB" (GET /nav) unter der Equity-Sektion
 // — Kontowert und Einzahlungen als zwei Linien mit Fläche, umschaltbar auf
 // „Gewinn laut IB" neben der realisierten Equity; alles Werte der API.
+// AP-08g2: Kapitalentwicklung (GET /kapital) unter der Drawdown-Fläche —
+// realisiertes Kapital, Kopf-Kennzahlen alles Werte der API.
 
 // Bestandteile des Kontowerts am letzten Tag — Feld null heißt Zeile weg.
 const BESTANDTEILE: { titel: string; feld: 'cash' | 'aktien' | 'optionen' | 'rohstoffe' }[] = [
@@ -65,6 +67,27 @@ export default function Dashboard(): JSX.Element {
       })
       .catch((ursache: unknown) => {
         if (!abgebrochen) setzeNavFehler(fehlerText(ursache))
+      })
+    return () => {
+      abgebrochen = true
+    }
+  }, [zeitraum.von, zeitraum.bis])
+
+  // AP-08g2: Kapitalentwicklung (realisiert, AP-06g) — eigene Quelle wie der
+  // Kontowert, eigener Ladezustand; Abschnitt unter der Drawdown-Fläche.
+  const [kapital, setzeKapital] = useState<Kapital | null>(null)
+  const [kapitalFehler, setzeKapitalFehler] = useState<string | null>(null)
+
+  useEffect(() => {
+    let abgebrochen = false
+    setzeKapital(null)
+    setzeKapitalFehler(null)
+    holeKapital(zeitraum.von, zeitraum.bis)
+      .then((ergebnis) => {
+        if (!abgebrochen) setzeKapital(ergebnis)
+      })
+      .catch((ursache: unknown) => {
+        if (!abgebrochen) setzeKapitalFehler(fehlerText(ursache))
       })
     return () => {
       abgebrochen = true
@@ -317,6 +340,58 @@ export default function Dashboard(): JSX.Element {
               </tbody>
             </table>
           </details>
+        </>
+      )}
+
+      {/* AP-08g2: Kapitalentwicklung unter der Drawdown-Fläche — realisiert,
+          unrealisierte Ergebnisse offener Positionen fehlen bewusst. */}
+      <h3>Kapitalentwicklung</h3>
+      {kapitalFehler !== null ? (
+        <section className="fehler">
+          <h4>Die Kapitalentwicklung konnte nicht geladen werden</h4>
+          <p>{kapitalFehler}</p>
+        </section>
+      ) : kapital === null ? (
+        <p className="laedt">Lade Kapitalentwicklung …</p>
+      ) : (
+        <>
+          <Linie punkte={kapital.tage.map((t) => ({ x: t.datum, y: t.kapital }))} />
+          <dl className="kopf">
+            <div>
+              <dt>Anfangskapital</dt>
+              <dd>
+                <Betrag wert={kapital.anfangskapital} />
+              </dd>
+            </div>
+            <div>
+              <dt>Endkapital</dt>
+              <dd>
+                <Betrag wert={kapital.endkapital} />
+              </dd>
+            </div>
+            <div>
+              <dt>Einzahlungen</dt>
+              <dd>
+                <Betrag wert={kapital.einzahlungen_im_zeitraum} />
+              </dd>
+            </div>
+            <div>
+              <dt>Ergebnis</dt>
+              <dd>
+                <Betrag wert={kapital.ergebnis_im_zeitraum} />
+              </dd>
+            </div>
+            <div>
+              <dt>Cash</dt>
+              <dd>
+                <Betrag wert={kapital.cash_im_zeitraum} />
+              </dd>
+            </div>
+          </dl>
+          <p className="sicht fussnote">
+            realisiert — Einzahlungen, abgeschlossene Geschäfte und Cash-Posten;
+            unrealisierte Ergebnisse offener Positionen sind nicht enthalten.
+          </p>
         </>
       )}
 

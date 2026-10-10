@@ -6,6 +6,7 @@ import Zeitraumwahl from './Zeitraumwahl'
 import { useZeitraum, zeitraumSuche } from './zeitraum'
 import Kalender from './Kalender'
 import Kampagnen from './Kampagnen'
+import KostenErtraege from './KostenErtraege'
 import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
 import Tag from './Tag'
@@ -22,8 +23,8 @@ function heuteDatum(): string {
 
 // AP-08f2: Seiten, auf die der Zeitraum schon wirkt. Die übrigen zeigen den
 // Wähler trotzdem (Z1: ein Zeitraum für alles) und sagen ehrlich, dass er
-// dort noch nichts filtert.
-const ZEITRAUM_SEITEN = ['/dashboard']
+// dort noch nichts filtert. AP-08g2: /kosten wirkt ebenfalls.
+const ZEITRAUM_SEITEN = ['/dashboard', '/kosten']
 
 function Kopf(): JSX.Element {
   const ort = useLocation()
@@ -41,6 +42,7 @@ function Kopf(): JSX.Element {
         <Link to={`/dashboard${mit}`}>Dashboard</Link>
         <Link to={`/${mit}`}>Positionen</Link>
         <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
+        <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
         <Link to={`/monat${mit}`}>Kalender</Link>
         <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
       </nav>
@@ -78,6 +80,9 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             {/* AP-08-kampagnen: ebenso heißt die Seite /kampagnenliste —
                 /kampagnen und /kampagnen/{id} sind API-Endpunkte. */}
             <Route path="/kampagnenliste" element={<Kampagnen />} />
+            {/* AP-08g2: Kosten & Erträge; /kosten ist kein API-Pfad —
+                /cashflows bleibt der Endpunkt. */}
+            <Route path="/kosten" element={<KostenErtraege />} />
             <Route path="/positionen/:chainId" element={<PositionDetail />} />
             <Route path="/tag/:datum" element={<Tag />} />
             <Route path="*" element={<Unbekannt />} />
