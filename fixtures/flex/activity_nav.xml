@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AP-02n: frei erfundene Werte. Kontowert je Tag, Change in NAV, Cash Report.
+     Der Vortag 20251231 kommt mit (Option "Exclude prior report date" aus). -->
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260102" toDate="20260105"
+                   period="CustomDateRange" whenGenerated="20260106;060000">
+      <EquitySummaryInBase>
+        <EquitySummaryByReportDateInBase accountId="U7777777" acctAlias="" model="" currency="EUR"
+            reportDate="20251231" cash="-1000.50" stock="5000.00" options="-200.25" commodities=""
+            funds="0" bonds="0" dividendAccruals="1.10" interestAccruals="-2.20" total="3798.15"
+            totalLong="5001.10" totalShort="-1202.95" />
+        <EquitySummaryByReportDateInBase accountId="U7777777" acctAlias="" model="" currency="EUR"
+            reportDate="20260102" cash="-900.00" stock="5100.00" options="-150.00" commodities="12.50"
+            funds="0" bonds="0" dividendAccruals="0" interestAccruals="-2.50" total="4060.00"
+            totalLong="5112.50" totalShort="-1052.50" />
+        <EquitySummaryByReportDateInBase accountId="U7777777" acctAlias="" model="" currency="EUR"
+            reportDate="20260105" cash="-850.00" stock="5050.00" options="-120.00" commodities="0"
+            funds="0" bonds="0" dividendAccruals="0" interestAccruals="-3.00" total="4077.00"
+            totalLong="5050.00" totalShort="-973.00" />
+      </EquitySummaryInBase>
+      <ChangeInNAV accountId="U7777777" acctAlias="" model="" currency="EUR"
+          fromDate="20260102" toDate="20260105" startingValue="3798.15" mtm=""
+          realized="150.00" changeInUnrealized="80.85" depositsWithdrawals="0" dividends="5.00"
+          interest="-2.00" commissions="-4.00" fxTranslation="49.00" other="0" twr="7.34"
+          endingValue="4077.00" />
+      <CashReport>
+        <CashReportCurrency accountId="U7777777" acctAlias="" model="" currency="EUR"
+            levelOfDetail="Currency" fromDate="20260102" toDate="20260105" startingCash="500.00"
+            endingCash="520.00" depositWithdrawals="0" commissions="-1.00" dividends="0"
+            brokerInterest="-0.50" fxTranslationGainLoss="" />
+        <CashReportCurrency accountId="U7777777" acctAlias="" model="" currency="USD"
+            levelOfDetail="Currency" fromDate="20260102" toDate="20260105" startingCash="-1600.00"
+            endingCash="-1500.00" depositWithdrawals="0" commissions="-3.00" dividends="5.50"
+            brokerInterest="-1.75" fxTranslationGainLoss="12.30" />
+      </CashReport>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

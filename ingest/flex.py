@@ -3,7 +3,9 @@
 Liest einen Activity-Flex-Export (§6.2) vollständig ein: die Trades-Sektion
 nach ``executions`` (Primärschlüssel ``tradeID``, der quellenübergreifende
 Schlüssel aus §5) und die Sektionen OpenPositions, CashTransactions,
-CorporateActions, Transfers und SecuritiesInfo je in ihre eigene Tabelle.
+CorporateActions, Transfers und SecuritiesInfo je in ihre eigene Tabelle —
+seit AP-02n auch den Kontowert je Tag (NAV in Base), Change in NAV und den
+Cash Report (``flex_nav_tage``, ``flex_change_in_nav``, ``flex_cash_report``).
 Dazu die Instrument-Normalisierung: ``instruments`` wird aus Trades und
 SecuritiesInfo gefüllt, ``asset_class`` aus der ``assetCategory``, die
 Abwicklungsart aus ``settlementPolicyMethod`` (OF-25).
@@ -53,8 +55,11 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from journal.db import create_db_engine
 from journal.schema import (
     executions,
+    flex_cash_report,
     flex_cash_transactions,
+    flex_change_in_nav,
     flex_corporate_actions,
+    flex_nav_tage,
     flex_open_positions,
     flex_securities_info,
     flex_transfers,
@@ -133,6 +138,10 @@ class _DateiInhalt:
     corporate_actions: list[dict] = field(default_factory=list)
     transfers: list[dict] = field(default_factory=list)
     securities_info: list[dict] = field(default_factory=list)
+    # AP-02n: Kontowert je Tag, Change in NAV, Cash Report.
+    nav_tage: list[dict] = field(default_factory=list)
+    change_in_nav: list[dict] = field(default_factory=list)
+    cash_report: list[dict] = field(default_factory=list)
     # conid → zusammengeführte Instrumentendaten; Trades zuerst, dann
     # SecuritiesInfo (liefert den Multiplikator).
     instruments: dict[int, dict] = field(default_factory=dict)
@@ -499,6 +508,85 @@ def _ereignis_zeile(konto: str, ereignis: ET.Element, sektion: str) -> dict:
     }
 
 
+def _nav_zeile(konto: str, element: ET.Element) -> dict:
+    """Ein Kontowert je Tag (``EquitySummaryByReportDateInBase``, AP-02n).
+    Pflicht sind ``reportDate``, ``currency`` und ``total``; leere
+    Teilwerte bleiben leer (keine stille 0)."""
+    attribute = dict(element.attrib)
+    kontext = f"EquitySummaryByReportDateInBase {attribute.get('reportDate', '?')}"
+    datum = _datumwert(_pflichtwert(attribute, "reportDate", kontext), kontext)
+    return dict(
+        konto=konto,
+        quell_schluessel=f"nav:{datum.isoformat()}",
+        datum=datum,
+        waehrung=_pflichtwert(attribute, "currency", kontext),
+        cash=_dezimalwert(attribute, "cash", kontext),
+        aktien=_dezimalwert(attribute, "stock", kontext),
+        optionen=_dezimalwert(attribute, "options", kontext),
+        rohstoffe=_dezimalwert(attribute, "commodities", kontext),
+        fonds=_dezimalwert(attribute, "funds", kontext),
+        anleihen=_dezimalwert(attribute, "bonds", kontext),
+        dividenden_abgrenzung=_dezimalwert(attribute, "dividendAccruals", kontext),
+        zins_abgrenzung=_dezimalwert(attribute, "interestAccruals", kontext),
+        gesamt=_pflichtdezimal(attribute, "total", kontext),
+        roh_json=_roh_json(attribute),
+    )
+
+
+def _change_in_nav_zeile(konto: str, element: ET.Element) -> dict:
+    """Überleitung des Kontowerts über den Statementzeitraum (AP-02n)."""
+    attribute = dict(element.attrib)
+    kontext = "ChangeInNAV"
+    von = _datumwert(_pflichtwert(attribute, "fromDate", kontext), kontext)
+    bis = _datumwert(_pflichtwert(attribute, "toDate", kontext), kontext)
+    return dict(
+        konto=konto,
+        quell_schluessel=f"cinav:{von.isoformat()}|{bis.isoformat()}",
+        von=von,
+        bis=bis,
+        waehrung=_pflichtwert(attribute, "currency", kontext),
+        anfangswert=_pflichtdezimal(attribute, "startingValue", kontext),
+        endwert=_pflichtdezimal(attribute, "endingValue", kontext),
+        realisiert=_dezimalwert(attribute, "realized", kontext),
+        veraenderung_unrealisiert=_dezimalwert(attribute, "changeInUnrealized", kontext),
+        marktbewertung=_dezimalwert(attribute, "mtm", kontext),
+        ein_auszahlungen=_dezimalwert(attribute, "depositsWithdrawals", kontext),
+        dividenden=_dezimalwert(attribute, "dividends", kontext),
+        zinsen=_dezimalwert(attribute, "interest", kontext),
+        kommissionen=_dezimalwert(attribute, "commissions", kontext),
+        waehrungseffekt=_dezimalwert(attribute, "fxTranslation", kontext),
+        twr=_dezimalwert(attribute, "twr", kontext),
+        roh_json=_roh_json(attribute),
+    )
+
+
+def _cash_report_zeile(konto: str, element: ET.Element) -> dict:
+    """Cash je Währung über den Statementzeitraum (AP-02n). Jede Ebene wird
+    gespeichert — die Ebene steht im Schlüssel, nichts wird verworfen."""
+    attribute = dict(element.attrib)
+    kontext = f"CashReportCurrency {attribute.get('currency', '?')}"
+    von = _datumwert(_pflichtwert(attribute, "fromDate", kontext), kontext)
+    bis = _datumwert(_pflichtwert(attribute, "toDate", kontext), kontext)
+    waehrung = _pflichtwert(attribute, "currency", kontext)
+    ebene = attribute.get("levelOfDetail", "").strip() or None
+    return dict(
+        konto=konto,
+        quell_schluessel=f"cash:{von.isoformat()}|{bis.isoformat()}|{waehrung}|{ebene or ''}",
+        von=von,
+        bis=bis,
+        waehrung=waehrung,
+        ebene=ebene,
+        anfangsbestand=_dezimalwert(attribute, "startingCash", kontext),
+        endbestand=_dezimalwert(attribute, "endingCash", kontext),
+        ein_auszahlungen=_dezimalwert(attribute, "depositWithdrawals", kontext),
+        kommissionen=_dezimalwert(attribute, "commissions", kontext),
+        dividenden=_dezimalwert(attribute, "dividends", kontext),
+        zinsen=_dezimalwert(attribute, "brokerInterest", kontext),
+        waehrungseffekt=_dezimalwert(attribute, "fxTranslationGainLoss", kontext),
+        roh_json=_roh_json(attribute),
+    )
+
+
 def _securities_info_zeile(info: ET.Element, periodenende: date | None) -> dict:
     attribute = dict(info.attrib)
     kontext = f"SecurityInfo conid {attribute.get('conid', '?')}"
@@ -681,6 +769,12 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
             _instrument_uebernehmen(
                 inhalt, dict(info.attrib), f"SecurityInfo conid {zeile['conid']}", bis
             )
+        for element in statement.findall("./EquitySummaryInBase/EquitySummaryByReportDateInBase"):
+            inhalt.nav_tage.append(_nav_zeile(konto, element))
+        for element in statement.findall("./ChangeInNAV"):
+            inhalt.change_in_nav.append(_change_in_nav_zeile(konto, element))
+        for element in statement.findall("./CashReport/CashReportCurrency"):
+            inhalt.cash_report.append(_cash_report_zeile(konto, element))
 
     _quell_schluessel_vergeben(inhalt.open_positions, "OpenPositions", datei)
     _quell_schluessel_vergeben(inhalt.cash_transactions, "CashTransactions", datei)
@@ -873,6 +967,9 @@ def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
             verbindung, flex_corporate_actions, inhalt.corporate_actions, lauf_id
         )
         _sektionszeilen_schreiben(verbindung, flex_transfers, inhalt.transfers, lauf_id)
+        _sektionszeilen_schreiben(verbindung, flex_nav_tage, inhalt.nav_tage, lauf_id)
+        _sektionszeilen_schreiben(verbindung, flex_change_in_nav, inhalt.change_in_nav, lauf_id)
+        _sektionszeilen_schreiben(verbindung, flex_cash_report, inhalt.cash_report, lauf_id)
         _securities_info_schreiben(verbindung, inhalt.securities_info)
         _instrumente_schreiben(verbindung, inhalt.instruments)
 

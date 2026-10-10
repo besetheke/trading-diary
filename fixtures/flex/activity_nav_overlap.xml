@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AP-02n: frei erfundene Werte. Überlappt activity_nav.xml am 20260105 mit
+     ABWEICHENDEM total (9999.99): Die erste Quelle gewinnt, nichts wird
+     überschrieben. Neu sind 20260106 und 20260107. -->
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260106" toDate="20260107"
+                   period="CustomDateRange" whenGenerated="20260108;060000">
+      <EquitySummaryInBase>
+        <EquitySummaryByReportDateInBase accountId="U7777777" currency="EUR" reportDate="20260105"
+            cash="-850.00" stock="5050.00" options="-120.00" total="9999.99" />
+        <EquitySummaryByReportDateInBase accountId="U7777777" currency="EUR" reportDate="20260106"
+            cash="-800.00" stock="5000.00" options="-100.00" total="4100.00" />
+        <EquitySummaryByReportDateInBase accountId="U7777777" currency="EUR" reportDate="20260107"
+            cash="-780.00" stock="4990.00" options="-90.00" total="4120.00" />
+      </EquitySummaryInBase>
+      <ChangeInNAV accountId="U7777777" currency="EUR" fromDate="20260106" toDate="20260107"
+          startingValue="4077.00" endingValue="4120.00" twr="1.05" />
+      <CashReport>
+        <CashReportCurrency accountId="U7777777" currency="EUR" levelOfDetail="Currency"
+            fromDate="20260106" toDate="20260107" startingCash="520.00" endingCash="530.00" />
+      </CashReport>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

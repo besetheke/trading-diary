@@ -336,6 +336,83 @@ flex_cash_transactions = Table(
     ),
 )
 
+# AP-02n: Kontowert und Überleitung (OF-77). Je Abschnitt einige Kernspalten,
+# der vollständige Rohsatz in roh_json. Schlüssel wie bei den übrigen
+# Flex-Sektionen (konto, quell_schluessel): Bewegungsdaten, die erste Quelle
+# gewinnt, nichts wird überschrieben.
+
+flex_nav_tage = Table(
+    "flex_nav_tage",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    # nav:<reportDate> — ein Kontowert je Konto und Tag.
+    Column("quell_schluessel", Text, nullable=False),
+    Column("datum", Date, nullable=False, index=True),
+    Column("waehrung", Text, nullable=False),   # Basiswährung (EUR)
+    Column("cash", ExactDecimal, nullable=True),
+    Column("aktien", ExactDecimal, nullable=True),
+    Column("optionen", ExactDecimal, nullable=True),
+    Column("rohstoffe", ExactDecimal, nullable=True),  # IB: commodities (Futures)
+    Column("fonds", ExactDecimal, nullable=True),
+    Column("anleihen", ExactDecimal, nullable=True),
+    Column("dividenden_abgrenzung", ExactDecimal, nullable=True),
+    Column("zins_abgrenzung", ExactDecimal, nullable=True),
+    Column("gesamt", ExactDecimal, nullable=False),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_nav_tage_quell_schluessel"),
+)
+
+flex_change_in_nav = Table(
+    "flex_change_in_nav",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    # cinav:<fromDate>|<toDate> — eine Überleitung je Statementzeitraum.
+    Column("quell_schluessel", Text, nullable=False),
+    Column("von", Date, nullable=False),
+    Column("bis", Date, nullable=False),
+    Column("waehrung", Text, nullable=False),
+    Column("anfangswert", ExactDecimal, nullable=False),
+    Column("endwert", ExactDecimal, nullable=False),
+    Column("realisiert", ExactDecimal, nullable=True),
+    Column("veraenderung_unrealisiert", ExactDecimal, nullable=True),
+    Column("marktbewertung", ExactDecimal, nullable=True),     # IB: mtm
+    Column("ein_auszahlungen", ExactDecimal, nullable=True),
+    Column("dividenden", ExactDecimal, nullable=True),
+    Column("zinsen", ExactDecimal, nullable=True),
+    Column("kommissionen", ExactDecimal, nullable=True),
+    Column("waehrungseffekt", ExactDecimal, nullable=True),    # IB: fxTranslation
+    Column("twr", ExactDecimal, nullable=True),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_change_in_nav_quell_schluessel"),
+)
+
+flex_cash_report = Table(
+    "flex_cash_report",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    # cash:<fromDate>|<toDate>|<currency>|<levelOfDetail>
+    Column("quell_schluessel", Text, nullable=False),
+    Column("von", Date, nullable=False),
+    Column("bis", Date, nullable=False),
+    Column("waehrung", Text, nullable=False),
+    Column("ebene", Text, nullable=True),                       # IB: levelOfDetail
+    Column("anfangsbestand", ExactDecimal, nullable=True),
+    Column("endbestand", ExactDecimal, nullable=True),
+    Column("ein_auszahlungen", ExactDecimal, nullable=True),
+    Column("kommissionen", ExactDecimal, nullable=True),
+    Column("dividenden", ExactDecimal, nullable=True),
+    Column("zinsen", ExactDecimal, nullable=True),              # IB: brokerInterest
+    Column("waehrungseffekt", ExactDecimal, nullable=True),     # IB: fxTranslationGainLoss
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_cash_report_quell_schluessel"),
+)
+
 flex_corporate_actions = Table(
     "flex_corporate_actions",
     metadata,
