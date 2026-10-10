@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fehlerText, holeKalender } from './api'
 import type { Monatskalender } from './api'
+import Betrag from './Betrag'
+import { datumDe } from './format'
 
 // AP-08j, Punkt 5: Der Monatskalender. Die Tage und Werte kommen fertig aus
 // der API (AP-07t) — nur Tage mit Ereignissen, aufsteigend; hier wird nichts
@@ -92,7 +94,7 @@ export default function Kalender(): JSX.Element {
               {kalender.tage.map((tag) => (
                 <tr key={tag.datum}>
                   <td>
-                    <Link to={`/tag/${tag.datum}`}>{tag.datum}</Link>
+                    <Link to={`/tag/${tag.datum}`}>{datumDe(tag.datum)}</Link>
                   </td>
                   <td className="zahl">{tag.eroeffnet}</td>
                   <td className="zahl">{tag.beendet}</td>
@@ -101,11 +103,8 @@ export default function Kalender(): JSX.Element {
                     {tag.realisiert.length === 0
                       ? '—'
                       : tag.realisiert.map((posten) => (
-                          <span
-                            key={posten.waehrung}
-                            title={`Kontosicht — ${posten.sicht}`}
-                          >
-                            {posten.netto} {posten.waehrung}
+                          <span key={posten.waehrung} title={`Kontosicht — ${posten.sicht}`}>
+                            <Betrag wert={posten.netto} waehrung={posten.waehrung} />
                           </span>
                         ))}
                   </td>

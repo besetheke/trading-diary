@@ -106,3 +106,12 @@ export function prozent(wert: string | null): string {
   return `${betrag((negativ ? '-' : '') + ohneNullen)} %`
 }
 
+// AP-08f1: Datum mit Uhrzeit in deutscher Schreibweise (TT.MM.JJJJ HH:MM) —
+// datumDe für den Tag, dahinter die Stunde aus dem ISO-Text geschnitten. Die
+// volle Zeit (mit Sekunden) bleibt im title des Elements. Ohne Uhrzeit
+// (reines Datum) bleibt es beim Datum.
+export function zeitDe(iso: string | null): string {
+  if (!iso) return '—'
+  return iso.includes('T') ? `${datumDe(iso)} ${iso.slice(11, 16)}` : datumDe(iso)
+}
+

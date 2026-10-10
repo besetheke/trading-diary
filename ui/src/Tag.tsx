@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fehlerText, holeTag } from './api'
 import type { TagesKette, Tagesuebersicht } from './api'
-import { geld, zeit } from './format'
+import { zeitDe } from './format'
+import Betrag from './Betrag'
 import Journal from './Journal'
 
 // AP-08j, Punkt 4: Die Tagesansicht. Alles Fachliche kommt fertig aus der
@@ -56,7 +57,9 @@ function KettenTabelle({
       <tbody>
         {zeilen.map((kette) => (
           <tr key={kette.chain_id}>
-            <td>{zeit(kette[spalte])}</td>
+            <td className="zeit" title={kette[spalte] ?? undefined}>
+              {zeitDe(kette[spalte])}
+            </td>
             <td>
               <Link to={`/positionen/${kette.chain_id}`} title={kette.natur_schluessel}>
                 {kette.underlying} · Kette {kette.chain_id}
@@ -164,7 +167,9 @@ export default function Tag(): JSX.Element {
               <tbody>
                 {uebersicht.rolls.map((roll) => (
                   <tr key={`${roll.chain_id}-${roll.structure_id}`}>
-                    <td>{zeit(roll.eroeffnet_am)}</td>
+                    <td className="zeit" title={roll.eroeffnet_am ?? undefined}>
+                      {zeitDe(roll.eroeffnet_am)}
+                    </td>
                     <td>
                       <Link to={`/positionen/${roll.chain_id}`}>Kette {roll.chain_id}</Link>
                     </td>
@@ -195,9 +200,15 @@ export default function Tag(): JSX.Element {
                   <tr key={posten.waehrung}>
                     <td>{posten.waehrung}</td>
                     <td className="zahl">{posten.anzahl_strukturen}</td>
-                    <td className="zahl">{geld(posten.brutto, posten.waehrung)}</td>
-                    <td className="zahl">{geld(posten.kommission, posten.waehrung)}</td>
-                    <td className="zahl">{geld(posten.netto, posten.waehrung)}</td>
+                    <td className="zahl">
+                      <Betrag wert={posten.brutto} waehrung={posten.waehrung} />
+                    </td>
+                    <td className="zahl">
+                      <Betrag wert={posten.kommission} waehrung={posten.waehrung} />
+                    </td>
+                    <td className="zahl">
+                      <Betrag wert={posten.netto} waehrung={posten.waehrung} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

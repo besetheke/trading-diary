@@ -10,7 +10,7 @@ import {
   loescheNotiz,
 } from './api'
 import type { JournalInhalt, Notiz, Schlagwort } from './api'
-import { zeit } from './format'
+import { zeit, zeitDe } from './format'
 
 // AP-08j, Punkt 2: Der Journal-Baustein — Notizen und Tags zu einem Bereich
 // (chain, structure, campaign, tag). Die Oberfläche bleibt dünn: Reihenfolge
@@ -118,7 +118,7 @@ export default function Journal({
   }
 
   function notizLoeschen(notiz: Notiz): void {
-    if (!window.confirm(`Diese Notiz vom ${zeit(notiz.erstellt_am)} löschen?`)) return
+    if (!window.confirm(`Diese Notiz vom ${zeitDe(notiz.erstellt_am)} löschen?`)) return
     setzeBeschaeftigt(true)
     setzeFehler(null)
     loescheNotiz(notiz.id)
@@ -224,9 +224,14 @@ export default function Journal({
                   </form>
                 ) : (
                   <>
-                    <p className="zeitstempel">
-                      {zeit(notiz.erstellt_am)}
-                      {notiz.geaendert_am ? ` · geändert ${zeit(notiz.geaendert_am)}` : ''}
+                    <p
+                      className="zeitstempel"
+                      title={`${zeit(notiz.erstellt_am)}${
+                        notiz.geaendert_am ? ` · geändert ${zeit(notiz.geaendert_am)}` : ''
+                      }`}
+                    >
+                      {zeitDe(notiz.erstellt_am)}
+                      {notiz.geaendert_am ? ` · geändert ${zeitDe(notiz.geaendert_am)}` : ''}
                     </p>
                     <p className="notiztext">{notiz.text}</p>
                     <div className="zeile">

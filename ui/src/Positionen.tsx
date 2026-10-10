@@ -3,7 +3,8 @@ import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fehlerText, holeKetten } from './api'
 import type { Kette, KettenListe, Richtung, Sortierspalte } from './api'
-import { zeit, zeitKurz, aufZweiNachkommastellen } from './format'
+import { betrag, zeit, zeitDe } from './format'
+import Betrag from './Betrag'
 
 const LIMITS = [10, 25, 50, 100]
 
@@ -116,9 +117,9 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
       return (
         <td className="zeit" title={zeit(kette.eroeffnet_am)}>
           {istVerweis ? (
-            <Link to={`/positionen/${kette.chain_id}`}>{zeitKurz(kette.eroeffnet_am)}</Link>
+            <Link to={`/positionen/${kette.chain_id}`}>{zeitDe(kette.eroeffnet_am)}</Link>
           ) : (
-            zeitKurz(kette.eroeffnet_am)
+            zeitDe(kette.eroeffnet_am)
           )}
         </td>
       )
@@ -137,7 +138,7 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
     case 'beendet_am':
       return (
         <td className="zeit" title={kette.beendet_am ? zeit(kette.beendet_am) : undefined}>
-          {kette.beendet_am ? zeitKurz(kette.beendet_am) : '—'}
+          {kette.beendet_am ? zeitDe(kette.beendet_am) : '—'}
         </td>
       )
     case 'anzahl_rolls':
@@ -148,37 +149,25 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
     // bleibt —. Status und Erkennung bleiben der Detailansicht vorbehalten.
     case 'oa_strategie':
       return <td>{kette.oa_strategie ?? '—'}</td>
-    // AP-08lk, Punkt 2 (vom Nutzer freigegeben) und AP-08fp, Vertrag 4: Die
-    // Liste zeigt zwei Nachkommastellen — reine Zeichenarbeit (Vertrag 8),
-    // der vollständige Wert steht im title der Zelle. Die Detailansicht
-    // bleibt unverändert genau.
-    case 'eroeffnungspreis': {
-      const voll = kette.eroeffnungspreis
-      const kurz = voll === null ? null : aufZweiNachkommastellen(voll)
-      return (
-        <td className="zahl" title={voll !== null && kurz !== voll ? voll : undefined}>
-          {kurz ?? '—'}
-        </td>
-      )
-    }
+    // AP-08f1: Preise ohne Farbe, deutsch über betrag() (zwei
+    // Nachkommastellen, Komma, Tausenderpunkte) — der Rohwert bleibt im
+    // title der Zelle. Das Ergebnis ist ein Geldbetrag und bekommt <Betrag>
+    // mit Farbe und Tooltip.
+    case 'eroeffnungspreis':
     case 'schlusspreis': {
-      const voll = kette.schlusspreis
-      const kurz = voll === null ? null : aufZweiNachkommastellen(voll)
+      const voll = id === 'eroeffnungspreis' ? kette.eroeffnungspreis : kette.schlusspreis
       return (
-        <td className="zahl" title={voll !== null && kurz !== voll ? voll : undefined}>
-          {kurz ?? '—'}
+        <td className="zahl" title={voll ?? undefined}>
+          {voll === null ? '—' : betrag(voll)}
         </td>
       )
     }
-    case 'struktur_summe_netto': {
-      const voll = kette.struktur_summe_netto
-      const kurz = voll === null ? null : aufZweiNachkommastellen(voll)
+    case 'struktur_summe_netto':
       return (
-        <td className="zahl" title={voll !== null && kurz !== voll ? voll : undefined}>
-          {kurz ?? '—'}
+        <td className="zahl">
+          <Betrag wert={kette.struktur_summe_netto} waehrung={kette.waehrung ?? undefined} />
         </td>
       )
-    }
     case 'waehrung':
       return (
         <td>
@@ -553,9 +542,8 @@ export default function Positionen(): JSX.Element {
             </label>
           </footer>
           <p className="sicht fussnote">
-            ¹ Kontosicht, Summe der Strukturergebnisse — in der Liste auf zwei
-            Nachkommastellen gekürzt; die Zellenüberschrift zeigt den vollen
-            Wert. Keine Umrechnung, nichts gerechnet.
+            ¹ Kontosicht, Summe der Strukturergebnisse — der genaue Wert steht
+            im Tooltip der Zelle. Keine Umrechnung, nichts gerechnet.
           </p>
         </>
       )}

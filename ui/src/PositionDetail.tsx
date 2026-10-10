@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { ApiFehler, fehlerText, holeAusfuehrungen, holeKette, holeStruktur } from './api'
 import type { Ausfuehrung, KetteDetail, Kettenglied, StrukturDetail } from './api'
 import Journal from './Journal'
-import { datum, geld, zeit } from './format'
+import { betrag, datumDe, zeitDe } from './format'
+import Betrag from './Betrag'
 
 // Bezeichner aus der Datenbank, deutsch gelesen — ein unbekannter Schlüssel
 // wird unverändert gezeigt statt verschwiegen.
@@ -121,11 +122,13 @@ export default function PositionDetail(): JSX.Element {
         </div>
         <div>
           <dt>Eröffnet</dt>
-          <dd>{zeit(kette.eroeffnet_am)}</dd>
+          <dd title={kette.eroeffnet_am}>{zeitDe(kette.eroeffnet_am)}</dd>
         </div>
         <div>
           <dt>Beendet</dt>
-          <dd>{kette.beendet_am ? zeit(kette.beendet_am) : '—'}</dd>
+          <dd title={kette.beendet_am ?? undefined}>
+            {kette.beendet_am ? zeitDe(kette.beendet_am) : '—'}
+          </dd>
         </div>
         <div>
           <dt>Rolls</dt>
@@ -142,11 +145,10 @@ export default function PositionDetail(): JSX.Element {
         <div>
           <dt>Ergebnis netto (Kontosicht)</dt>
           <dd className="zahl">
-            {kette.struktur_summe_netto ?? '—'}{' '}
-            {kette.waehrung ??
-              (kette.waehrungen.length > 1
-                ? `(${kette.waehrungen.join(' / ')} — keine Summe)`
-                : '')}
+            <Betrag wert={kette.struktur_summe_netto} waehrung={kette.waehrung ?? undefined} />
+            {kette.struktur_summe_netto === null && kette.waehrungen.length > 1
+              ? ` (${kette.waehrungen.join(' / ')} — keine Summe)`
+              : ''}
           </dd>
         </div>
       </dl>
@@ -241,7 +243,7 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
         </div>
         <div>
           <dt>Verfall</dt>
-          <dd>{datum(struktur.expiry)}</dd>
+          <dd>{datumDe(struktur.expiry)}</dd>
         </div>
         <div>
           <dt>Short-Strike</dt>
@@ -269,35 +271,51 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
         </div>
         <div>
           <dt>Eröffnet</dt>
-          <dd>{zeit(struktur.eroeffnet_am)}</dd>
+          <dd title={struktur.eroeffnet_am}>{zeitDe(struktur.eroeffnet_am)}</dd>
         </div>
         <div>
           <dt>Geschlossen</dt>
-          <dd>{zeit(struktur.geschlossen_am)}</dd>
+          <dd title={struktur.geschlossen_am ?? undefined}>
+            {zeitDe(struktur.geschlossen_am)}
+          </dd>
         </div>
-        {/* AP-08fp, Vertrag 3 und 4: Der Eröffnungs- und Schlusspreis gehören
-            fachlich neben das Ergebnis — hier in der Detailansicht unverändert
-            genau, ohne Kürzung (die gilt nur in der Liste). Leer bleibt leer:
-            eine offene Struktur hat keinen Schlusspreis und zeigt —. */}
+        {/* AP-08fp, Vertrag 3 und 4, AP-08f1: Der Eröffnungs- und Schlusspreis
+            gehören fachlich neben das Ergebnis — deutsch über betrag(), ohne
+            Farbe, der Rohwert im title. Leer bleibt leer: eine offene
+            Struktur hat keinen Schlusspreis und zeigt —. */}
         <div>
           <dt>Preis auf</dt>
-          <dd className="zahl">{geld(struktur.eroeffnungspreis, struktur.waehrung)}</dd>
+          <dd className="zahl" title={struktur.eroeffnungspreis ?? undefined}>
+            {struktur.eroeffnungspreis === null
+              ? '—'
+              : `${betrag(struktur.eroeffnungspreis)} ${struktur.waehrung}`}
+          </dd>
         </div>
         <div>
           <dt>Preis zu</dt>
-          <dd className="zahl">{geld(struktur.schlusspreis, struktur.waehrung)}</dd>
+          <dd className="zahl" title={struktur.schlusspreis ?? undefined}>
+            {struktur.schlusspreis === null
+              ? '—'
+              : `${betrag(struktur.schlusspreis)} ${struktur.waehrung}`}
+          </dd>
         </div>
         <div>
           <dt>Brutto</dt>
-          <dd className="zahl">{geld(struktur.brutto_pnl, struktur.waehrung)}</dd>
+          <dd className="zahl">
+            <Betrag wert={struktur.brutto_pnl} waehrung={struktur.waehrung} />
+          </dd>
         </div>
         <div>
           <dt>Kommission</dt>
-          <dd className="zahl">{geld(struktur.kommission, struktur.waehrung)}</dd>
+          <dd className="zahl">
+            <Betrag wert={struktur.kommission} waehrung={struktur.waehrung} />
+          </dd>
         </div>
         <div>
           <dt>Netto (Kontosicht)</dt>
-          <dd className="zahl">{geld(struktur.netto_pnl, struktur.waehrung)}</dd>
+          <dd className="zahl">
+            <Betrag wert={struktur.netto_pnl} waehrung={struktur.waehrung} />
+          </dd>
         </div>
       </dl>
 
@@ -339,8 +357,12 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
                     <td>{leg.close_exec_id ?? '—'}</td>
                     <td>{leg.matching_methode}</td>
                     <td>{leg.offen_ja_nein ? 'ja' : 'nein'}</td>
-                    <td className="zahl">{geld(leg.brutto_pnl, struktur.waehrung)}</td>
-                    <td className="zahl">{geld(leg.kommission_gesamt, struktur.waehrung)}</td>
+                    <td className="zahl">
+                      <Betrag wert={leg.brutto_pnl} waehrung={struktur.waehrung} />
+                    </td>
+                    <td className="zahl">
+                      <Betrag wert={leg.kommission_gesamt} waehrung={struktur.waehrung} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -372,15 +394,19 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
               <tbody>
                 {ausfuehrungen.map((ausfuehrung) => (
                   <tr key={ausfuehrung.exec_id}>
-                    <td>{zeit(ausfuehrung.handelszeit)}</td>
+                    <td className="zeit" title={ausfuehrung.handelszeit}>
+                      {zeitDe(ausfuehrung.handelszeit)}
+                    </td>
                     <td>{ausfuehrung.rolle}</td>
                     <td title={`Conid ${ausfuehrung.conid}`}>{ausfuehrung.symbol}</td>
                     <td>{ausfuehrung.side}</td>
                     <td className="zahl">{ausfuehrung.menge}</td>
-                    <td className="zahl">
-                      {ausfuehrung.preis} {ausfuehrung.waehrung}
+                    <td className="zahl" title={ausfuehrung.preis}>
+                      {betrag(ausfuehrung.preis)} {ausfuehrung.waehrung}
                     </td>
-                    <td className="zahl">{geld(ausfuehrung.kommission, ausfuehrung.waehrung)}</td>
+                    <td className="zahl">
+                      <Betrag wert={ausfuehrung.kommission} waehrung={ausfuehrung.waehrung} />
+                    </td>
                     <td>{ausfuehrung.ereignistyp}</td>
                     <td title={ausfuehrung.oa_trade ?? undefined}>
                       {ausfuehrung.exec_batch ?? '—'}

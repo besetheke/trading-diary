@@ -7,7 +7,8 @@ import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fehlerText, holeKampagne, holeKampagnen } from './api'
 import type { Kampagne, KampagnenDetail, KampagnenListe } from './api'
-import { aufZweiNachkommastellen, zeitKurz } from './format'
+import Betrag from './Betrag'
+import { zeitDe } from './format'
 
 interface Entwurf {
   basiswert: string
@@ -41,19 +42,20 @@ function KampagnenZeile(props: {
     }
   }, [offen, detail, kampagne.campaign_id])
 
-  // Ergebnis wie in der Positionsliste: auf zwei Nachkommastellen gekürzt,
-  // nur Zeichenarbeit — der volle Wert steht im title der Zelle.
-  const voll = kampagne.netto_pnl_eur
-  const kurz = voll === null ? null : aufZweiNachkommastellen(voll)
-
+  // Ergebnis wie in der Positionsliste: deutsche Schreibweise über <Betrag>,
+  // rot/grün, der volle Wert steht im title (Tooltip) der Zelle.
   return (
     <>
       <tr onClick={umschalten}>
-        <td className="zeit">{zeitKurz(kampagne.eroeffnet_am)}</td>
+        <td className="zeit" title={kampagne.eroeffnet_am}>
+          {zeitDe(kampagne.eroeffnet_am)}
+        </td>
         <td>{kampagne.underlying}</td>
-        <td className="zeit">{zeitKurz(kampagne.beendet_am)}</td>
-        <td className="zahl" title={voll !== null && kurz !== voll ? `${voll} EUR` : undefined}>
-          {kurz === null ? '—' : `${kurz} EUR`}
+        <td className="zeit" title={kampagne.beendet_am ?? undefined}>
+          {zeitDe(kampagne.beendet_am)}
+        </td>
+        <td className="zahl">
+          <Betrag wert={kampagne.netto_pnl_eur} />
         </td>
         <td className="zahl">{kampagne.anzahl_ketten}</td>
         <td>
@@ -93,7 +95,9 @@ function KampagnenZeile(props: {
                       <td>{kette.natur_schluessel}</td>
                       <td>{kette.beziehungstyp}</td>
                       <td>{kette.erkennung}</td>
-                      <td className="zeit">{zeitKurz(kette.bestaetigt_am)}</td>
+                      <td className="zeit" title={kette.bestaetigt_am ?? undefined}>
+                        {zeitDe(kette.bestaetigt_am)}
+                      </td>
                       <td>
                         <Link to={`/positionen/${kette.chain_id}`}>öffnen</Link>
                       </td>
