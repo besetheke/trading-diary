@@ -2974,3 +2974,36 @@ nur Struktur/Grammatik). **Offen, vor einer Abnahmebasis zu klären:**
    AP-12) ist auf Nutzerwunsch vorläufig zurückgestellt — ohne diese
    Festlegung kann keine Abnahmebasis mit von Hand gerechnetem Erwartungswert
    (Regel 8) geschrieben werden.
+
+## OF-77 · Realisiertes Kapital ≠ Depotwert — NAV fehlt in der Flex-Query
+
+Befund 10.10.2026: Die realisierte Kapitalentwicklung (AP-06g) ergibt
+384.748,98 €; der Nutzer sieht diesen Wert nicht im Depot. Ursachen, soweit
+aus den Daten belegbar:
+
+1. **Unrealisierte Ergebnisse offener Positionen** — laut IB
+   (`fifoPnlUnrealized`, Stichtag 2026-10-08) −15.234 EUR und −44.333 USD,
+   grob −53.000 € zusammen. Fehlt in der realisierten Kurve per Konstruktion.
+2. **Währungsumrechnung des Fremdwährungs-Cash** — realisierte Ergebnisse
+   stehen zum historischen Buchungskurs, das Depot bewertet USD-Bestände zum
+   aktuellen Kurs. Größe ohne Cash-Report/Change-in-NAV nicht bestimmbar.
+3. **Auffällig:** Die Jahresend-Stichtage (2022-12-30, 2023-12-29,
+   2024-12-31, 2025-12-31) zeigen unrealisiert überall 0 — vermutlich liefern
+   diese Statements das Feld nicht; nicht als „kein offenes Risiko" lesen.
+
+Die Flex-Query liefert heute: Trades, CashTransactions, OpenPositions,
+CorporateActions, Transfers, SecuritiesInfo, FIFOPerformanceSummary — **kein
+NAV, kein Change in NAV, kein Cash Report**.
+
+**Entscheidung des Nutzers (10.10.2026): beides zeigen — realisiert und
+unrealisiert.** Vorgehen:
+
+- **Beim Nutzer (Portal):** Flex-Query um „Net Asset Value (NAV) in Base"
+  (mit Tagesaufteilung), „Change in NAV" und „Cash Report" erweitern. Für die
+  Historie vor dem laufenden 365-Tage-Fenster einmalig je Jahr (2022–2025)
+  ein Statement mit eigenem Zeitraum exportieren und nach `C:\Trading\flex`
+  legen.
+- **Danach (starkes Modell):** Import der drei Abschnitte (Migration, neue
+  Tabellen), NAV-Kurve neben der realisierten Kurve, und eine Überleitung
+  „realisiert → NAV" aus Change in NAV (Marktbewertung, Währungseffekt,
+  Sonstiges) — die Antwort auf „warum sehe ich den Wert nicht im Depot".
