@@ -1,7 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import Dashboard from './Dashboard'
+import Zeitraumwahl from './Zeitraumwahl'
+import { useZeitraum, zeitraumSuche } from './zeitraum'
 import Kalender from './Kalender'
 import Kampagnen from './Kampagnen'
 import PositionDetail from './PositionDetail'
@@ -16,6 +18,35 @@ function heuteDatum(): string {
   const monat = String(jetzt.getMonth() + 1).padStart(2, '0')
   const tag = String(jetzt.getDate()).padStart(2, '0')
   return `${jetzt.getFullYear()}-${monat}-${tag}`
+}
+
+// AP-08f2: Seiten, auf die der Zeitraum schon wirkt. Die übrigen zeigen den
+// Wähler trotzdem (Z1: ein Zeitraum für alles) und sagen ehrlich, dass er
+// dort noch nichts filtert.
+const ZEITRAUM_SEITEN = ['/dashboard']
+
+function Kopf(): JSX.Element {
+  const ort = useLocation()
+  const [zeitraum] = useZeitraum()
+  const mit = zeitraumSuche(zeitraum)
+  return (
+    <header>
+      <h1>
+        <Link to={`/${mit}`}>Trading Journal</Link>
+      </h1>
+      <p className="sicht">
+        Alle Geldbeträge in Kontosicht. Der genaue Wert steht jeweils im Tooltip.
+      </p>
+      <nav className="hauptnav">
+        <Link to={`/dashboard${mit}`}>Dashboard</Link>
+        <Link to={`/${mit}`}>Positionen</Link>
+        <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
+        <Link to={`/monat${mit}`}>Kalender</Link>
+        <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
+      </nav>
+      <Zeitraumwahl wirkt={ZEITRAUM_SEITEN.includes(ort.pathname)} />
+    </header>
+  )
 }
 
 function Unbekannt(): JSX.Element {
@@ -33,22 +64,7 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
       <div className="geruest">
-        <header>
-          <h1>
-            <Link to="/">Trading Journal</Link>
-          </h1>
-          <p className="sicht">
-            Alle Geldbeträge in Kontosicht — die Kettensicht ist noch nicht gebaut.
-            Beträge bleiben unverändert, wie die API sie liefert.
-          </p>
-          <nav className="hauptnav">
-            <Link to="/">Positionen</Link>
-            <Link to="/dashboard">Dashboard</Link>
-            <Link to="/kampagnenliste">Kampagnen</Link>
-            <Link to="/monat">Kalender</Link>
-            <Link to={`/tag/${heuteDatum()}`}>Heute</Link>
-          </nav>
-        </header>
+        <Kopf />
         <main>
           <Routes>
             <Route path="/" element={<Positionen />} />

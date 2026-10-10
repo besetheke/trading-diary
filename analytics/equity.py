@@ -117,18 +117,29 @@ def equity_auswertung(
     *,
     sicht: str = "konto",
     nur_qualitaetsstufe_a: bool = False,
+    von: date | None = None,
+    bis: date | None = None,
 ) -> EquityErgebnis:
     """Equity-Kurve und Drawdown nach AP-06e, E1-E6 (rein, P2).
 
     Eingangszeilen sind plain dicts mit den Spaltennamen der Tabellen, wie
     bei ``degradations_auswertung`` — ``struktur_zeilen`` tragen zusätzlich
     ``geschlossen_am`` (E2).
+
+    ``von``/``bis`` (AP-08f2, Z2/Z4): nur Strukturen, deren Schließungsdatum
+    im Zeitraum liegt (beide Enden einschließlich); die Kurve beginnt am
+    Zeitraumanfang bei 0, der Drawdown zählt nur innerhalb des Zeitraums.
     """
     if sicht != "konto":
         raise ValueError(
             f"Die Equity-Kurve läuft nur auf der Kontosicht — sicht "
             f"{sicht!r} ist nicht erlaubt (AP-06e, E1)"
         )
+    if von is not None and bis is not None and von > bis:
+        raise ValueError(f"Zeitraum ungültig: von {von} liegt nach bis {bis}")
+
+    def im_zeitraum(tag: date) -> bool:
+        return (von is None or tag >= von) and (bis is None or tag <= bis)
     grundlage = kennzahlen_auswertung(
         ketten_zeilen,
         struktur_zeilen,
@@ -153,6 +164,8 @@ def equity_auswertung(
         if zeitpunkt is None:
             continue
         tag = zeitpunkt.date()
+        if not im_zeitraum(tag):
+            continue
         if struktur.netto_eur_wirtschaftlich is None:
             mangel_je_tag[tag] = mangel_je_tag.get(tag, 0) + 1
             continue
@@ -193,6 +206,8 @@ def equity_auswertung(
     for struktur in grundlage.strukturen:
         zeitpunkt = geschlossen_am_je_struktur.get(struktur.structure_id)
         if zeitpunkt is None:
+            continue
+        if not im_zeitraum(zeitpunkt.date()):
             continue
         monat = f"{zeitpunkt.year:04d}-{zeitpunkt.month:02d}"
         if struktur.netto_eur_wirtschaftlich is None:
@@ -284,6 +299,8 @@ def equity_bericht(
     db_pfad: str | pathlib.Path,
     *,
     nur_qualitaetsstufe_a: bool = False,
+    von: date | None = None,
+    bis: date | None = None,
 ) -> EquityErgebnis:
     """Liest die Zeilen der Kontosicht und wertet aus (P3, Hülle).
 
@@ -380,4 +397,6 @@ def equity_bericht(
         instrumenten_zeilen,
         sicht="konto",
         nur_qualitaetsstufe_a=nur_qualitaetsstufe_a,
+        von=von,
+        bis=bis,
     )

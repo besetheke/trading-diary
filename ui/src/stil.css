@@ -353,6 +353,50 @@ p.sicht {
   margin: 0.2rem 0 0;
 }
 
+/* AP-08f2: Zeitraum-Wähler im Kopf — eine Zeile, Auswahl plus optional
+   freier Zeitraum, dahinter der gewählte Zeitraum in Worten. */
+.zeitraumwahl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.9rem;
+  background: #fff;
+  border: 1px solid var(--rand);
+  font-size: 0.9rem;
+}
+
+.zeitraumwahl label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--grau);
+}
+
+.zeitraumwahl select,
+.zeitraumwahl input {
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--rand);
+  background: #fff;
+  color: var(--tinte);
+}
+
+.zeitraumwahl form.eigen {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zeitraumwahl form.eigen button {
+  padding: 0.2rem 0.7rem;
+}
+
+.zeitraumwahl .beschreibung {
+  font-weight: 600;
+}
+
 nav.tageswahl,
 nav.monatswahl {
   display: flex;

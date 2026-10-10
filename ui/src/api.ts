@@ -412,6 +412,11 @@ export interface Equity {
   max_drawdown_datum: string | null
 }
 
-export function holeEquity(): Promise<Equity> {
-  return hole('/equity') as Promise<Equity>
+// AP-08f2: von/bis im ISO-Format, beide einschließlich; ohne Angabe alles.
+export function holeEquity(von?: string | null, bis?: string | null): Promise<Equity> {
+  const zusaetze = new URLSearchParams()
+  if (von) zusaetze.set('von', von)
+  if (bis) zusaetze.set('bis', bis)
+  const query = zusaetze.toString()
+  return hole(`/equity${query === '' ? '' : `?${query}`}`) as Promise<Equity>
 }

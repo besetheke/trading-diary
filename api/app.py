@@ -1253,11 +1253,14 @@ def erzeuge_app(
     # -----------------------------------------------------------------------
 
     @applikation.get("/equity", response_model=EquityAntwort)
-    def equity() -> EquityAntwort:
-        """Equity-Kurve, Monatsübersicht und maximaler Drawdown über die
-        gesamte Historie (AP-06e). Rechnet nichts Neues — reicht nur durch,
-        was ``analytics.equity.equity_bericht`` liefert."""
-        ergebnis = equity_bericht(db_pfad)
+    def equity(von: date | None = None, bis: date | None = None) -> EquityAntwort:
+        """Equity-Kurve, Monatsübersicht und maximaler Drawdown (AP-06e),
+        wahlweise für einen Zeitraum (AP-08f2: beide Enden einschließlich,
+        Kurve beginnt bei 0). Rechnet nichts Neues — reicht nur durch, was
+        ``analytics.equity.equity_bericht`` liefert."""
+        if von is not None and bis is not None and von > bis:
+            raise HTTPException(status_code=422, detail="von liegt nach bis")
+        ergebnis = equity_bericht(db_pfad, von=von, bis=bis)
         return EquityAntwort(
             tage=[
                 EquityTagAntwort(

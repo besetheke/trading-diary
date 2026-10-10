@@ -3,6 +3,7 @@ import { fehlerText, holeEquity } from './api'
 import type { Equity } from './api'
 import Betrag from './Betrag'
 import { datumDe, prozent } from './format'
+import { useZeitraum } from './zeitraum'
 
 // AP-06e/Dashboard: Equity-Kurve und Drawdown als Tabellen, kein Diagramm —
 // stil.css nennt das ausdrücklich als Gestaltungsprinzip der Oberfläche
@@ -11,12 +12,15 @@ import { datumDe, prozent } from './format'
 // Schreibweise, Rohwert im title.
 
 export default function Dashboard(): JSX.Element {
+  const [zeitraum] = useZeitraum()
   const [equity, setzeEquity] = useState<Equity | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
 
   useEffect(() => {
     let abgebrochen = false
-    holeEquity()
+    setzeEquity(null)
+    setzeFehler(null)
+    holeEquity(zeitraum.von, zeitraum.bis)
       .then((ergebnis) => {
         if (!abgebrochen) setzeEquity(ergebnis)
       })
@@ -26,7 +30,9 @@ export default function Dashboard(): JSX.Element {
     return () => {
       abgebrochen = true
     }
-  }, [])
+  }, [zeitraum.von, zeitraum.bis])
+
+  const imZeitraum = zeitraum.von !== null || zeitraum.bis !== null
 
   if (fehler) {
     return (
@@ -48,18 +54,28 @@ export default function Dashboard(): JSX.Element {
       <h2>Dashboard</h2>
       <p className="sicht fussnote">
         Equity-Kurve und Monatsübersicht, Kontosicht, in EUR — Ergebnis am Tag der
-        Schließung. Der genaue Wert steht im Tooltip.
+        Schließung.
+        {imZeitraum
+          ? ' Im gewählten Zeitraum beginnt die Kurve bei 0; der Drawdown zählt nur darin.'
+          : ''}
       </p>
 
       {equity.tage.length === 0 ? (
         <section className="hinweis">
-          <p>Noch keine abgeschlossene Struktur mit Kurs — die Equity-Kurve ist leer.</p>
+          <p>
+            {imZeitraum
+              ? 'Im gewählten Zeitraum wurde keine Struktur mit Kurs geschlossen.'
+              : 'Noch keine abgeschlossene Struktur mit Kurs — die Equity-Kurve ist leer.'}
+          </p>
         </section>
       ) : (
         <>
           <dl className="kopf">
             <div>
-              <dt>Stand {letzterTag ? `(${datumDe(letzterTag.datum)})` : ''}</dt>
+              <dt>
+                {imZeitraum ? 'Ergebnis im Zeitraum' : 'Stand'}{' '}
+                {letzterTag ? `(bis ${datumDe(letzterTag.datum)})` : ''}
+              </dt>
               <dd>
                 <Betrag wert={letzterTag ? letzterTag.kumuliert_eur : null} />
               </dd>
