@@ -243,6 +243,8 @@ class KampagnenListeAntwort(BaseModel):
 
 
 # AP-06e: Equity-Kurve und Drawdown, immer Kontosicht (analytics.equity, E1).
+# AP-06i (I7): lose Legs — ihre Beträge laufen in netto_eur/summe_netto_eur
+# mit, die Anzahlen stehen getrennt dahinter.
 class EquityTagAntwort(BaseModel):
     datum: date
     netto_eur: str
@@ -250,6 +252,8 @@ class EquityTagAntwort(BaseModel):
     drawdown_eur: str
     anzahl_strukturen: int
     anzahl_strukturen_kurs_fehlt: int
+    anzahl_lose_legs: int
+    anzahl_lose_legs_kurs_fehlt: int
 
 
 class EquityMonatAntwort(BaseModel):
@@ -259,6 +263,9 @@ class EquityMonatAntwort(BaseModel):
     durchschnitt_netto_eur: str | None
     trefferquote: str | None
     anzahl_strukturen_kurs_fehlt: int
+    lose_legs_eur: str
+    anzahl_lose_legs: int
+    anzahl_lose_legs_kurs_fehlt: int
 
 
 class EquityAntwort(BaseModel):
@@ -1333,6 +1340,8 @@ def erzeuge_app(
                     drawdown_eur=_als_text(t.drawdown_eur),
                     anzahl_strukturen=t.anzahl_strukturen,
                     anzahl_strukturen_kurs_fehlt=t.anzahl_strukturen_kurs_fehlt,
+                    anzahl_lose_legs=t.anzahl_lose_legs,
+                    anzahl_lose_legs_kurs_fehlt=t.anzahl_lose_legs_kurs_fehlt,
                 )
                 for t in ergebnis.tage
             ],
@@ -1344,6 +1353,9 @@ def erzeuge_app(
                     durchschnitt_netto_eur=_als_text(m.durchschnitt_netto_eur),
                     trefferquote=_als_text(m.trefferquote),
                     anzahl_strukturen_kurs_fehlt=m.anzahl_strukturen_kurs_fehlt,
+                    lose_legs_eur=_als_text(m.lose_legs_eur),
+                    anzahl_lose_legs=m.anzahl_lose_legs,
+                    anzahl_lose_legs_kurs_fehlt=m.anzahl_lose_legs_kurs_fehlt,
                 )
                 for m in ergebnis.monate
             ],

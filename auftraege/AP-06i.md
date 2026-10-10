@@ -1,7 +1,7 @@
 ---
 titel: Ergebnis loser Legs in Equity und Kapital (OF-78, Teil 1)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-06e, AP-06g, AP-08f2
 aendert_tests: nein
 ---

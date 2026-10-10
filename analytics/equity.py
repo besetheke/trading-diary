@@ -49,6 +49,20 @@ Qualitätsstufe fehlen ganz, auch in der Tagesreihe.
 E7 — Die CSV (wie Degradation/Kommission: Semicolon, UTF-8 mit BOM,
 Zeilenende ``\\n``, von der CLI gesetzt) hat einen Abschnitt ``tag`` und
 einen Abschnitt ``monat``, erkennbar am ersten Feld.
+
+AP-06i (OF-78, Teil 1) — **lose Legs zählen mit Geld.** Abgeschlossene Legs
+der Kontosicht ohne Struktur (``structure_id`` None, ``close_exec_id``
+gesetzt; OF-78: 185 im Echtbestand) laufen über dasselbe EUR-Fundament in
+die Kurve wie Strukturen: ``bewerte_barausgleich`` vorher, dann
+``_wirtschaftlich([leg], ...)`` — keine zweite EUR-Rechnung (I2). Tag ist
+das ``handelszeit``-Datum der schließenden Ausführung; fehlt ein Kurs, zählt
+der Mangel des Tages (``anzahl_lose_legs_kurs_fehlt``), nie still 0 (I3).
+``netto_eur``/``summe_netto_eur`` enthalten Strukturen **und** lose Legs,
+während Durchschnitt und Trefferquote Kennzahlen über Strukturen bleiben
+(I3); ein Tag/Monat entsteht auch aus losen Legs allein. Mit
+``nur_qualitaetsstufe_a`` fällt ein loses Leg weg, wenn eine seiner
+Ausführungen schlechter als A ist (I4); der Zeitraum gilt wie bei
+Strukturen (I5); die CSV bekommt keine neue Spalte (I6).
 """
 
 import pathlib
@@ -58,7 +72,13 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 
-from analytics.kennzahlen import _quote, kennzahlen_auswertung
+from analytics.kennzahlen import (
+    _qualitaetsstufe,
+    _quote,
+    _wirtschaftlich,
+    bewerte_barausgleich,
+    kennzahlen_auswertung,
+)
 from journal.db import create_db_engine
 from journal.schema import chain_links, chains, executions, instruments, legs, structures
 
@@ -82,20 +102,31 @@ _KOPF = (
 class EquityTag:
     datum: date
     netto_eur: Decimal              # Summe der an diesem Tag geschlossenen Strukturen
+                                    # und losen Legs (AP-06i, I3)
     kumuliert_eur: Decimal          # laufende Summe bis einschließlich diesem Tag
     drawdown_eur: Decimal           # kumuliert - laufendes Hoch, immer <= 0
-    anzahl_strukturen: int          # mit Kurs, genau die in netto_eur
+    anzahl_strukturen: int          # mit Kurs, genau die Strukturen in netto_eur
     anzahl_strukturen_kurs_fehlt: int
+    # AP-06i (I3): lose Legs — Beträge laufen in netto_eur mit, die Anzahlen
+    # stehen getrennt dahinter (mit Vorgabe: bestehende Tests bauen EquityTag
+    # ohne sie).
+    anzahl_lose_legs: int = 0
+    anzahl_lose_legs_kurs_fehlt: int = 0
 
 
 @dataclass(frozen=True)
 class EquityMonat:
     monat: str                      # 'JJJJ-MM'
     anzahl_strukturen: int
-    summe_netto_eur: Decimal
-    durchschnitt_netto_eur: Decimal | None
-    trefferquote: Decimal | None
+    summe_netto_eur: Decimal        # Strukturen und lose Legs (AP-06i, I3)
+    durchschnitt_netto_eur: Decimal | None   # nur über Strukturen (I3)
+    trefferquote: Decimal | None             # nur über Strukturen (I3)
     anzahl_strukturen_kurs_fehlt: int
+    # AP-06i (I3): Betrag und Anzahlen der losen Legs (mit Vorgabe: die
+    # bestehenden Tests bauen EquityMonat ohne sie).
+    lose_legs_eur: Decimal = Decimal("0.00")
+    anzahl_lose_legs: int = 0
+    anzahl_lose_legs_kurs_fehlt: int = 0
 
 
 @dataclass(frozen=True)
@@ -154,6 +185,56 @@ def equity_auswertung(
         s["structure_id"]: s["geschlossen_am"] for s in struktur_zeilen
     }
 
+    # AP-06i (I1/I2): abgeschlossene lose Legs — ohne Struktur, aber mit Geld.
+    # Dasselbe Fundament wie für Strukturen, keine zweite EUR-Rechnung: erst
+    # die Barausgleich-Bewertung wie in ``kennzahlen_auswertung``, dann
+    # ``_wirtschaftlich`` je Leg. Tag ist das handelszeit-Datum der
+    # schließenden Ausführung (I2); ein fehlender Kurs zählt als Mangel des
+    # Tages, nie als still 0. Offene lose Legs gehen nirgends ein (I1), mit
+    # ``nur_qualitaetsstufe_a`` auch solche mit einer Ausführung schlechter
+    # als A (I4, Minimum über die beteiligten Ausführungen).
+    bewertete_ausfuehrungen = bewerte_barausgleich(ausfuehrungs_zeilen, instrumenten_zeilen)
+    exec_je_id = {z["exec_id"]: z for z in bewertete_ausfuehrungen}
+    mult_je_conid = {z["conid"]: z["multiplikator"] for z in instrumenten_zeilen}
+    lose_je_tag: dict[date, Decimal] = {}
+    lose_anzahl_je_tag: dict[date, int] = {}
+    lose_mangel_je_tag: dict[date, int] = {}
+    lose_je_monat: dict[str, Decimal] = {}
+    lose_anzahl_je_monat: dict[str, int] = {}
+    lose_mangel_je_monat: dict[str, int] = {}
+    for leg in leg_zeilen:
+        if leg["structure_id"] is not None or leg["close_exec_id"] is None:
+            continue
+        # _wirtschaftlich zuerst: es prüft die referenzierten Ausführungen
+        # (benannter Fehler, kein Raten), bevor hier direkt indexiert wird.
+        betrag = _wirtschaftlich([leg], exec_je_id, mult_je_conid)
+        if betrag is not None:
+            # EUR-Betrag mit zwei Stellen wie überall in der Equity (E5/E7;
+            # die Kursrechnung selbst bleibt allein in _wirtschaftlich —
+            # keine zweite EUR-Rechnung).
+            betrag = betrag.quantize(_ZWEI_STELLEN, rounding=ROUND_HALF_UP)
+        schliessend = exec_je_id[leg["close_exec_id"]]
+        if nur_qualitaetsstufe_a:
+            beteiligte = [
+                exec_je_id[exec_id]
+                for exec_id in (leg["open_exec_id"], leg["close_exec_id"])
+                if exec_id is not None
+            ]
+            if _qualitaetsstufe(beteiligte) != "A":
+                continue
+        tag = schliessend["handelszeit"].date()
+        if not im_zeitraum(tag):
+            continue  # I5: Schließungstag im Zeitraum, wie bei Strukturen
+        monat = f"{tag.year:04d}-{tag.month:02d}"
+        if betrag is None:
+            lose_mangel_je_tag[tag] = lose_mangel_je_tag.get(tag, 0) + 1
+            lose_mangel_je_monat[monat] = lose_mangel_je_monat.get(monat, 0) + 1
+            continue
+        lose_je_tag[tag] = lose_je_tag.get(tag, _NULL) + betrag
+        lose_anzahl_je_tag[tag] = lose_anzahl_je_tag.get(tag, 0) + 1
+        lose_je_monat[monat] = lose_je_monat.get(monat, _NULL) + betrag
+        lose_anzahl_je_monat[monat] = lose_anzahl_je_monat.get(monat, 0) + 1
+
     # E2/E3: je Tag Summe mit Kurs und Anzahl ohne Kurs, nur abgeschlossene
     # Strukturen (geschlossen_am gesetzt) der zugelassenen Qualitätsstufe.
     netto_je_tag: dict[date, Decimal] = {}
@@ -172,7 +253,11 @@ def equity_auswertung(
         netto_je_tag[tag] = netto_je_tag.get(tag, _NULL) + struktur.netto_eur_wirtschaftlich
         anzahl_je_tag[tag] = anzahl_je_tag.get(tag, 0) + 1
 
-    alle_tage = sorted(set(netto_je_tag) | set(mangel_je_tag))
+    # I3: ein Tag entsteht auch, wenn nur lose Legs (oder nur ihr Mangel)
+    # beitragen.
+    alle_tage = sorted(
+        set(netto_je_tag) | set(mangel_je_tag) | set(lose_je_tag) | set(lose_mangel_je_tag)
+    )
 
     tage: list[EquityTag] = []
     kumuliert = _NULL
@@ -180,7 +265,7 @@ def equity_auswertung(
     max_drawdown = _NULL
     max_drawdown_datum: date | None = None
     for tag in alle_tage:
-        netto = netto_je_tag.get(tag, _NULL)
+        netto = netto_je_tag.get(tag, _NULL) + lose_je_tag.get(tag, _NULL)
         kumuliert += netto
         hoch = max(hoch, kumuliert)
         drawdown = kumuliert - hoch
@@ -195,6 +280,8 @@ def equity_auswertung(
                 drawdown_eur=drawdown,
                 anzahl_strukturen=anzahl_je_tag.get(tag, 0),
                 anzahl_strukturen_kurs_fehlt=mangel_je_tag.get(tag, 0),
+                anzahl_lose_legs=lose_anzahl_je_tag.get(tag, 0),
+                anzahl_lose_legs_kurs_fehlt=lose_mangel_je_tag.get(tag, 0),
             )
         )
 
@@ -219,21 +306,31 @@ def equity_auswertung(
             treffer_je_monat[monat] = treffer_je_monat.get(monat, 0) + 1
 
     monate: list[EquityMonat] = []
-    for monat in sorted(set(netto_je_monat) | set(mangel_je_monat)):
+    # I3: ein Monat entsteht auch aus losen Legs allein (oder ihrem Mangel).
+    alle_monate = sorted(
+        set(netto_je_monat) | set(mangel_je_monat)
+        | set(lose_je_monat) | set(lose_mangel_je_monat)
+    )
+    for monat in alle_monate:
         anzahl = anzahl_je_monat.get(monat, 0)
-        summe = netto_je_monat.get(monat, _NULL)
+        strukturen_summe = netto_je_monat.get(monat, _NULL)
         monate.append(
             EquityMonat(
                 monat=monat,
                 anzahl_strukturen=anzahl,
-                summe_netto_eur=summe,
+                # I3: die Summe enthält Strukturen und lose Legs; Durchschnitt
+                # und Trefferquote bleiben Kennzahlen über Strukturen.
+                summe_netto_eur=strukturen_summe + lose_je_monat.get(monat, _NULL),
                 durchschnitt_netto_eur=(
-                    (summe / anzahl).quantize(_ZWEI_STELLEN, rounding=ROUND_HALF_UP)
+                    (strukturen_summe / anzahl).quantize(_ZWEI_STELLEN, rounding=ROUND_HALF_UP)
                     if anzahl
                     else None
                 ),
                 trefferquote=_quote(treffer_je_monat.get(monat, 0), anzahl),
                 anzahl_strukturen_kurs_fehlt=mangel_je_monat.get(monat, 0),
+                lose_legs_eur=lose_je_monat.get(monat, _NULL),
+                anzahl_lose_legs=lose_anzahl_je_monat.get(monat, 0),
+                anzahl_lose_legs_kurs_fehlt=lose_mangel_je_monat.get(monat, 0),
             )
         )
 
