@@ -3150,7 +3150,7 @@ und sind überholt:**
   Import gewinnt die erste Quelle (`on_conflict_do_nothing`) — die späteren
   Jahresdateien mit den Werten ergänzen die Zeilen nicht. Alle früheren
   „IB realisiert"-Summen aus der Datenbank (10.614 €) waren daher zu klein.
-- **Echte IB-Werte aus den Jahresdateien** (`C:\Tradinglex\Flex_20*.xml`,
+- **Echte IB-Werte aus den Jahresdateien** (`C:\Trading\flex\Flex_20*.xml`,
   34.510 Ausführungen, deckungsgleich mit der DB): IB `fifoPnlRealized`
   je Handelsjahr in EUR: 2022 30.954 | 2023 29.758 | 2024 −725 | 2025 37.882 |
   2026 −20.015 | **Summe 77.854**. (`fifoPnlRealized` ist bei IB schon **netto
