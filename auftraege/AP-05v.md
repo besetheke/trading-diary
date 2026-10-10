@@ -1,7 +1,7 @@
 ---
 titel: Abnahmebasis fuer Campaign-Kandidaten (engine/campaigns.py)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-04
 aendert_tests: ja
 ---

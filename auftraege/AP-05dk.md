@@ -1,7 +1,7 @@
 ---
 titel: Klassifikation der Campaign-Kandidaten — Umsetzung (AP-05, Teil 2)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-05d
 aendert_tests: nein
 ---

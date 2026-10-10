@@ -1,7 +1,7 @@
 ---
 titel: Kettensicht ohne Doppelzählung — Umsetzung (OF-68, Option A)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-04sx
 aendert_tests: nein
 ---

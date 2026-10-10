@@ -1,7 +1,7 @@
 # AP-10v — Abnahmebasis: Steuerliche Auswertung (Töpfe, Jahresabgrenzung, CSV)
 
 modell: stark
-status: offen
+status: fertig
 aendert: tests/test_steuer.py (neu), auftraege/AP-10k.md (neu), OFFENE_FRAGEN.md (OF-58, OF-59)
 aendert_tests: ja
 abhaengig_von: AP-04sw (legs trägt beide Sichten; rebuild liest Kapitalmaßnahmen)

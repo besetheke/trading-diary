@@ -1,7 +1,7 @@
 ---
 titel: Overrides auch in der Kettensicht — Umsetzung (OF-61)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-04sz
 aendert_tests: nein
 ---

@@ -1,7 +1,7 @@
 ---
 titel: OA-Strategie auch in der Kettensicht — Umsetzung
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13z
 aendert_tests: nein
 ---

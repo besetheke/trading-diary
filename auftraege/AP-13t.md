@@ -1,7 +1,7 @@
 ---
 titel: Parsernachbesserung - Trade mit einem Leg (OF-67)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13pp
 ---
 

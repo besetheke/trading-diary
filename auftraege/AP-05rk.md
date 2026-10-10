@@ -1,7 +1,7 @@
 ---
 titel: Kandidatenregeln nach der Praxis des Nutzers — Umsetzung (AP-05, Teil 1)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-05r
 aendert_tests: nein
 ---

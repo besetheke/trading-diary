@@ -1,7 +1,7 @@
 ---
 titel: Befehl journal import-optionapp
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13
 ---
 

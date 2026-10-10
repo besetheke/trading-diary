@@ -1,7 +1,7 @@
 ---
 titel: Parsernachbesserung - Produktcode in der Leg-Grammatik (OF-66)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-13pn
 ---
 

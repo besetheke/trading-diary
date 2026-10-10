@@ -1,7 +1,7 @@
 ---
 titel: Automatischer Abruf der Flex-Query — Umsetzung und Nachtlauf
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-02a2
 aendert_tests: nein
 ---
