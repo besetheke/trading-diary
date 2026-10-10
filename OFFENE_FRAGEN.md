@@ -3105,6 +3105,40 @@ Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
   die Einzelgeschäfte der größten Abweichungen gegenüberstellen
   (starkes Modell, nur Summen je Ereignistyp).
 
+**Nachtrag 10.10.2026, zweite Runde (nur Summen, EUR; Korrektur des Vortrags):**
+
+- **Korrektur:** Die Aussage „Hypothese gehaltene Aktien widerlegt" beruhte auf
+  einem Fehler im Abgleichsskript: 53 Aktien-Instrumente tragen kein
+  `underlying`; ihre Ausführungen (199 Zuteilungen) fielen aus der Gruppierung
+  je Basiswert. Mit `coalesce(underlying, symbol)` gilt:
+- Lücke Journal − IB (geschlossene Legs): **+96.183 €** (Journal 106.796, IB 10.614).
+- **Nach Abwicklungsart:** Indexoptionen mit Barausgleich (8 Basiswerte) stimmen
+  überein (Diff −845 bei −47.450). Physisch gelieferte Optionen: +111.510;
+  gemischte/sonstige: −14.482. → Die Berechnung selbst ist richtig; die Lücke
+  entsteht ausschließlich bei **Lieferung (Aktien)**.
+- **Nach Zuteilung/Ausübung:** ohne Zuteilung/Ausübung +1.600 (150 Basiswerte,
+  praktisch gleich); mit Zuteilung/Ausübung +94.590, davon 55.525 bei
+  Basiswerten mit noch gehaltenen Aktien, 39.065 ohne Bestand. Gleich in USD
+  gerechnet (Währung ausgeschlossen): +53.837 bzw. +62.257 → **kein
+  Währungseffekt**.
+- **Erklärt (Methode, kein Fehler):** IB bucht bei Zuteilung die Prämie in den
+  Einstand der Aktie (Optionszeile 0); das Journal weist sie bei der Option als
+  Ertrag aus. Solange die Aktie noch gehalten wird, steckt die Prämie bei IB im
+  Unrealisierten (Gruppe „Bestand", rund +45.000 bis +55.000).
+- **Ungeklärt, rund +40.000 bis +52.000:** Basiswerte mit Zuteilung, deren Aktien
+  vollständig verkauft sind. Dort müssten sich Prämienverschiebung (Option)
+  und Aktie ausgleichen (Journal und IB ergeben je Zyklus dieselbe Summe).
+  Geprüft und ausgeschlossen: Währung; fehlende Aktienzeilen (Stückzahl
+  Zuteilungen vs. gelieferte Aktien stimmt bei 138 von 160 Basiswerten, der
+  Rest sind Barausgleich und Namensabweichungen Option/Aktie bei 6 Werten);
+  `basis_ungeklaert` (kein einziges Leg); Barausgleich-Bewertung.
+  Nächster Schritt: wenige kleine Einzelfälle Zeile für Zeile gegenüberstellen
+  (das gibt Einzelbeträge aus — Freigabe durch den Nutzer nötig, Regel 2).
+- **Nebenbefund (Daten):** 53 Aktien-Instrumente ohne `underlying` (Import
+  Flex, AP-02?). Folgen: Filter „Basiswert" und Auswahllisten brauchen den
+  Ersatz durch `symbol` (in AP-07f/AP-07fw so vorgesehen); der Import sollte
+  `underlying` für Aktien aus dem Symbol setzen — eigenes Paket.
+
 **Folge:** Bis zur Korrektur sind alle realisierten Geldsummen des Journals
 zu hoch. Teil 1 der Korrektur: AP-06i (lose Legs ins Geld; Abnahmebasis
 liegt, Umsetzung Cline). Danach Echtabgleich je Jahr durch das starke
