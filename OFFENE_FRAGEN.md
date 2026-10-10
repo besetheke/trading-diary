@@ -3007,3 +3007,46 @@ unrealisiert.** Vorgehen:
   Tabellen), NAV-Kurve neben der realisierten Kurve, und eine Überleitung
   „realisiert → NAV" aus Change in NAV (Marktbewertung, Währungseffekt,
   Sonstiges) — die Antwort auf „warum sehe ich den Wert nicht im Depot".
+
+## OF-78 · Realisiertes Ergebnis des Journals weicht von IBs realisiertem Ergebnis ab
+
+Befund 10.10.2026 aus den Jahresexporten 2022–2025 (Nutzer, `C:\Trading\flex`,
+mit NAV, Change in NAV, Cash Report). Nur Summen:
+
+| Jahr | IB realisiert (EUR, FIFOPerformanceSummary) | Journal (Equity, Kontosicht) | Differenz |
+|---|---|---|---|
+| 2022 | 33.595 | 61.032 | +27.437 |
+| 2023 | 34.781 | 23.483 | −11.298 |
+| 2024 | −193 | 15.021 | +15.214 |
+| 2025 | 39.864 | 61.987 | +22.123 |
+
+Gegenprobe Depotwert (NAV, IB) zum Jahresende 2025: 254.228 € gegen
+realisiertes Kapital 359.294 €. **Einzahlungen stimmen je Jahr exakt** mit
+dem Cash Report überein (keine fehlenden Zu-/Abflüsse). IBs unrealisiertes
+Ergebnis zum 31.12.2025: −25.891 € (Aktien −20.981, Optionen −6.649,
+Futures +1.739).
+
+**Mögliche Ursachen (ungeprüft, nicht raten):**
+1. **Methode bei Andienung** (Plan §5): Das Journal realisiert die Prämie an
+   der Option; IB verrechnet sie in die Aktienbasis und realisiert erst beim
+   Verkauf der Aktie. Verschiebt Ergebnis zwischen Jahren und zwischen
+   realisiert/unrealisiert; für noch gehaltene angediente Aktien bleibt eine
+   Dauerdifferenz. Achtung: Journal-realisiert + IB-unrealisiert zählt diese
+   Prämien doppelt.
+2. **EUR-Methode:** Journal bewertet jeden Zahlungsstrom zum eigenen
+   Buchungskurs (`netto_eur_wirtschaftlich`); IB bucht realisierte
+   Währungsgewinne getrennt (Klasse CASH: 2022 3.046, 2023 4.650, 2025 2.456)
+   und bewertet Fremdwährungs-Cash zum Stichtagskurs.
+3. Ein echter Fehler in der EUR-Rechnung oder der Kontosicht ist **nicht
+   ausgeschlossen** — die Abnahme AP-03 prüfte gegen IB in
+   Instrumentenwährung, nicht in EUR.
+
+**Nächster Schritt:** eigenes Untersuchungspaket (starkes Modell):
+Überleitung je Jahr und Anlageklasse Journal ↔ IB, getrennt nach den drei
+Ursachen; erst danach ist das realisierte Ergebnis im Journal wieder
+belastbar. Bis dahin: der NAV (IB) ist die maßgebliche Kapitalgröße.
+
+**Daneben:** Change in NAV liefert in den Exporten nur Start-/Endwert und
+`twr`, alle Einzelposten leer (Option „Realized & Unrealized"). Der
+Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
+10 Minuten nicht erzeugt — der Nachtlauf (12 × 10 s) scheitert damit.
