@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.engine import Connection
 
+from analytics.cashflows import cashflow_bericht
 from analytics.equity import equity_bericht
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
@@ -263,6 +264,28 @@ class EquityAntwort(BaseModel):
     monate: list[EquityMonatAntwort]
     max_drawdown_eur: str
     max_drawdown_datum: date | None
+
+
+# AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
+class CashflowKategorieAntwort(BaseModel):
+    kategorie: str
+    anzahl: int
+    summe_eur: str
+    anzahl_kurs_fehlt: int
+    im_ergebnis_enthalten: bool
+
+
+class CashflowMonatAntwort(BaseModel):
+    monat: str
+    kategorie: str
+    anzahl: int
+    summe_eur: str
+    anzahl_kurs_fehlt: int
+
+
+class CashflowAntwort(BaseModel):
+    kategorien: list[CashflowKategorieAntwort]
+    monate: list[CashflowMonatAntwort]
 
 
 # ---------------------------------------------------------------------------
@@ -1286,6 +1309,36 @@ def erzeuge_app(
             ],
             max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
             max_drawdown_datum=ergebnis.max_drawdown_datum,
+        )
+
+    @applikation.get("/cashflows", response_model=CashflowAntwort)
+    def cashflows(von: date | None = None, bis: date | None = None) -> CashflowAntwort:
+        """Kosten & Erträge je Kategorie und Monat in EUR (AP-06f) — reicht
+        durch, was ``analytics.cashflows.cashflow_bericht`` liefert."""
+        if von is not None and bis is not None and von > bis:
+            raise HTTPException(status_code=422, detail="von liegt nach bis")
+        ergebnis = cashflow_bericht(db_pfad, von=von, bis=bis)
+        return CashflowAntwort(
+            kategorien=[
+                CashflowKategorieAntwort(
+                    kategorie=k.kategorie,
+                    anzahl=k.anzahl,
+                    summe_eur=_als_text(k.summe_eur),
+                    anzahl_kurs_fehlt=k.anzahl_kurs_fehlt,
+                    im_ergebnis_enthalten=k.im_ergebnis_enthalten,
+                )
+                for k in ergebnis.kategorien
+            ],
+            monate=[
+                CashflowMonatAntwort(
+                    monat=m.monat,
+                    kategorie=m.kategorie,
+                    anzahl=m.anzahl,
+                    summe_eur=_als_text(m.summe_eur),
+                    anzahl_kurs_fehlt=m.anzahl_kurs_fehlt,
+                )
+                for m in ergebnis.monate
+            ],
         )
 
     # -----------------------------------------------------------------------
