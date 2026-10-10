@@ -49,6 +49,7 @@ from sqlalchemy.engine import Connection
 
 from analytics.cashflows import cashflow_bericht
 from analytics.equity import equity_bericht
+from analytics.kapital import kapital_bericht
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -286,6 +287,25 @@ class CashflowMonatAntwort(BaseModel):
 class CashflowAntwort(BaseModel):
     kategorien: list[CashflowKategorieAntwort]
     monate: list[CashflowMonatAntwort]
+
+
+# AP-06g: Kapitalentwicklung, realisiert (analytics.kapital), in EUR.
+class KapitalTagAntwort(BaseModel):
+    datum: date
+    einzahlungen_kumuliert: str
+    ergebnis_kumuliert: str
+    cash_kumuliert: str
+    kapital: str
+
+
+class KapitalAntwort(BaseModel):
+    tage: list[KapitalTagAntwort]
+    anfangskapital: str
+    endkapital: str
+    einzahlungen_im_zeitraum: str
+    ergebnis_im_zeitraum: str
+    cash_im_zeitraum: str
+    anzahl_kurs_fehlt: int
 
 
 # ---------------------------------------------------------------------------
@@ -1309,6 +1329,32 @@ def erzeuge_app(
             ],
             max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
             max_drawdown_datum=ergebnis.max_drawdown_datum,
+        )
+
+    @applikation.get("/kapital", response_model=KapitalAntwort)
+    def kapital(von: date | None = None, bis: date | None = None) -> KapitalAntwort:
+        """Kapitalentwicklung, realisiert (AP-06g) — Einzahlungen, Ergebnis,
+        Cash-Posten; kein NAV. Im Zeitraum der Bestand, nicht ab 0."""
+        if von is not None and bis is not None and von > bis:
+            raise HTTPException(status_code=422, detail="von liegt nach bis")
+        e = kapital_bericht(db_pfad, von=von, bis=bis)
+        return KapitalAntwort(
+            tage=[
+                KapitalTagAntwort(
+                    datum=t.datum,
+                    einzahlungen_kumuliert=_als_text(t.einzahlungen_kumuliert),
+                    ergebnis_kumuliert=_als_text(t.ergebnis_kumuliert),
+                    cash_kumuliert=_als_text(t.cash_kumuliert),
+                    kapital=_als_text(t.kapital),
+                )
+                for t in e.tage
+            ],
+            anfangskapital=_als_text(e.anfangskapital),
+            endkapital=_als_text(e.endkapital),
+            einzahlungen_im_zeitraum=_als_text(e.einzahlungen_im_zeitraum),
+            ergebnis_im_zeitraum=_als_text(e.ergebnis_im_zeitraum),
+            cash_im_zeitraum=_als_text(e.cash_im_zeitraum),
+            anzahl_kurs_fehlt=e.anzahl_kurs_fehlt,
         )
 
     @applikation.get("/cashflows", response_model=CashflowAntwort)

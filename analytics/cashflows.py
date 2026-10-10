@@ -182,6 +182,29 @@ def _kurs_aus_rohsatz(roh_json: str) -> Decimal | None:
     return Decimal(str(wert))
 
 
+def cash_zeilen_lesen(verbindung) -> list[dict]:
+    """Die Cash-Buchungen als Eingangszeilen der reinen Funktionen — die eine
+    Lesestelle für AP-06f und AP-06g."""
+    return [
+        dict(
+            datum=z["datum"],
+            typ=z["typ"],
+            betrag=z["betrag"],
+            waehrung=z["waehrung"],
+            kurs=_kurs_aus_rohsatz(z["roh_json"]),
+        )
+        for z in verbindung.execute(
+            select(
+                flex_cash_transactions.c.datum,
+                flex_cash_transactions.c.typ,
+                flex_cash_transactions.c.betrag,
+                flex_cash_transactions.c.waehrung,
+                flex_cash_transactions.c.roh_json,
+            )
+        ).mappings()
+    ]
+
+
 def cashflow_bericht(
     db_pfad: str | pathlib.Path,
     *,
@@ -218,24 +241,7 @@ def cashflow_bericht(
                 )
             ).mappings()
         ]
-        cash_zeilen = [
-            dict(
-                datum=z["datum"],
-                typ=z["typ"],
-                betrag=z["betrag"],
-                waehrung=z["waehrung"],
-                kurs=_kurs_aus_rohsatz(z["roh_json"]),
-            )
-            for z in verbindung.execute(
-                select(
-                    flex_cash_transactions.c.datum,
-                    flex_cash_transactions.c.typ,
-                    flex_cash_transactions.c.betrag,
-                    flex_cash_transactions.c.waehrung,
-                    flex_cash_transactions.c.roh_json,
-                )
-            ).mappings()
-        ]
+        cash_zeilen = cash_zeilen_lesen(verbindung)
     return cashflow_auswertung(
         ausfuehrungs_zeilen, instrumenten_zeilen, cash_zeilen, von=von, bis=bis
     )

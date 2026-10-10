@@ -413,10 +413,77 @@ export interface Equity {
 }
 
 // AP-08f2: von/bis im ISO-Format, beide einschließlich; ohne Angabe alles.
-export function holeEquity(von?: string | null, bis?: string | null): Promise<Equity> {
+function zeitraumQuery(von?: string | null, bis?: string | null): string {
   const zusaetze = new URLSearchParams()
   if (von) zusaetze.set('von', von)
   if (bis) zusaetze.set('bis', bis)
   const query = zusaetze.toString()
-  return hole(`/equity${query === '' ? '' : `?${query}`}`) as Promise<Equity>
+  return query === '' ? '' : `?${query}`
+}
+
+export function holeEquity(von?: string | null, bis?: string | null): Promise<Equity> {
+  return hole(`/equity${zeitraumQuery(von, bis)}`) as Promise<Equity>
+}
+
+// AP-06f, Kosten & Erträge. Kategorien in fester Reihenfolge; Kommissionen
+// und Barausgleich tragen im_ergebnis_enthalten = true (schon im Ergebnis).
+export type CashflowKategorieName =
+  | 'kommissionen'
+  | 'kommissionsanpassungen'
+  | 'gebuehren'
+  | 'zinsen_erhalten'
+  | 'zinsen_gezahlt'
+  | 'dividenden'
+  | 'quellensteuer'
+  | 'barausgleich'
+  | 'sonstige'
+  | 'ein_auszahlungen'
+
+export interface CashflowKategorie {
+  kategorie: CashflowKategorieName
+  anzahl: number
+  summe_eur: string
+  anzahl_kurs_fehlt: number
+  im_ergebnis_enthalten: boolean
+}
+
+export interface CashflowMonat {
+  monat: string
+  kategorie: CashflowKategorieName
+  anzahl: number
+  summe_eur: string
+  anzahl_kurs_fehlt: number
+}
+
+export interface Cashflows {
+  kategorien: CashflowKategorie[]
+  monate: CashflowMonat[]
+}
+
+export function holeCashflows(von?: string | null, bis?: string | null): Promise<Cashflows> {
+  return hole(`/cashflows${zeitraumQuery(von, bis)}`) as Promise<Cashflows>
+}
+
+// AP-06g, Kapitalentwicklung (realisiert, kein NAV). Im Zeitraum der Bestand,
+// nicht ab 0; Anfang + Einzahlungen + Ergebnis + Cash = Ende.
+export interface KapitalTag {
+  datum: string
+  einzahlungen_kumuliert: string
+  ergebnis_kumuliert: string
+  cash_kumuliert: string
+  kapital: string
+}
+
+export interface Kapital {
+  tage: KapitalTag[]
+  anfangskapital: string
+  endkapital: string
+  einzahlungen_im_zeitraum: string
+  ergebnis_im_zeitraum: string
+  cash_im_zeitraum: string
+  anzahl_kurs_fehlt: number
+}
+
+export function holeKapital(von?: string | null, bis?: string | null): Promise<Kapital> {
+  return hole(`/kapital${zeitraumQuery(von, bis)}`) as Promise<Kapital>
 }

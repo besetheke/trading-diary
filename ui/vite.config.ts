@@ -24,6 +24,9 @@ export default defineConfig({
       // AP-06e: die Equity-Kurve; die Seite heißt /dashboard, keine
       // Kollision möglich.
       '/equity': 'http://localhost:8000',
+      // AP-06f/AP-06g: Kosten & Erträge und Kapital.
+      '/cashflows': 'http://localhost:8000',
+      '/kapital': 'http://localhost:8000',
     },
   },
 })
