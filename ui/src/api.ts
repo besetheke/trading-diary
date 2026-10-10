@@ -178,12 +178,45 @@ export type Sortierspalte =
 
 export type Richtung = 'asc' | 'desc'
 
-export interface KettenAbfrage {
+// AP-07f/AP-08g2b: die Kettenfilter, die /ketten und /auswertung gemeinsam
+// kennen. Datumswerte ISO (JJJJ-MM-TT), beide Enden einschließlich.
+export interface KettenFilter {
   basiswert?: string
   anlageklasse?: string
+  waehrung?: string
+  strategie?: string
+  seite?: string
   endzustand?: string
   min_rolls?: number
   max_rolls?: number
+  eroeffnet_ab?: string
+  eroeffnet_bis?: string
+  geschlossen_ab?: string
+  geschlossen_bis?: string
+}
+
+function filterZusaetze(filter: KettenFilter, zusaetze: URLSearchParams): void {
+  const texte: (keyof KettenFilter)[] = [
+    'basiswert',
+    'anlageklasse',
+    'waehrung',
+    'strategie',
+    'seite',
+    'endzustand',
+    'eroeffnet_ab',
+    'eroeffnet_bis',
+    'geschlossen_ab',
+    'geschlossen_bis',
+  ]
+  for (const schluessel of texte) {
+    const wert = filter[schluessel]
+    if (wert) zusaetze.set(schluessel, String(wert))
+  }
+  if (filter.min_rolls !== undefined) zusaetze.set('min_rolls', String(filter.min_rolls))
+  if (filter.max_rolls !== undefined) zusaetze.set('max_rolls', String(filter.max_rolls))
+}
+
+export interface KettenAbfrage extends KettenFilter {
   // AP-07s/AP-08s: Sortierung auf dem Server, vor dem Blättern. Die
   // Oberfläche sortiert nie selbst — sie schickt nur Spalte und Richtung mit.
   sortierung?: Sortierspalte
@@ -199,11 +232,7 @@ export interface KettenAbfrage {
 
 export function holeKetten(abfrage: KettenAbfrage): Promise<KettenListe> {
   const zusaetze = new URLSearchParams()
-  if (abfrage.basiswert) zusaetze.set('basiswert', abfrage.basiswert)
-  if (abfrage.anlageklasse) zusaetze.set('anlageklasse', abfrage.anlageklasse)
-  if (abfrage.endzustand) zusaetze.set('endzustand', abfrage.endzustand)
-  if (abfrage.min_rolls !== undefined) zusaetze.set('min_rolls', String(abfrage.min_rolls))
-  if (abfrage.max_rolls !== undefined) zusaetze.set('max_rolls', String(abfrage.max_rolls))
+  filterZusaetze(abfrage, zusaetze)
   if (abfrage.sortierung !== undefined) zusaetze.set('sortierung', abfrage.sortierung)
   if (abfrage.richtung !== undefined) zusaetze.set('richtung', abfrage.richtung)
   if (abfrage.von) zusaetze.set('von', abfrage.von)
@@ -401,6 +430,9 @@ export interface EquityTag {
   drawdown_eur: string
   anzahl_strukturen: number
   anzahl_strukturen_kurs_fehlt: number
+  // AP-06i: Aktiengeschäfte ohne Struktur; ihr Betrag steckt in netto_eur.
+  anzahl_lose_legs: number
+  anzahl_lose_legs_kurs_fehlt: number
 }
 
 export interface EquityMonat {
@@ -410,6 +442,9 @@ export interface EquityMonat {
   durchschnitt_netto_eur: string | null
   trefferquote: string | null
   anzahl_strukturen_kurs_fehlt: number
+  lose_legs_eur: string
+  anzahl_lose_legs: number
+  anzahl_lose_legs_kurs_fehlt: number
 }
 
 export interface Equity {
@@ -430,6 +465,47 @@ function zeitraumQuery(von?: string | null, bis?: string | null): string {
 
 export function holeEquity(von?: string | null, bis?: string | null): Promise<Equity> {
   return hole(`/equity${zeitraumQuery(von, bis)}`) as Promise<Equity>
+}
+
+// AP-07fw: wählbare Werte der Filter (Kontosicht, inklusive loser Legs).
+export interface Filterwerte {
+  basiswerte: string[]
+  anlageklassen: string[]
+  waehrungen: string[]
+  strategien: string[]
+  seiten: string[]
+  endzustaende: string[]
+}
+
+export function holeFilterwerte(): Promise<Filterwerte> {
+  return hole('/filterwerte') as Promise<Filterwerte>
+}
+
+// AP-07f: Verlauf und Ergebnis der gefilterten Ketten. von/bis gelten hier am
+// Schließungstag (Z2/Z4), nicht als „aktiv im Zeitraum" wie bei /ketten.
+export interface AuswertungErgebnis {
+  anzahl_ketten: number
+  anzahl_strukturen: number
+  summe_netto_eur: string
+  anzahl_kurs_fehlt: number
+  lose_legs_eingeschlossen: boolean
+}
+
+export interface Auswertung extends Equity {
+  ergebnis: AuswertungErgebnis
+}
+
+export function holeAuswertung(
+  filter: KettenFilter,
+  von?: string | null,
+  bis?: string | null,
+): Promise<Auswertung> {
+  const zusaetze = new URLSearchParams()
+  filterZusaetze(filter, zusaetze)
+  if (von) zusaetze.set('von', von)
+  if (bis) zusaetze.set('bis', bis)
+  const query = zusaetze.toString()
+  return hole(`/auswertung${query === '' ? '' : `?${query}`}`) as Promise<Auswertung>
 }
 
 // AP-06f, Kosten & Erträge. Kategorien in fester Reihenfolge; Kommissionen

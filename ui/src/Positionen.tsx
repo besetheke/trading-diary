@@ -1,16 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { fehlerText, holeKetten } from './api'
-import type { Kette, KettenListe, Richtung, Sortierspalte } from './api'
+import { fehlerText, holeAuswertung, holeFilterwerte, holeKetten } from './api'
+import type {
+  Auswertung,
+  Filterwerte,
+  Kette,
+  KettenFilter,
+  KettenListe,
+  Richtung,
+  Sortierspalte,
+} from './api'
 import { betrag, datumDe, zeit, zeitDe } from './format'
 import Betrag from './Betrag'
+import FilterAuswertung from './FilterAuswertung'
 import { useZeitraum } from './zeitraum'
 
 const LIMITS = [10, 25, 50, 100]
 
-// Werte aus dem Datenbankschema (CHECK instruments.asset_class) und aus dem
-// Wiederhersteller (chains.endzustand) — die Oberfläche erfindet keine.
+// Rückfallwerte, falls GET /filterwerte (AP-07fw) nicht antwortet: Werte aus dem
+// Datenbankschema (CHECK instruments.asset_class) und aus dem Wiederhersteller
+// (chains.endzustand) — die Oberfläche erfindet keine. Sonst gelten die
+// Auswahllisten der API.
 const ANLAGEKLASSEN = ['OPT', 'FOP', 'FUT', 'STK', 'CASH']
 const ENDZUSTAENDE = ['Offen', 'Geschlossen', 'Verfall', 'Assigned']
 
@@ -95,12 +106,82 @@ function leseSpalten(): SpaltenId[] | null {
   }
 }
 
+// AP-08g2b: alle Filter der Liste. Sie stehen in der Adresse (Lesezeichen,
+// Neuladen) unter den Namen der API; der Entwurf hält die Eingaben, bis
+// „Anwenden" sie dorthin schreibt.
 interface Entwurf {
   basiswert: string
   anlageklasse: string
+  waehrung: string
+  strategie: string
+  seite: string
   endzustand: string
+  eroeffnetAb: string
+  eroeffnetBis: string
+  geschlossenAb: string
+  geschlossenBis: string
   minRolls: string
   maxRolls: string
+}
+
+const LEERER_ENTWURF: Entwurf = {
+  basiswert: '',
+  anlageklasse: '',
+  waehrung: '',
+  strategie: '',
+  seite: '',
+  endzustand: '',
+  eroeffnetAb: '',
+  eroeffnetBis: '',
+  geschlossenAb: '',
+  geschlossenBis: '',
+  minRolls: '',
+  maxRolls: '',
+}
+
+const FILTER_PARAMETER: [keyof Entwurf, string][] = [
+  ['basiswert', 'basiswert'],
+  ['anlageklasse', 'anlageklasse'],
+  ['waehrung', 'waehrung'],
+  ['strategie', 'strategie'],
+  ['seite', 'seite'],
+  ['endzustand', 'endzustand'],
+  ['eroeffnetAb', 'eroeffnet_ab'],
+  ['eroeffnetBis', 'eroeffnet_bis'],
+  ['geschlossenAb', 'geschlossen_ab'],
+  ['geschlossenBis', 'geschlossen_bis'],
+  ['minRolls', 'min_rolls'],
+  ['maxRolls', 'max_rolls'],
+]
+
+function entwurfAusAdresse(suche: URLSearchParams): Entwurf {
+  const entwurf = { ...LEERER_ENTWURF }
+  for (const [schluessel, parameter] of FILTER_PARAMETER) {
+    entwurf[schluessel] = suche.get(parameter) ?? ''
+  }
+  return entwurf
+}
+
+function rollsOderUndefined(wert: string): number | undefined {
+  const zahl = Number.parseInt(wert, 10)
+  return Number.isNaN(zahl) || zahl < 0 ? undefined : zahl
+}
+
+function filterAusEntwurf(entwurf: Entwurf): KettenFilter {
+  return {
+    basiswert: entwurf.basiswert.trim() || undefined,
+    anlageklasse: entwurf.anlageklasse || undefined,
+    waehrung: entwurf.waehrung || undefined,
+    strategie: entwurf.strategie || undefined,
+    seite: entwurf.seite || undefined,
+    endzustand: entwurf.endzustand || undefined,
+    eroeffnet_ab: entwurf.eroeffnetAb || undefined,
+    eroeffnet_bis: entwurf.eroeffnetBis || undefined,
+    geschlossen_ab: entwurf.geschlossenAb || undefined,
+    geschlossen_bis: entwurf.geschlossenBis || undefined,
+    min_rolls: rollsOderUndefined(entwurf.minRolls),
+    max_rolls: rollsOderUndefined(entwurf.maxRolls),
+  }
 }
 
 function zahlOderVorgabe(wert: string | null, vorgabe: number): number {
@@ -182,17 +263,45 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
   }
 }
 
+// Ein Auswahlfeld mit „alle". Fehlt die Liste (kein Wert im Bestand oder die API
+// antwortet nicht), bleibt das Feld sichtbar, nur ohne Optionen. Ein in der
+// Adresse stehender Wert, der nicht in der Liste ist, bleibt wählbar.
+function Auswahl({
+  titel,
+  wert,
+  optionen,
+  aendere,
+}: {
+  titel: string
+  wert: string
+  optionen: string[]
+  aendere: (wert: string) => void
+}): JSX.Element {
+  const alle = wert !== '' && !optionen.includes(wert) ? [...optionen, wert] : optionen
+  return (
+    <label>
+      {titel}
+      <select value={wert} onChange={(e) => aendere(e.target.value)}>
+        <option value="">alle</option>
+        {alle.map((eine) => (
+          <option key={eine} value={eine}>
+            {eine}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 export default function Positionen(): JSX.Element {
   const [suche, setzeSuche] = useSearchParams()
   // AP-08z: Der globale Zeitraum aus dem Wähler im Kopf (AP-08f2) steuert
   // auch diese Liste — die API liefert die im Zeitraum aktiven Ketten
   // (AP-07f, Z3); der Browser filtert nichts selbst.
   const [zeitraum] = useZeitraum()
-  const basiswert = suche.get('basiswert') ?? ''
-  const anlageklasse = suche.get('anlageklasse') ?? ''
-  const endzustand = suche.get('endzustand') ?? ''
-  const minRolls = suche.get('min_rolls') ?? ''
-  const maxRolls = suche.get('max_rolls') ?? ''
+  // Die Filter der Adresse; als Text, damit Effekte nur bei echter Änderung
+  // neu laden.
+  const filterText = JSON.stringify(entwurfAusAdresse(suche))
   const limit = Math.min(Math.max(zahlOderVorgabe(suche.get('limit'), 25), 1), 500)
   const offset = Math.max(zahlOderVorgabe(suche.get('offset'), 0), 0)
 
@@ -207,15 +316,20 @@ export default function Positionen(): JSX.Element {
   const richtung: Richtung =
     richtungParam === 'asc' || richtungParam === 'desc' ? richtungParam : 'desc'
 
-  const [entwurf, setzeEntwurf] = useState<Entwurf>({
-    basiswert,
-    anlageklasse,
-    endzustand,
-    minRolls,
-    maxRolls,
-  })
+  const [entwurf, setzeEntwurf] = useState<Entwurf>(() => entwurfAusAdresse(suche))
   const [liste, setzeListe] = useState<KettenListe | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
+  // AP-08g2b: wählbare Werte (AP-07fw) und Auswertung der Auswahl (AP-07f).
+  const [werte, setzeWerte] = useState<Filterwerte | null>(null)
+  const [auswertung, setzeAuswertung] = useState<Auswertung | null>(null)
+  const [auswertungFehler, setzeAuswertungFehler] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Ohne Auswahllisten bleibt die Leiste benutzbar (Rückfallwerte, Freitext).
+    holeFilterwerte()
+      .then(setzeWerte)
+      .catch(() => setzeWerte(null))
+  }, [])
 
   // AP-08s, Punkt 3: Auswahl und Reihenfolge der sichtbaren Spalten.
   const [sichtbare, setzeSichtbare] = useState<SpaltenId[]>(
@@ -243,14 +357,8 @@ export default function Positionen(): JSX.Element {
     let abgebrochen = false
     setzeListe(null)
     setzeFehler(null)
-    const min = Number.parseInt(minRolls, 10)
-    const max = Number.parseInt(maxRolls, 10)
     holeKetten({
-      basiswert: basiswert || undefined,
-      anlageklasse: anlageklasse || undefined,
-      endzustand: endzustand || undefined,
-      min_rolls: Number.isNaN(min) ? undefined : min,
-      max_rolls: Number.isNaN(max) ? undefined : max,
+      ...filterAusEntwurf(JSON.parse(filterText) as Entwurf),
       sortierung,
       richtung,
       von: zeitraum.von,
@@ -267,19 +375,30 @@ export default function Positionen(): JSX.Element {
     return () => {
       abgebrochen = true
     }
-  }, [
-    basiswert,
-    anlageklasse,
-    endzustand,
-    minRolls,
-    maxRolls,
-    limit,
-    offset,
-    sortierung,
-    richtung,
-    zeitraum.von,
-    zeitraum.bis,
-  ])
+  }, [filterText, limit, offset, sortierung, richtung, zeitraum.von, zeitraum.bis])
+
+  // AP-08g2b: Verlauf und Ergebnis für dieselbe Auswahl. Der Zeitraum gilt
+  // hier am Schließungstag (AP-07f, Z2); Blättern und Sortieren ändern die
+  // Auswertung nicht.
+  useEffect(() => {
+    let abgebrochen = false
+    setzeAuswertung(null)
+    setzeAuswertungFehler(null)
+    holeAuswertung(
+      filterAusEntwurf(JSON.parse(filterText) as Entwurf),
+      zeitraum.von,
+      zeitraum.bis,
+    )
+      .then((ergebnis) => {
+        if (!abgebrochen) setzeAuswertung(ergebnis)
+      })
+      .catch((ursache: unknown) => {
+        if (!abgebrochen) setzeAuswertungFehler(fehlerText(ursache))
+      })
+    return () => {
+      abgebrochen = true
+    }
+  }, [filterText, zeitraum.von, zeitraum.bis])
 
   // AP-08z: Ein anderer Zeitraum beginnt beim Blättern wieder vorn. Der
   // Wähler löscht den Blätterstand schon selbst (zeitraum.ts); das hier
@@ -297,14 +416,15 @@ export default function Positionen(): JSX.Element {
   function anwenden(ereignis: FormEvent): void {
     ereignis.preventDefault()
     const naechste = new URLSearchParams()
-    const basis = entwurf.basiswert.trim()
-    const min = Number.parseInt(entwurf.minRolls, 10)
-    const max = Number.parseInt(entwurf.maxRolls, 10)
-    if (basis) naechste.set('basiswert', basis)
-    if (entwurf.anlageklasse) naechste.set('anlageklasse', entwurf.anlageklasse)
-    if (entwurf.endzustand) naechste.set('endzustand', entwurf.endzustand)
-    if (!Number.isNaN(min) && min >= 0) naechste.set('min_rolls', String(min))
-    if (!Number.isNaN(max) && max >= 0) naechste.set('max_rolls', String(max))
+    for (const [schluessel, parameter] of FILTER_PARAMETER) {
+      const wert = entwurf[schluessel].trim()
+      if (schluessel === 'minRolls' || schluessel === 'maxRolls') {
+        const zahl = rollsOderUndefined(wert)
+        if (zahl !== undefined) naechste.set(parameter, String(zahl))
+      } else if (wert) {
+        naechste.set(parameter, wert)
+      }
+    }
     // Die Sortierung gehört zur Ansicht — sie bleibt beim Anwenden der
     // Filter erhalten (AP-08s); limit und offset fallen auf die Vorgabe
     // zurück.
@@ -320,13 +440,7 @@ export default function Positionen(): JSX.Element {
   }
 
   function zuruecksetzen(): void {
-    setzeEntwurf({
-      basiswert: '',
-      anlageklasse: '',
-      endzustand: '',
-      minRolls: '',
-      maxRolls: '',
-    })
+    setzeEntwurf({ ...LEERER_ENTWURF })
     // AP-08z: Zurücksetzen räumt nur die Filter der Liste — der globale
     // Zeitraum bleibt gewählt und in der Adresse.
     const naechste = new URLSearchParams()
@@ -398,24 +512,78 @@ export default function Positionen(): JSX.Element {
         <label>
           Basiswert
           <input
+            list="filter-basiswerte"
             value={entwurf.basiswert}
             onChange={(e) => setzeEntwurf({ ...entwurf, basiswert: e.target.value })}
             placeholder="z. B. DAX"
           />
+          <datalist id="filter-basiswerte">
+            {(werte?.basiswerte ?? []).map((wert) => (
+              <option key={wert} value={wert} />
+            ))}
+          </datalist>
+        </label>
+        <Auswahl
+          titel="Anlageklasse"
+          wert={entwurf.anlageklasse}
+          optionen={werte?.anlageklassen ?? ANLAGEKLASSEN}
+          aendere={(wert) => setzeEntwurf({ ...entwurf, anlageklasse: wert })}
+        />
+        <Auswahl
+          titel="Währung"
+          wert={entwurf.waehrung}
+          optionen={werte?.waehrungen ?? []}
+          aendere={(wert) => setzeEntwurf({ ...entwurf, waehrung: wert })}
+        />
+        <Auswahl
+          titel="Strategie"
+          wert={entwurf.strategie}
+          optionen={werte?.strategien ?? []}
+          aendere={(wert) => setzeEntwurf({ ...entwurf, strategie: wert })}
+        />
+        <Auswahl
+          titel="Seite"
+          wert={entwurf.seite}
+          optionen={werte?.seiten ?? []}
+          aendere={(wert) => setzeEntwurf({ ...entwurf, seite: wert })}
+        />
+        <Auswahl
+          titel="Endzustand"
+          wert={entwurf.endzustand}
+          optionen={werte?.endzustaende ?? ENDZUSTAENDE}
+          aendere={(wert) => setzeEntwurf({ ...entwurf, endzustand: wert })}
+        />
+        <label>
+          Eröffnet von
+          <input
+            type="date"
+            value={entwurf.eroeffnetAb}
+            onChange={(e) => setzeEntwurf({ ...entwurf, eroeffnetAb: e.target.value })}
+          />
         </label>
         <label>
-          Anlageklasse
-          <select
-            value={entwurf.anlageklasse}
-            onChange={(e) => setzeEntwurf({ ...entwurf, anlageklasse: e.target.value })}
-          >
-            <option value="">alle</option>
-            {ANLAGEKLASSEN.map((klasse) => (
-              <option key={klasse} value={klasse}>
-                {klasse}
-              </option>
-            ))}
-          </select>
+          bis
+          <input
+            type="date"
+            value={entwurf.eroeffnetBis}
+            onChange={(e) => setzeEntwurf({ ...entwurf, eroeffnetBis: e.target.value })}
+          />
+        </label>
+        <label>
+          Geschlossen von
+          <input
+            type="date"
+            value={entwurf.geschlossenAb}
+            onChange={(e) => setzeEntwurf({ ...entwurf, geschlossenAb: e.target.value })}
+          />
+        </label>
+        <label>
+          bis
+          <input
+            type="date"
+            value={entwurf.geschlossenBis}
+            onChange={(e) => setzeEntwurf({ ...entwurf, geschlossenBis: e.target.value })}
+          />
         </label>
         <label>
           Rolls von
@@ -435,25 +603,14 @@ export default function Positionen(): JSX.Element {
             onChange={(e) => setzeEntwurf({ ...entwurf, maxRolls: e.target.value })}
           />
         </label>
-        <label>
-          Endzustand
-          <select
-            value={entwurf.endzustand}
-            onChange={(e) => setzeEntwurf({ ...entwurf, endzustand: e.target.value })}
-          >
-            <option value="">alle</option>
-            {ENDZUSTAENDE.map((zustand) => (
-              <option key={zustand} value={zustand}>
-                {zustand}
-              </option>
-            ))}
-          </select>
-        </label>
         <button type="submit">Anwenden</button>
         <button type="button" onClick={zuruecksetzen}>
           Zurücksetzen
         </button>
       </form>
+
+      {/* AP-08g2b: Verlauf und Ergebnis der Auswahl (GET /auswertung). */}
+      <FilterAuswertung auswertung={auswertung} fehler={auswertungFehler} />
 
       {/* AP-08s: Spaltenauswahl — ein Kästchen je Spalte, Reihenfolge über
           die Pfeile, im Browser gespeichert (mit Rückfall auf die Vorgabe);

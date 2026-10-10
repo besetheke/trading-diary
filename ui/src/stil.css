@@ -761,3 +761,12 @@ dl.kopf div.abgesetzt dt {
 table.kosten {
   font-size: 0.85rem;
 }
+
+/* AP-08g2b: Kennzahlenkopf der gefilterten Auswahl — breitere Zellen, Beträge brechen nicht um. */
+section.auswertung dl.kopf {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+section.auswertung dl.kopf dd {
+  white-space: nowrap;
+}
