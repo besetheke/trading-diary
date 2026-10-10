@@ -108,8 +108,42 @@ ein eigenes, späteres Paket — sie braucht zuerst gespeicherte Rollkandidaten.
 - **Z4 Equity im Zeitraum** beginnt am Zeitraumanfang bei 0; der Drawdown
   zählt nur innerhalb des Zeitraums.
 
-## Darstellung
+## Darstellung — Entscheidung des Nutzers (10.10.2026)
 
-Das Gestaltungsprinzip „kein Diagramm" (`stil.css`) bleibt bis auf
-Weiteres stehen; der Nutzer wurde gefragt, ob eine schlichte Equity-Linie
-(SVG, nur Anzeige) erlaubt ist — bis zur Antwort Tabellen.
+> „Ich würde gerne eine Visualisierung haben, zB Equity Linie. […] Der
+> gefilterte Rest gibt ein Diagramm über P&L oder Ergebnis. Dann noch
+> irgendwo Info über Kommissionen, Dividenden, Cash Settlement, Zinsen etc.
+> Weiter muss es ein Diagramm geben für Drawdown, Kapitalentwicklung."
+
+Das Prinzip „kein Diagramm" ist damit aufgehoben. Es gilt stattdessen:
+
+- **D1 Eigene SVG-Bausteine, keine Diagramm-Bibliothek.** Linie, Fläche,
+  Balken — klein, ohne neue Abhängigkeit, im Stil der Oberfläche.
+- **D2 Zahl nur für die Pixellage.** Ein Diagramm darf den Text der API in
+  eine Zahl wandeln, um einen Punkt zu platzieren — angezeigt (Achsen,
+  Tooltip) wird weiterhin der Text der API über die Formatierer. Gerechnet
+  wird im Browser nichts (Vertrag 8 bleibt für alles Angezeigte).
+- **D3 Diagramm plus Tabelle.** Die Tabellen bleiben unter dem Diagramm —
+  Nachvollziehen geht vor.
+
+## Erweiterter Zuschnitt (10.10.2026)
+
+| Paket | Inhalt | Wer |
+|---|---|---|
+| **AP-08g1** | Diagramm-Bausteine (Linie, Fläche, Balken) + Dashboard: Equity-Linie, Drawdown-Fläche, Monatsbalken | günstig (Cline), nach AP-08f1 |
+| **AP-06f** | Kosten & Erträge: Kommissionen, Dividenden (inkl. Payment in Lieu), Quellensteuer, Zinsen erhalten/gezahlt, Gebühren, Commission Adjustments, Barausgleich — je Monat, in EUR, mit Zeitraum | stark |
+| **AP-06g** | Kapitalentwicklung (realisiert): Ein-/Auszahlungen + realisiertes Ergebnis + Cash-Posten, als Tagesreihe | stark |
+| **AP-07f** | Filter-Auswertung: `/ketten` mit Zeitbezug (Eröffnung/Schließung), Währung, Strategie; `GET /auswertung` liefert für dieselben Filter Verlauf und Kennzahlen in EUR | stark |
+| **AP-08g2** | Positionsliste: alle Filter + Diagramm über das Ergebnis der gefilterten Ketten; Seite „Kosten & Erträge"; Kapital-Diagramm | günstig, nach AP-06f/06g/07f |
+
+**Grenze der Kapitalentwicklung:** Die Datenbank kennt realisierte
+Ergebnisse und Cash-Buchungen, aber keinen täglichen Kontowert (NAV) — dafür
+fehlen Bewertungen der offenen Positionen (nur 10 Bestands-Stichtage). AP-06g
+zeigt deshalb das **realisierte Kapital** und sagt das dazu. Ein echter
+NAV-Verlauf braucht eine Erweiterung der Flex-Query (Abschnitt „Net Asset
+Value" bzw. „Change in NAV") — Portalarbeit beim Nutzer, dann ein eigenes
+Import-Paket.
+
+**Keine Doppelzählung:** Kommissionen und Barausgleich stecken bereits im
+realisierten Ergebnis (Tranche I, AP-06x). In „Kosten & Erträge" werden sie
+nur *ausgewiesen*; in der Kapitalentwicklung zählen sie nicht ein zweites Mal.
