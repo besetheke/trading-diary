@@ -2947,3 +2947,30 @@ Risiko für die laufende Arbeit am Diary aufschiebbar.
 AP-07tk → AP-08j/AP-08j2), danach die übrigen offenen Umsetzungspakete, deren
 Abnahmebasis bereits steht (AP-04sy, AP-04szk, AP-05dk, AP-05rk, AP-06dk,
 AP-06xk/xr, AP-07sk, AP-08s, AP-13s/t/y/zk, AP-02a2k). AP-11 erst danach.
+
+**Nachtrag 10.10.2026:** Vollständige Durchsicht ergab, dass alle oben
+genannten Pakete bereits implementiert und committet waren (nur die
+`status`-Felder waren veraltet) — korrigiert. Einzige nach dieser Durchsicht
+verbleibende echte Lücke neben AP-11: **AP-12** (Erwartung gegen Realität),
+noch ohne Abnahmebasis.
+
+## OF-76 · Format des Option-Omega-Backtest-Exports (Grundlage für AP-12)
+
+Nutzer hat am 10.10.2026 ein Beispiel (60 Zeilen) geteilt. Struktur in
+`auftraege/AP-12-anhang-oo-format.md` festgehalten (keine Kontodaten darin,
+nur Struktur/Grammatik). **Offen, vor einer Abnahmebasis zu klären:**
+
+1. Eindeutiger Schlüssel einer Zeile: vermutlich `(Date Opened, Time Opened,
+   Strategy)`, da mehrere Strategien zum selben Scan-Zeitpunkt öffnen können.
+2. Vorzeichenkonvention von `Premium`/`P/L`/`Avg. Closing Cost` nur aus dem
+   Beispiel erschlossen, nicht bestätigt.
+3. Bedeutung von `Opening/Closing Short/Long Ratio` geraten, nicht bestätigt.
+4. Zeitzone von `Time Opened`/`Time Closed` unbekannt.
+5. Die Spalte `Legs` zeigt in der Stichprobe ausschließlich
+   Eröffnungsaktionen (`STO`/`BTO`) — ob/wie Rolls oder Teilschließungen
+   dargestellt werden, ist unbelegt (nur 60 Zeilen gesehen, keine über
+   mehrere Zeilen verknüpfte Roll-Kette erkennbar).
+6. **Zerlegung der Differenz** (Kommission/Slippage/Roll/Timing, Kern von
+   AP-12) ist auf Nutzerwunsch vorläufig zurückgestellt — ohne diese
+   Festlegung kann keine Abnahmebasis mit von Hand gerechnetem Erwartungswert
+   (Regel 8) geschrieben werden.
