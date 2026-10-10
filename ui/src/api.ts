@@ -383,3 +383,35 @@ export function ersetzeTags(
 export function holeAlleSchlagwoerter(): Promise<Schlagwort[]> {
   return hole('/tags') as Promise<Schlagwort[]>
 }
+
+// AP-06e, Equity-Kurve und Drawdown (Dashboard): wie immer gilt — Geld
+// bleibt Zeichenkette, Reihenfolge wie geliefert, nichts gerechnet.
+
+export interface EquityTag {
+  datum: string
+  netto_eur: string
+  kumuliert_eur: string
+  drawdown_eur: string
+  anzahl_strukturen: number
+  anzahl_strukturen_kurs_fehlt: number
+}
+
+export interface EquityMonat {
+  monat: string
+  anzahl_strukturen: number
+  summe_netto_eur: string
+  durchschnitt_netto_eur: string | null
+  trefferquote: string | null
+  anzahl_strukturen_kurs_fehlt: number
+}
+
+export interface Equity {
+  tage: EquityTag[]
+  monate: EquityMonat[]
+  max_drawdown_eur: string
+  max_drawdown_datum: string | null
+}
+
+export function holeEquity(): Promise<Equity> {
+  return hole('/equity') as Promise<Equity>
+}

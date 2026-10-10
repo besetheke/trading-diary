@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import Dashboard from './Dashboard'
 import Kalender from './Kalender'
 import Kampagnen from './Kampagnen'
 import PositionDetail from './PositionDetail'
@@ -42,6 +43,7 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
           </p>
           <nav className="hauptnav">
             <Link to="/">Positionen</Link>
+            <Link to="/dashboard">Dashboard</Link>
             <Link to="/kampagnenliste">Kampagnen</Link>
             <Link to="/monat">Kalender</Link>
             <Link to={`/tag/${heuteDatum()}`}>Heute</Link>
@@ -50,6 +52,9 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
         <main>
           <Routes>
             <Route path="/" element={<Positionen />} />
+            {/* AP-06e: eigene Adresse, kollidiert mit keinem API-Pfad
+                (anders als /kalender, /kampagnen — /equity bleibt API). */}
+            <Route path="/dashboard" element={<Dashboard />} />
             {/* AP-08j2: /kalender ist der API-Endpunkt (AP-07t). Die Seite
                 heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
                 erreichen und nicht den JSON-Fehler 422 des Endpunkts. */}

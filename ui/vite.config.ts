@@ -21,6 +21,9 @@ export default defineConfig({
       // AP-08-kampagnen: die Kampagnen-Endpunkte; die Seite heißt
       // /kampagnenliste und bleibt beim Entwicklungsserver.
       '/kampagnen': 'http://localhost:8000',
+      // AP-06e: die Equity-Kurve; die Seite heißt /dashboard, keine
+      // Kollision möglich.
+      '/equity': 'http://localhost:8000',
     },
   },
 })
