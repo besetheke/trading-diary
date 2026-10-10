@@ -1,7 +1,7 @@
 ---
 titel: Globaler Zeitraum wirkt auf der Positionsliste
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-08f2, AP-07f
 aendert_tests: nein
 ---

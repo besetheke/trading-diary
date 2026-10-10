@@ -23,8 +23,9 @@ function heuteDatum(): string {
 
 // AP-08f2: Seiten, auf die der Zeitraum schon wirkt. Die übrigen zeigen den
 // Wähler trotzdem (Z1: ein Zeitraum für alles) und sagen ehrlich, dass er
-// dort noch nichts filtert. AP-08g2: /kosten wirkt ebenfalls.
-const ZEITRAUM_SEITEN = ['/dashboard', '/kosten']
+// dort noch nichts filtert. AP-08g2: /kosten wirkt ebenfalls; AP-08z: die
+// Positionsliste (/) ebenso.
+const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten']
 
 function Kopf(): JSX.Element {
   const ort = useLocation()

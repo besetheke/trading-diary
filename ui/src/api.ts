@@ -188,6 +188,11 @@ export interface KettenAbfrage {
   // Oberfläche sortiert nie selbst — sie schickt nur Spalte und Richtung mit.
   sortierung?: Sortierspalte
   richtung?: Richtung
+  // AP-08z: globaler Zeitraum aus dem Wähler im Kopf (AP-08f2). Die API
+  // liefert die Ketten, die im Zeitraum aktiv waren (AP-07f, Z3) — der
+  // Browser rechnet und filtert nichts selbst.
+  von?: string | null
+  bis?: string | null
   limit: number
   offset: number
 }
@@ -201,6 +206,8 @@ export function holeKetten(abfrage: KettenAbfrage): Promise<KettenListe> {
   if (abfrage.max_rolls !== undefined) zusaetze.set('max_rolls', String(abfrage.max_rolls))
   if (abfrage.sortierung !== undefined) zusaetze.set('sortierung', abfrage.sortierung)
   if (abfrage.richtung !== undefined) zusaetze.set('richtung', abfrage.richtung)
+  if (abfrage.von) zusaetze.set('von', abfrage.von)
+  if (abfrage.bis) zusaetze.set('bis', abfrage.bis)
   zusaetze.set('limit', String(abfrage.limit))
   zusaetze.set('offset', String(abfrage.offset))
   return hole(`/ketten?${zusaetze.toString()}`) as Promise<KettenListe>

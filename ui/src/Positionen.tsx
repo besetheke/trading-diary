@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fehlerText, holeKetten } from './api'
 import type { Kette, KettenListe, Richtung, Sortierspalte } from './api'
-import { betrag, zeit, zeitDe } from './format'
+import { betrag, datumDe, zeit, zeitDe } from './format'
 import Betrag from './Betrag'
+import { useZeitraum } from './zeitraum'
 
 const LIMITS = [10, 25, 50, 100]
 
@@ -183,6 +184,10 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
 
 export default function Positionen(): JSX.Element {
   const [suche, setzeSuche] = useSearchParams()
+  // AP-08z: Der globale Zeitraum aus dem Wähler im Kopf (AP-08f2) steuert
+  // auch diese Liste — die API liefert die im Zeitraum aktiven Ketten
+  // (AP-07f, Z3); der Browser filtert nichts selbst.
+  const [zeitraum] = useZeitraum()
   const basiswert = suche.get('basiswert') ?? ''
   const anlageklasse = suche.get('anlageklasse') ?? ''
   const endzustand = suche.get('endzustand') ?? ''
@@ -248,6 +253,8 @@ export default function Positionen(): JSX.Element {
       max_rolls: Number.isNaN(max) ? undefined : max,
       sortierung,
       richtung,
+      von: zeitraum.von,
+      bis: zeitraum.bis,
       limit,
       offset,
     })
@@ -260,7 +267,32 @@ export default function Positionen(): JSX.Element {
     return () => {
       abgebrochen = true
     }
-  }, [basiswert, anlageklasse, endzustand, minRolls, maxRolls, limit, offset, sortierung, richtung])
+  }, [
+    basiswert,
+    anlageklasse,
+    endzustand,
+    minRolls,
+    maxRolls,
+    limit,
+    offset,
+    sortierung,
+    richtung,
+    zeitraum.von,
+    zeitraum.bis,
+  ])
+
+  // AP-08z: Ein anderer Zeitraum beginnt beim Blättern wieder vorn. Der
+  // Wähler löscht den Blätterstand schon selbst (zeitraum.ts); das hier
+  // sichert auch Adressen, die von außen kommen (Zurück-Taste, Verweise).
+  const vorigerZeitraum = useRef(`${zeitraum.von ?? ''}|${zeitraum.bis ?? ''}`)
+  useEffect(() => {
+    const jetzt = `${zeitraum.von ?? ''}|${zeitraum.bis ?? ''}`
+    if (jetzt === vorigerZeitraum.current) return
+    vorigerZeitraum.current = jetzt
+    const naechste = new URLSearchParams(suche)
+    naechste.delete('offset')
+    setzeSuche(naechste)
+  }, [zeitraum.von, zeitraum.bis, suche, setzeSuche])
 
   function anwenden(ereignis: FormEvent): void {
     ereignis.preventDefault()
@@ -280,6 +312,10 @@ export default function Positionen(): JSX.Element {
       naechste.set('sortierung', sortierung)
       naechste.set('richtung', richtung)
     }
+    // AP-08z: Der globale Zeitraum gehört zum Kopf, nicht zur Filterleiste
+    // — von/bis wandern aus der aktuellen Adresse in die neue.
+    if (zeitraum.von) naechste.set('von', zeitraum.von)
+    if (zeitraum.bis) naechste.set('bis', zeitraum.bis)
     setzeSuche(naechste) // limit und offset fallen auf die Vorgabe zurück
   }
 
@@ -291,7 +327,12 @@ export default function Positionen(): JSX.Element {
       minRolls: '',
       maxRolls: '',
     })
-    setzeSuche(new URLSearchParams())
+    // AP-08z: Zurücksetzen räumt nur die Filter der Liste — der globale
+    // Zeitraum bleibt gewählt und in der Adresse.
+    const naechste = new URLSearchParams()
+    if (zeitraum.von) naechste.set('von', zeitraum.von)
+    if (zeitraum.bis) naechste.set('bis', zeitraum.bis)
+    setzeSuche(naechste)
   }
 
   function blaettern(schritt: number): void {
@@ -465,6 +506,15 @@ export default function Positionen(): JSX.Element {
         </button>
       </details>
 
+      {/* AP-08z: Der gewählte Zeitraum steht über der Tabelle; was „aktiv"
+          heißt, sagt die Klammer. Ohne Zeitraum keine Zeile. */}
+      {zeitraum.von !== null || zeitraum.bis !== null ? (
+        <p className="sicht">
+          Aktiv im Zeitraum: {datumDe(zeitraum.von)} – {datumDe(zeitraum.bis)} (eröffnet bis
+          zum Ende und offen oder beendet ab dem Anfang)
+        </p>
+      ) : null}
+
       {fehler ? (
         <section className="fehler">
           <h3>Die Liste konnte nicht geladen werden</h3>
@@ -474,7 +524,11 @@ export default function Positionen(): JSX.Element {
         <p className="laedt">Lade Positionen …</p>
       ) : liste.gesamt === 0 ? (
         <section className="hinweis">
-          <p>Keine Positionen für diese Filter.</p>
+          <p>
+            {zeitraum.von !== null || zeitraum.bis !== null
+              ? 'Keine Positionen in diesem Zeitraum aktiv.'
+              : 'Keine Positionen für diese Filter.'}
+          </p>
           <p>Filter zurücksetzen oder andere Werte versuchen.</p>
         </section>
       ) : (
