@@ -42,6 +42,14 @@ for /f "skip=14 delims=" %%D in ('dir /b /a-d /o-d "%FLEX_BACKUP_ZIEL%\journal-*
     del "%FLEX_BACKUP_ZIEL%\%%D"
 )
 
+rem Zusaetzliche Cloud-Kopie: nur bei tatsaechlicher Aenderung (Hash-Vergleich
+rem in Cloud-Sicherung.ps1), danach dort maximal 10 Kopien behalten. Ein
+rem eigenstaendiger Schritt - erreicht die Cloud nicht (Laufwerk nicht
+rem verbunden o.ae.), bleibt das ohne Einfluss auf %CODE%, das bisherige
+rem Ergebnis (Abruf/Rebuild/lokales Backup) gilt unveraendert.
+if not defined CLOUD_SICHERUNG_ZIEL set "CLOUD_SICHERUNG_ZIEL=G:\Meine Ablage\#Code#\trading-journal-backups\db"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Cloud-Sicherung.ps1" -QuellOrdner "%FLEX_BACKUP_ZIEL%" -ZielOrdner "%CLOUD_SICHERUNG_ZIEL%" -MaxKopien 10 >> "%LOG%" 2>&1
+
 :fertig
 popd
 exit /b %CODE%
