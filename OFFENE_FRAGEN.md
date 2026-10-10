@@ -3139,6 +3139,53 @@ Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
   Ersatz durch `symbol` (in AP-07f/AP-07fw so vorgesehen); der Import sollte
   `underlying` für Aktien aus dem Symbol setzen — eigenes Paket.
 
+**ERGEBNIS 10.10.2026 (nach Prüfung Zeile für Zeile, Nutzer-Freigabe) —
+OF-78 ist im Wesentlichen geklärt; die Einträge „Nachtrag, zweite Runde" und
+„Abgleich nach AP-06i" oben beruhen auf einer unvollständigen Vergleichsgröße
+und sind überholt:**
+
+- **Ursache der scheinbar großen Lücke: die Vergleichsgröße.** `fifoPnlRealized`
+  in `executions.roh_json` ist bei 11.949 Zeilen (5 Flex-Läufe mit
+  `realized_pnl_verfuegbar = 0`, Handelsjahre 2023–2025) nicht gefüllt. Beim
+  Import gewinnt die erste Quelle (`on_conflict_do_nothing`) — die späteren
+  Jahresdateien mit den Werten ergänzen die Zeilen nicht. Alle früheren
+  „IB realisiert"-Summen aus der Datenbank (10.614 €) waren daher zu klein.
+- **Echte IB-Werte aus den Jahresdateien** (`C:\Tradinglex\Flex_20*.xml`,
+  34.510 Ausführungen, deckungsgleich mit der DB): IB `fifoPnlRealized`
+  je Handelsjahr in EUR: 2022 30.954 | 2023 29.758 | 2024 −725 | 2025 37.882 |
+  2026 −20.015 | **Summe 77.854**. (`fifoPnlRealized` ist bei IB schon **netto
+  nach Kommission**: Beispiel 20 Gewinn − 0,19 − 0,19 = 19,62; das Journal
+  bucht Kommissionen ebenfalls im Ergebnis — beides vergleichbar.)
+- **Journal (geschlossene Legs, Kontosicht) 106.796 € gegen IB 77.854 €: Diff
+  +28.942 €** (statt 96.183). Nach Gruppen: Barausgleich-Indexoptionen −845
+  (stimmt); mit Zuteilung/Ausübung **und noch gehaltenen Aktien +50.792**
+  (davon WDC allein +23.675); mit Zuteilung, Aktien vollständig verkauft
+  −14.661; ohne Zuteilung −7.189.
+- **Erklärung (Methode, kein Fehler):** IB bucht die Prämie bei Zuteilung in den
+  Einstand der Aktie (Optionszeile 0), das Journal weist sie sofort als Ertrag
+  der Option aus. Bei noch gehaltenen Aktien steckt sie bei IB im
+  Unrealisierten. Reststreuung (±15.000) ist die EUR-Methode: IB rechnet das
+  Gesamtergebnis zum Kurs des Schließungstags, das Journal jede Seite zum Kurs
+  ihrer Ausführung (Fall CCI: Journal 965 €, IB 972 €).
+- **Einzelfall CCI** (Put zugeteilt, Aktie verkauft, 12 Zeilen): Journal und IB
+  stimmen bis auf Wechselkursrundung überein.
+- **Gegenprobe NAV:** IB realisiert 77.854 + unrealisiert (rund −53.000)
+  ≈ Gewinn laut IB 24.674 (Kontowert − Einzahlungen). IB ist in sich stimmig.
+- **Folgen:**
+  1. Das Journal-Ergebnis ist „realisiert inklusive Prämien aus Zuteilungen";
+     es liegt um die Prämien in gehaltenen Aktien über IB. Das Dashboard zeigt
+     beides (Equity und Kontowert laut IB, AP-08h) — das ist so gewollt.
+  2. Import: bei Zeilen, die bereits aus einem Lauf ohne `fifoPnlRealized`
+     stammen, wird der Wert aus späteren Dateien nicht ergänzt. Das
+     Abgleichswerkzeug (`werkzeuge/abgleich/`) darf nicht auf `roh_json`
+     bauen. Eigenes Paket: Wert ergänzen, ohne `executions` zu überschreiben
+     (Regel 4) — etwa als eigene Tabelle `flex_ib_realized (transaction_id,
+     fifo_pnl_realized)`.
+  3. 53 Aktien-Instrumente ohne `underlying`: Import füllt den Basiswert nicht
+     (Ersatz `symbol` in den Filtern vorgesehen).
+  4. Ein Ausweis „Prämien in gehaltenen Aktien" (Journal − IB) wäre eine
+     eigene Kennzahl; nicht Teil dieser Frage.
+
 **Folge:** Bis zur Korrektur sind alle realisierten Geldsummen des Journals
 zu hoch. Teil 1 der Korrektur: AP-06i (lose Legs ins Geld; Abnahmebasis
 liegt, Umsetzung Cline). Danach Echtabgleich je Jahr durch das starke
