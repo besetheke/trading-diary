@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import Kalender from './Kalender'
+import Kampagnen from './Kampagnen'
 import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
 import Tag from './Tag'
@@ -41,6 +42,7 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
           </p>
           <nav className="hauptnav">
             <Link to="/">Positionen</Link>
+            <Link to="/kampagnenliste">Kampagnen</Link>
             <Link to="/monat">Kalender</Link>
             <Link to={`/tag/${heuteDatum()}`}>Heute</Link>
           </nav>
@@ -52,6 +54,9 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
                 heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
                 erreichen und nicht den JSON-Fehler 422 des Endpunkts. */}
             <Route path="/monat" element={<Kalender />} />
+            {/* AP-08-kampagnen: ebenso heißt die Seite /kampagnenliste —
+                /kampagnen und /kampagnen/{id} sind API-Endpunkte. */}
+            <Route path="/kampagnenliste" element={<Kampagnen />} />
             <Route path="/positionen/:chainId" element={<PositionDetail />} />
             <Route path="/tag/:datum" element={<Tag />} />
             <Route path="*" element={<Unbekannt />} />

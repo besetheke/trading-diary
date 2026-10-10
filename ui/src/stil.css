@@ -536,3 +536,16 @@ details.spaltenwahl li.aus {
 details.spaltenwahl li button {
   padding: 0.05rem 0.5rem;
 }
+
+/* AP-08-kampagnen: aufgeklappte Kettenliste unter der Kampagnenzeile —
+   leicht abgesetzt, damit der Bereich als zugehörig lesbar bleibt. */
+table.positionen tr.kampagnendetail td {
+  background: #f4f1ec;
+}
+
+/* Die Kampagnenzeile klappt bei Klick auf (Vertrag AP-08-kampagnen) — der
+   Zeiger zeigt das an; der Knopf am Zeilenende tut denselben Dienst für
+   die Tastatur. */
+table.positionen.kampagnen > tbody > tr:not(.kampagnendetail) {
+  cursor: pointer;
+}

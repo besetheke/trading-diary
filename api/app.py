@@ -1,5 +1,6 @@
 """Lese-API über Ketten, Strukturen und Ausführungen (AP-07l), seit AP-08l
-mit statischer Auslieferung der gebauten Oberfläche.
+mit statischer Auslieferung der gebauten Oberfläche und seit AP-08-kampagnen
+mit den bestätigten Kampagnen (``campaigns``/``campaign_links``).
 
 Umsetzung des Vertrags 1–17 aus ``auftraege/AP-07lv.md`` (Abnahmebasis:
 ``tests/test_api_lesen.py``). Die Anwendung ist ausschließlich lesend — im
@@ -46,6 +47,7 @@ from sqlalchemy.engine import Connection
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
+    campaign_links,
     campaigns,
     chain_links,
     chains,
@@ -197,6 +199,40 @@ class AusfuehrungAntwort(BaseModel):
 class KettenListeAntwort(BaseModel):
     gesamt: int
     treffer: list[KetteAntwort]
+
+
+# AP-08-kampagnen: bestätigte Kampagnen — reines Durchreichen der Tabellen,
+# keine Neuberechnung der Kandidaten (die bleiben bei der CLI-Dateirundreise).
+class KampagneAntwort(BaseModel):
+    """Eine bestätigte Kampagne (campaigns-Zeile mit Kettenzahl)."""
+
+    campaign_id: int
+    underlying: str
+    eroeffnet_am: datetime
+    beendet_am: datetime | None
+    # Regel 5/13: Geld als Zeichenkette wie bei /ketten; eine laufende
+    # Kampagne ohne Ergebnis bleibt leer, kein "0".
+    netto_pnl_eur: str | None
+    anzahl_ketten: int
+
+
+class KampagnenKetteAntwort(BaseModel):
+    """Eine verknüpfte Kette einer Kampagne (campaign_links-Zeile)."""
+
+    chain_id: int
+    natur_schluessel: str
+    beziehungstyp: str
+    erkennung: str
+    bestaetigt_am: datetime | None
+
+
+class KampagneDetailAntwort(KampagneAntwort):
+    ketten: list[KampagnenKetteAntwort]
+
+
+class KampagnenListeAntwort(BaseModel):
+    gesamt: int
+    treffer: list[KampagneAntwort]
 
 
 # ---------------------------------------------------------------------------
@@ -587,6 +623,23 @@ def _kette_als_dict(
         oa_strategie=k["oa_strategie"],
         oa_status=k["oa_status"],
         oa_erkennung=k["oa_erkennung"],
+    )
+
+
+def _kampagne_als_dict(zeile, anzahl_ketten: int) -> dict:
+    """Spaltenwerte einer Kampagnenzeile für das Antwortmodell (AP-08-kampagnen).
+
+    Reines Durchreichen: ``netto_pnl_eur`` wird wie jedes Geld zur Zeichenkette
+    (Regel 5/13), ein leerer Wert bleibt leer — eine laufende Kampagne ohne
+    Ergebnis ist kein Nullergebnis.
+    """
+    return dict(
+        campaign_id=zeile["campaign_id"],
+        underlying=zeile["underlying"],
+        eroeffnet_am=zeile["eroeffnet_am"],
+        beendet_am=zeile["beendet_am"],
+        netto_pnl_eur=_als_text(zeile["netto_pnl_eur"]),
+        anzahl_ketten=anzahl_ketten,
     )
 
 
@@ -1081,6 +1134,85 @@ def erzeuge_app(
                     ],
                 )
                 for tag_datum, eintrag in sorted(ereignisse.items())
+            ],
+        )
+
+    # -----------------------------------------------------------------------
+    # Kampagnen (AP-08-kampagnen): bestätigte Zuordnungen aus campaigns/
+    # campaign_links — rein lesend. Offene (unbestätigte) Kandidaten werden
+    # nicht berechnet und bleiben der CLI-Dateirundreise überlassen.
+    # -----------------------------------------------------------------------
+
+    @applikation.get("/kampagnen", response_model=KampagnenListeAntwort)
+    def kampagnen(underlying: str | None = None) -> KampagnenListeAntwort:
+        """Liste der bestätigten Kampagnen — Eröffnung absteigend (wie
+        /ketten); ``eroeffnet_am`` ist pflichtgefüllt, bei Gleichstand
+        entscheidet die aufsteigende ``campaign_id`` (Determinismus wie
+        OF-44). Ohne Begrenzung zählt ``gesamt`` alle Treffer."""
+        bedingungen = []
+        if underlying:
+            bedingungen.append(campaigns.c.underlying == underlying)
+        with engine.connect() as verbindung:
+            zeilen = verbindung.execute(
+                select(
+                    campaigns,
+                    func.count(campaign_links.c.chain_id).label("anzahl_ketten"),
+                )
+                .outerjoin(
+                    campaign_links, campaign_links.c.campaign_id == campaigns.c.campaign_id
+                )
+                .where(*bedingungen)
+                .group_by(campaigns.c.campaign_id)
+                .order_by(campaigns.c.eroeffnet_am.desc(), campaigns.c.campaign_id)
+            ).mappings().all()
+        return KampagnenListeAntwort(
+            gesamt=len(zeilen),
+            treffer=[
+                KampagneAntwort(**_kampagne_als_dict(zeile, zeile["anzahl_ketten"]))
+                for zeile in zeilen
+            ],
+        )
+
+    @applikation.get("/kampagnen/{campaign_id}", response_model=KampagneDetailAntwort)
+    def kampagne_einzeln(campaign_id: int) -> KampagneDetailAntwort:
+        """Eine Kampagne mit ihren verknüpften Ketten — nach ``chain_id``
+        aufsteigend, damit die Reihenfolge deterministisch bleibt. Der
+        Naturschlüssel kommt aus ``chains`` (chain_id ist dort alleiniger
+        Primärschlüssel, der Join trifft also genau eine Zeile)."""
+        with engine.connect() as verbindung:
+            zeile = verbindung.execute(
+                select(campaigns).where(campaigns.c.campaign_id == campaign_id)
+            ).mappings().one_or_none()
+            if zeile is None:
+                raise HTTPException(status_code=404, detail="Kampagne nicht gefunden")
+            anzahl_ketten = verbindung.execute(
+                select(func.count())
+                .select_from(campaign_links)
+                .where(campaign_links.c.campaign_id == campaign_id)
+            ).scalar_one()
+            ketten_zeilen = verbindung.execute(
+                select(
+                    campaign_links.c.chain_id,
+                    campaign_links.c.beziehungstyp,
+                    campaign_links.c.erkennung,
+                    campaign_links.c.bestaetigt_am,
+                    chains.c.natur_schluessel,
+                )
+                .join(chains, chains.c.chain_id == campaign_links.c.chain_id)
+                .where(campaign_links.c.campaign_id == campaign_id)
+                .order_by(campaign_links.c.chain_id)
+            ).mappings().all()
+        return KampagneDetailAntwort(
+            **_kampagne_als_dict(zeile, anzahl_ketten),
+            ketten=[
+                KampagnenKetteAntwort(
+                    chain_id=z["chain_id"],
+                    natur_schluessel=z["natur_schluessel"],
+                    beziehungstyp=z["beziehungstyp"],
+                    erkennung=z["erkennung"],
+                    bestaetigt_am=z["bestaetigt_am"],
+                )
+                for z in ketten_zeilen
             ],
         )
 

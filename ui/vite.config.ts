@@ -18,6 +18,9 @@ export default defineConfig({
       '/kalender': 'http://localhost:8000',
       '/journal': 'http://localhost:8000',
       '/tags': 'http://localhost:8000',
+      // AP-08-kampagnen: die Kampagnen-Endpunkte; die Seite heißt
+      // /kampagnenliste und bleibt beim Entwicklungsserver.
+      '/kampagnen': 'http://localhost:8000',
     },
   },
 })

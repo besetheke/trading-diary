@@ -279,6 +279,34 @@ export interface Monatskalender {
   tage: Kalendertag[]
 }
 
+// AP-08-kampagnen: bestätigte Kampagnen — wie immer gilt: Geld bleibt
+// Zeichenkette, Reihenfolge wie geliefert, nichts gerechnet.
+export interface Kampagne {
+  campaign_id: number
+  underlying: string
+  eroeffnet_am: string
+  beendet_am: string | null
+  netto_pnl_eur: string | null
+  anzahl_ketten: number
+}
+
+export interface KampagnenKette {
+  chain_id: number
+  natur_schluessel: string
+  beziehungstyp: string
+  erkennung: string
+  bestaetigt_am: string | null
+}
+
+export interface KampagnenDetail extends Kampagne {
+  ketten: KampagnenKette[]
+}
+
+export interface KampagnenListe {
+  gesamt: number
+  treffer: Kampagne[]
+}
+
 // AP-07j, Journal (AP-08j): Notizen und Tags eines Bereichs. Der Text bleibt
 // unverändert — Leerraum inklusive; Zeitstempel sind Zeichenketten der API.
 
@@ -309,6 +337,19 @@ export function holeTag(datum: string): Promise<Tagesuebersicht> {
 
 export function holeKalender(monat: string): Promise<Monatskalender> {
   return hole(`/kalender?monat=${encodeURIComponent(monat)}`) as Promise<Monatskalender>
+}
+
+// AP-08-kampagnen: ohne Filter das ganze Verzeichnis der bestätigten
+// Kampagnen.
+export function holeKampagnen(underlying?: string): Promise<KampagnenListe> {
+  const zusaetze = new URLSearchParams()
+  if (underlying) zusaetze.set('underlying', underlying)
+  const query = zusaetze.toString()
+  return hole(`/kampagnen${query === '' ? '' : `?${query}`}`) as Promise<KampagnenListe>
+}
+
+export function holeKampagne(campaignId: number): Promise<KampagnenDetail> {
+  return hole(`/kampagnen/${campaignId}`) as Promise<KampagnenDetail>
 }
 
 export function holeJournal(scopeTyp: string, scopeId: string): Promise<JournalInhalt> {
