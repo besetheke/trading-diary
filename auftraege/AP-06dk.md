@@ -1,7 +1,7 @@
 ---
 titel: Roll-Degradation — Umsetzung (AP-06 Tranche III)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-06d
 aendert_tests: nein
 ---

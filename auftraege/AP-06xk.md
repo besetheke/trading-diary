@@ -1,7 +1,7 @@
 ---
 titel: Barausgleich in der wirtschaftlichen EUR-Rechnung — Umsetzung (OF-69)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-06x
 aendert_tests: nein
 ---

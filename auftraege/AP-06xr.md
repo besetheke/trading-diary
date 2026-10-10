@@ -1,7 +1,7 @@
 ---
 titel: Gemeinsame Leg-Seiten-Zerlegung für die EUR-Rechnung (Refactoring)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-06xk
 aendert_tests: nein
 ---
