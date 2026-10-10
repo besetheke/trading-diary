@@ -27,6 +27,8 @@ export default defineConfig({
       // AP-06f/AP-06g: Kosten & Erträge und Kapital.
       '/cashflows': 'http://localhost:8000',
       '/kapital': 'http://localhost:8000',
+      // AP-06h: Kontowert laut IB.
+      '/nav': 'http://localhost:8000',
     },
   },
 })

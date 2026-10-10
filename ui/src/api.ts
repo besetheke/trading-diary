@@ -487,3 +487,27 @@ export interface Kapital {
 export function holeKapital(von?: string | null, bis?: string | null): Promise<Kapital> {
   return hole(`/kapital${zeitraumQuery(von, bis)}`) as Promise<Kapital>
 }
+
+// AP-06h, Kontowert laut IB (realisiert + unrealisiert) je Tag; gewinn =
+// Kontowert − kumulierte Einzahlungen. Im Zeitraum der Bestand.
+export interface NavTag {
+  datum: string
+  gesamt: string
+  cash: string | null
+  aktien: string | null
+  optionen: string | null
+  rohstoffe: string | null
+  einzahlungen_kumuliert: string
+  gewinn: string
+}
+
+export interface Nav {
+  tage: NavTag[]
+  anfangswert: string | null
+  endwert: string | null
+  anzahl_kurs_fehlt: number
+}
+
+export function holeNav(von?: string | null, bis?: string | null): Promise<Nav> {
+  return hole(`/nav${zeitraumQuery(von, bis)}`) as Promise<Nav>
+}

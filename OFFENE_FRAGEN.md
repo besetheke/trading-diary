@@ -3050,3 +3050,26 @@ belastbar. Bis dahin: der NAV (IB) ist die maßgebliche Kapitalgröße.
 `twr`, alle Einzelposten leer (Option „Realized & Unrealized"). Der
 Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
 10 Minuten nicht erzeugt — der Nachtlauf (12 × 10 s) scheitert damit.
+→ Behoben: Query-Zeitraum auf 30 Tage, Abruf in ~19 s (10.10.2026).
+
+**Nachtrag 10.10.2026 (nach AP-02n/AP-06h, NAV importiert):**
+
+- Gewinn laut IB (Kontowert − Einzahlungen) am 2026-10-09: **+24.674 €**
+  (Kontowert 244.673 €, Einzahlungen 219.999 €). Journal realisiert + Cash-
+  Posten: +165.448 €. Lücke rund 140.000 €.
+- **Ursache 1 belegt — fehlende Aktienverluste:** 162 abgeschlossene
+  Aktien-Legs in USD (Kontosicht) gehören zu keiner Struktur
+  (`legs.structure_id IS NULL`), brutto −72.820 USD (rund −65.000 €); dazu 2
+  SEK-Legs (−1.109 SEK) und 1 EUR-Leg. Equity-Kurve, Kennzahlen und Kapital
+  summieren nur Strukturen — **diese Ergebnisse fehlen in jeder Geldsumme**.
+  Vermutlich Verkäufe angedienter Aktien: die Prämie ist realisiert, der
+  Verlust beim Aktienverkauf nicht.
+- Ursache 2: unrealisiert laut IB rund −53.000 € (gehört nicht ins
+  realisierte Ergebnis, erklärt aber die Lücke zum Kontowert).
+- Rest rund 22.000 €: Währung (Fremdwährungs-Cash, EUR-Methode) und Methode
+  bei Andienung — noch nicht zerlegt.
+
+**Folge:** Bis zur Korrektur sind alle realisierten Geldsummen des Journals
+zu hoch. Korrektur ist ein eigenes Paket (starkes Modell): Ergebnis
+unstrukturierter Legs in den Geldsummen der Kontosicht ausweisen, mit
+Abnahme gegen IBs realisiertes Ergebnis je Jahr.

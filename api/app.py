@@ -50,6 +50,7 @@ from sqlalchemy.engine import Connection
 from analytics.cashflows import cashflow_bericht
 from analytics.equity import equity_bericht
 from analytics.kapital import kapital_bericht
+from analytics.nav import nav_bericht
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -296,6 +297,25 @@ class KapitalTagAntwort(BaseModel):
     ergebnis_kumuliert: str
     cash_kumuliert: str
     kapital: str
+
+
+class NavTagAntwort(BaseModel):
+    datum: date
+    gesamt: str
+    cash: str | None
+    aktien: str | None
+    optionen: str | None
+    rohstoffe: str | None
+    einzahlungen_kumuliert: str
+    gewinn: str
+
+
+# AP-06h: Kontowert laut IB (realisiert + unrealisiert) und Gewinn laut IB.
+class NavAntwort(BaseModel):
+    tage: list[NavTagAntwort]
+    anfangswert: str | None
+    endwert: str | None
+    anzahl_kurs_fehlt: int
 
 
 class KapitalAntwort(BaseModel):
@@ -1329,6 +1349,32 @@ def erzeuge_app(
             ],
             max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
             max_drawdown_datum=ergebnis.max_drawdown_datum,
+        )
+
+    @applikation.get("/nav", response_model=NavAntwort)
+    def nav(von: date | None = None, bis: date | None = None) -> NavAntwort:
+        """Kontowert je Tag laut IB und Gewinn laut IB (AP-06h) — reicht durch,
+        was ``analytics.nav.nav_bericht`` liefert."""
+        if von is not None and bis is not None and von > bis:
+            raise HTTPException(status_code=422, detail="von liegt nach bis")
+        e = nav_bericht(db_pfad, von=von, bis=bis)
+        return NavAntwort(
+            tage=[
+                NavTagAntwort(
+                    datum=t.datum,
+                    gesamt=_als_text(t.gesamt),
+                    cash=_als_text(t.cash),
+                    aktien=_als_text(t.aktien),
+                    optionen=_als_text(t.optionen),
+                    rohstoffe=_als_text(t.rohstoffe),
+                    einzahlungen_kumuliert=_als_text(t.einzahlungen_kumuliert),
+                    gewinn=_als_text(t.gewinn),
+                )
+                for t in e.tage
+            ],
+            anfangswert=_als_text(e.anfangswert),
+            endwert=_als_text(e.endwert),
+            anzahl_kurs_fehlt=e.anzahl_kurs_fehlt,
         )
 
     @applikation.get("/kapital", response_model=KapitalAntwort)
