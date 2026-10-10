@@ -2931,3 +2931,19 @@ echte Abruf mit dem Token des Nutzers ist die Probe.** Weicht die echte
 Antwort ab (anderes Element, andere Adresse), ist das ein kleiner
 Korrekturauftrag am Transport bzw. an `BASIS_URL`, nicht an der Logik.
 Noch beim Nutzer: Flex-Query nach §6.2 anpassen, Token im IBKR-Portal anlegen.
+
+## OF-75 · Reihenfolge: AP-11 (Options-Roller-Integration) ans Ende geparkt
+
+Entscheidung des Nutzers (10.10.2026): **AP-11 (Absichtserfassung im Options
+Roller, `roller_link`) wird zurückgestellt, bis alle anderen offenen Pakete
+abgeschlossen sind.** Grund: Der Options-Roller ist ein externes, eigenes
+Projekt (separates Repository `options-roller`, inzwischen ebenfalls
+migriert und versioniert); die Verzahnung über `roller_link` existiert nach
+Prüfung des Roller-Codes bislang **nur im Plan, nicht in der Umsetzung** —
+der Roller schreibt aktuell nirgends in `journal.db`. AP-11 bleibt also ohne
+Risiko für die laufende Arbeit am Diary aufschiebbar.
+
+**Reihenfolge bis dahin:** weiter mit dem MVP-Pfad aus OF-73 (AP-07jk →
+AP-07tk → AP-08j/AP-08j2), danach die übrigen offenen Umsetzungspakete, deren
+Abnahmebasis bereits steht (AP-04sy, AP-04szk, AP-05dk, AP-05rk, AP-06dk,
+AP-06xk/xr, AP-07sk, AP-08s, AP-13s/t/y/zk, AP-02a2k). AP-11 erst danach.
