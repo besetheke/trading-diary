@@ -1,7 +1,7 @@
 ---
 titel: Tagesübersicht und Kalender der Lese-API — Umsetzung
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07t
 aendert_tests: nein
 ---

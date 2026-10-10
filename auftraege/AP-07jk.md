@@ -1,7 +1,7 @@
 ---
 titel: Journal-Endpunkte der API — Umsetzung
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07j
 aendert_tests: nein
 ---

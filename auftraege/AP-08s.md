@@ -1,7 +1,7 @@
 ---
 titel: Positionsliste — Zeit zuerst, sortierbare und wählbare Spalten, schmalere Zeilen
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07sk, AP-08j2
 aendert_tests: nein
 ---

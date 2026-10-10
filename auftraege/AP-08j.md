@@ -1,7 +1,7 @@
 ---
 titel: Oberfläche für das tägliche Journal (Notizen, Tags, Tagesansicht, Kalender)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07jk, AP-07tk
 aendert_tests: nein
 ---
