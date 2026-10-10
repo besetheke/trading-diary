@@ -180,11 +180,13 @@ def test_auswertung_ohne_filter(klient):
 
 
 def test_auswertung_nach_waehrung(klient):
+    """Die Währung kennt auch ein loses Leg: der Filter schließt es nicht aus
+    (hier gibt es keines), die Kennzeichnung bleibt wahr (test_api_filter_lose_legs)."""
     daten = klient.get("/auswertung", params={"waehrung": "USD"}).json()
     assert [(t["datum"], t["netto_eur"]) for t in daten["tage"]] == [("2026-03-01", "52.00")]
     assert daten["ergebnis"] == {
         "anzahl_ketten": 1, "anzahl_strukturen": 1, "summe_netto_eur": "52.00",
-        "anzahl_kurs_fehlt": 0, "lose_legs_eingeschlossen": False,
+        "anzahl_kurs_fehlt": 0, "lose_legs_eingeschlossen": True,
     }
     assert daten["max_drawdown_eur"] == "0.00"
 

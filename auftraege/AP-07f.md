@@ -12,8 +12,9 @@ Teil des Facelifts (`auftraege/AP-08f.md`, Zeile AP-07f). Der Nutzer will die
 Positionen nach Zeit (Eröffnung/Schließung), Währung, Strategie und mehr
 filtern und für den **gefilterten Rest** Verlauf und Ergebnis sehen. Die
 Abnahmebasis hat das starke Modell gelegt (eigener Commit):
-`tests/test_api_filter.py` (24 Fälle), **unveränderlich**, derzeit rot.
-Erwartungswerte stehen im Kopf der Testdatei.
+`tests/test_api_filter.py` (24 Fälle) und `tests/test_api_filter_lose_legs.py`
+(Regel für lose Legs unter Filtern), **unveränderlich**, derzeit rot.
+Erwartungswerte stehen im Kopf der Testdateien.
 
 Reine Python-Arbeit in `api/app.py` und `analytics/equity.py`. Keine
 Oberfläche (das ist AP-08g2b).
@@ -59,15 +60,38 @@ Ablauf:
 
 1. Ketten-IDs = `chain_id` aller Ketten, die die Kettenfilter erfüllen
    (ohne `von`/`bis`).
-2. Ist **mindestens ein Kettenfilter** gesetzt, rechnet
-   `equity_bericht(..., ketten_ids=frozenset(ids), von=..., bis=...)`;
-   sonst `ketten_ids=None` (alles inklusive loser Legs, AP-06i).
-3. `analytics/equity.py`: `equity_auswertung` und `equity_bericht` bekommen
-   den Parameter `ketten_ids: frozenset[int] | None = None`. Ist er
-   gesetzt, zählen nur Strukturen, die über `glieder_zeilen` (`chain_links`)
-   zu einer dieser Ketten gehören; **lose Legs (AP-06i) zählen dann nicht**
-   (sie haben keine Kette). Die Standardwerte lassen alle bisherigen Tests
-   unverändert.
+2. Ist **mindestens ein Kettenfilter** gesetzt, zählen nur Strukturen der
+   gefundenen Ketten (`ketten_ids`); sonst alles.
+3. **Lose Legs (AP-06i) unter Filtern — Regel des Nutzers:** Ein Filter, den
+   ein loses Leg kennt, gilt auch für das lose Leg; ein Filter, den es nicht
+   kennt, schließt es aus. Ohne Filter zählt es mit.
+
+   | Filter | loses Leg |
+   |---|---|
+   | `basiswert` | `instruments.underlying` des Legs (sonst `symbol`) |
+   | `anlageklasse` | `instruments.asset_class` |
+   | `waehrung` | `executions.waehrung` der **schließenden** Ausführung |
+   | `geschlossen_ab`, `geschlossen_bis` | Tag der schließenden Ausführung (`handelszeit`), beide Enden einschließlich |
+   | `eroeffnet_ab`, `eroeffnet_bis` | Eröffnung des Legs (`handelszeit` der eröffnenden Ausführung), gleiche Vergleichslogik wie bei den Ketten |
+   | `strategie`, `seite`, `endzustand`, `min_rolls`, `max_rolls` | **schließen es aus** (kennt es nicht) |
+
+4. `analytics/equity.py`: `equity_auswertung` und `equity_bericht` bekommen
+   zwei neue Schlüsselwortparameter mit Standardwerten, die das bisherige
+   Verhalten unverändert lassen:
+   - `ketten_ids: frozenset[int] | None = None` — gesetzt: nur Strukturen,
+     die über `glieder_zeilen` (`chain_links`) zu einer dieser Ketten
+     gehören.
+   - `lose_legs: LoseLegFilter | None | Literal[False] = None` —
+     `None`: alle losen Legs (bisher); `False`: keine; sonst ein kleiner
+     `@dataclass(frozen=True) LoseLegFilter` mit `basiswert`, `anlageklasse`,
+     `waehrung`, `geschlossen_ab`, `geschlossen_bis`, `eroeffnet_ab`,
+     `eroeffnet_bis` (je `None` = nicht filtern). (Namen und Form dürfen
+     abweichen, solange die Tests grün sind; die Entscheidung gehört in den
+     Modulkopf.)
+   - `equity_bericht` liest dafür zusätzlich `instruments.underlying`,
+     `instruments.asset_class` und `instruments.symbol`.
+   - Die Filter für lose Legs werden **in der Python-Auswertung** angewendet
+     (rein, keine SQL-Zeichenketten aus Eingaben).
 
 Antwort (`AuswertungAntwort`):
 
@@ -96,8 +120,10 @@ Antwort (`AuswertungAntwort`):
   Startwert `Decimal("0.00")`, Ausgabe über `_als_text`. Keine Rundung.
 - `anzahl_kurs_fehlt`: Summe aus `anzahl_strukturen_kurs_fehlt` und
   `anzahl_lose_legs_kurs_fehlt` über alle Tage.
-- `lose_legs_eingeschlossen`: `true` genau dann, wenn kein Kettenfilter
-  gesetzt war.
+- `lose_legs_eingeschlossen`: `true`, wenn **kein Filter gesetzt ist, der
+  lose Legs ausschließt** (`strategie`, `seite`, `endzustand`, `min_rolls`,
+  `max_rolls`); sonst `false`. Es sagt, ob lose Legs mitgerechnet *werden
+  dürfen*, nicht, ob eines vorkam.
 - Route immer aktiv (nicht hinter `mit_journal`), **vor** der Rückfall-Route
   eintragen, nur lesend (`engine.connect()`), wie `/equity`.
 
@@ -111,7 +137,7 @@ Antwort (`AuswertungAntwort`):
 
 ## Abnahme
 
-`tests/test_api_filter.py` komplett grün, Gesamtsuite grün
+`tests/test_api_filter.py` und `tests/test_api_filter_lose_legs.py` komplett grün, Gesamtsuite grün
 (`.venv\Scripts\python.exe -m pytest -q` im Vordergrund, Ergebnis direkt
 lesen, Timeout 10 Minuten), `ruff check .` sauber, `git diff --stat` nur
 `api/app.py`, `analytics/equity.py` und dieses Auftragsdokument (Status auf
