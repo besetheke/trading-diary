@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { fehlerText, holeEquity } from './api'
 import type { Equity } from './api'
-import { datum, geld } from './format'
+import Betrag from './Betrag'
+import { datumDe, prozent } from './format'
 
 // AP-06e/Dashboard: Equity-Kurve und Drawdown als Tabellen, kein Diagramm —
 // stil.css nennt das ausdrücklich als Gestaltungsprinzip der Oberfläche
 // ("Lesen und Nachvollziehen, kein Diagramm"). Geld bleibt Zeichenkette,
-// nichts wird hier gerechnet (Vertrag 8/9 wie überall).
+// nichts wird hier gerechnet (Vertrag 8/9 wie überall). AP-08f1: deutsche
+// Schreibweise, Rohwert im title.
 
 export default function Dashboard(): JSX.Element {
   const [equity, setzeEquity] = useState<Equity | null>(null)
@@ -45,8 +47,8 @@ export default function Dashboard(): JSX.Element {
     <section>
       <h2>Dashboard</h2>
       <p className="sicht fussnote">
-        Equity-Kurve und Monatsübersicht, Kontosicht, in EUR — nichts gerechnet, nur
-        durchgereicht von <code>GET /equity</code>.
+        Equity-Kurve und Monatsübersicht, Kontosicht, in EUR — Ergebnis am Tag der
+        Schließung. Der genaue Wert steht im Tooltip.
       </p>
 
       {equity.tage.length === 0 ? (
@@ -57,17 +59,18 @@ export default function Dashboard(): JSX.Element {
         <>
           <dl className="kopf">
             <div>
-              <dt>Stand</dt>
+              <dt>Stand {letzterTag ? `(${datumDe(letzterTag.datum)})` : ''}</dt>
               <dd>
-                {letzterTag ? geld(letzterTag.kumuliert_eur, 'EUR') : '—'}
-                {letzterTag ? ` (${datum(letzterTag.datum)})` : ''}
+                <Betrag wert={letzterTag ? letzterTag.kumuliert_eur : null} />
               </dd>
             </div>
             <div>
-              <dt>Maximaler Drawdown</dt>
+              <dt>
+                Maximaler Drawdown
+                {equity.max_drawdown_datum ? ` (${datumDe(equity.max_drawdown_datum)})` : ''}
+              </dt>
               <dd>
-                {geld(equity.max_drawdown_eur, 'EUR')}
-                {equity.max_drawdown_datum ? ` (${datum(equity.max_drawdown_datum)})` : ''}
+                <Betrag wert={equity.max_drawdown_eur} />
               </dd>
             </div>
             <div>
@@ -89,20 +92,23 @@ export default function Dashboard(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {equity.monate.map((m) => (
-                <tr key={m.monat}>
-                  <td>{m.monat}</td>
-                  <td className="zahl">{m.anzahl_strukturen}</td>
-                  <td className="zahl">{geld(m.summe_netto_eur, 'EUR')}</td>
-                  <td className="zahl">
-                    {m.durchschnitt_netto_eur === null
-                      ? '—'
-                      : geld(m.durchschnitt_netto_eur, 'EUR')}
-                  </td>
-                  <td className="zahl">{m.trefferquote ?? '—'}</td>
-                  <td className="zahl">{m.anzahl_strukturen_kurs_fehlt}</td>
-                </tr>
-              ))}
+              {equity.monate
+                .slice()
+                .reverse()
+                .map((m) => (
+                  <tr key={m.monat}>
+                    <td>{m.monat}</td>
+                    <td className="zahl">{m.anzahl_strukturen}</td>
+                    <td className="zahl">
+                      <Betrag wert={m.summe_netto_eur} />
+                    </td>
+                    <td className="zahl">
+                      <Betrag wert={m.durchschnitt_netto_eur} />
+                    </td>
+                    <td className="zahl">{prozent(m.trefferquote)}</td>
+                    <td className="zahl">{m.anzahl_strukturen_kurs_fehlt || ''}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
 
@@ -125,12 +131,18 @@ export default function Dashboard(): JSX.Element {
                   .reverse()
                   .map((t) => (
                     <tr key={t.datum}>
-                      <td>{datum(t.datum)}</td>
+                      <td>{datumDe(t.datum)}</td>
                       <td className="zahl">{t.anzahl_strukturen}</td>
-                      <td className="zahl">{geld(t.netto_eur, 'EUR')}</td>
-                      <td className="zahl">{geld(t.kumuliert_eur, 'EUR')}</td>
-                      <td className="zahl">{geld(t.drawdown_eur, 'EUR')}</td>
-                      <td className="zahl">{t.anzahl_strukturen_kurs_fehlt}</td>
+                      <td className="zahl">
+                        <Betrag wert={t.netto_eur} />
+                      </td>
+                      <td className="zahl">
+                        <Betrag wert={t.kumuliert_eur} />
+                      </td>
+                      <td className="zahl">
+                        <Betrag wert={t.drawdown_eur} />
+                      </td>
+                      <td className="zahl">{t.anzahl_strukturen_kurs_fehlt || ''}</td>
                     </tr>
                   ))}
               </tbody>

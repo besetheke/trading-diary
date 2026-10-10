@@ -50,6 +50,15 @@ a {
   color: var(--akzent);
 }
 
+/* AP-08f1: Vorzeichenfarbe für Beträge (format.ts, vorzeichen()). */
+.positiv {
+  color: #1d6b3a;
+}
+
+.negativ {
+  color: #a33a2a;
+}
+
 /* Zahlen tabellarisch und rechtsbündig — Geld bleibt Zeichenkette, nur die
    Ausrichtung ist Darstellungssache. */
 .zahl {

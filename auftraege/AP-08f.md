@@ -1,8 +1,8 @@
 ---
-titel: Verdichtung der Ansichten (Facelift) - vorgemerkt, noch kein Auftrag
+titel: Verdichtung der Ansichten (Facelift) - Zuschnitt in AP-08f1 bis AP-08f5
 modell: stark
-status: vorgemerkt
-abhaengig_von: AP-08l
+status: offen
+abhaengig_von: AP-08l, AP-06e
 ---
 
 # AP-08f · Verdichtung der Ansichten
@@ -77,3 +77,39 @@ Zuschnitt.
   Spaltenwahl, Aufklappen und Tastaturbedienung trägt, ist sie nicht mehr
   dünn — und die Begründung aus AP-08lv, ohne Test auszukommen, fällt weg.
   Dann ist der Vergleich Vitest gegen Playwright fällig.
+
+## Zuschnitt (Nutzer, 10.10.2026: „Fang an")
+
+Erledigt seit der Vormerkung: Preise in der Liste (AP-08fp), sortierbare und
+wählbare Spalten (AP-08s), Dashboard mit Equity-Kurve (AP-06e).
+
+| Paket | Inhalt | Wer |
+|---|---|---|
+| **AP-08f1** | Deutsche Schreibweise für Beträge/Daten/Quoten in allen Ansichten, rot/grün nach Vorzeichen, Rohwert im Tooltip | günstig (Cline) — Helfer stehen bereit |
+| **AP-08f2** | Globaler Zeitraum-Wähler (Kopf, Adresse) + `von`/`bis` an den Kennzahlen-Endpunkten | stark |
+| **AP-08f3** | Startseite „Übersicht": offene Positionen nach DTE, Ergebnis Woche/Monat/Jahr, Equity-Stand, offene Durchsicht | stark |
+| **AP-08f4** | Strategie-Ansicht: Ergebnis, Trefferquote, Kommissionsanteil, Roll-Degradation je OA-Strategie | stark |
+| **AP-08f5** | Durchgängige Verknüpfung (Monat → Kalender → Tag → Kette, Strategie → Ketten) | offen |
+
+Die Durchsicht der Kandidaten in der Oberfläche (statt CSV-Rundreise) bleibt
+ein eigenes, späteres Paket — sie braucht zuerst gespeicherte Rollkandidaten.
+
+## Entscheidungen zum Zeitraum (Z1–Z4, gelten für alle Folgepakete)
+
+- **Z1 Ein Zeitraum für alles.** Gewählt im Kopf, steht in der Adresse
+  (`?von=JJJJ-MM-TT&bis=JJJJ-MM-TT`, beide Enden einschließlich), gilt für
+  jede Ansicht, die Zeit kennt. Ohne Angabe: alles. Vorgaben: Diese Woche,
+  Dieser Monat, Letzter Monat, Dieses Quartal, Dieses Jahr, Letztes Jahr,
+  einzelnes Jahr, Alles, Von–bis.
+- **Z2 Ergebnisse zählen am Tag der Schließung** (`geschlossen_am`) — wie die
+  Equity-Kurve (AP-06e, E2) und die Steuer (Zuflussprinzip).
+- **Z3 Positionslisten zeigen, was im Zeitraum aktiv war:** eröffnet bis
+  `bis`, und offen oder beendet ab `von`.
+- **Z4 Equity im Zeitraum** beginnt am Zeitraumanfang bei 0; der Drawdown
+  zählt nur innerhalb des Zeitraums.
+
+## Darstellung
+
+Das Gestaltungsprinzip „kein Diagramm" (`stil.css`) bleibt bis auf
+Weiteres stehen; der Nutzer wurde gefragt, ob eine schlichte Equity-Linie
+(SVG, nur Anzeige) erlaubt ist — bis zur Antwort Tabellen.

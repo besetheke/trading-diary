@@ -53,3 +53,56 @@ export function aufZweiNachkommastellen(wert: string): string {
   return `${vorzeichen}1${rest}`
 }
 
+// AP-08f1: Deutsche Schreibweise für Beträge — Tausenderpunkt, Dezimalkomma,
+// genau zwei Nachkommastellen, typografisches Minus. Wie oben reine
+// Zeichenarbeit: kein Number(), kein parseFloat. Der Rohwert gehört in den
+// title des Elements, damit nichts verloren geht.
+function istNull(wert: string): boolean {
+  return /^-?0*(\.0*)?$/.test(wert)
+}
+
+export function betrag(wert: string | null): string {
+  if (wert === null) return '—'
+  if (wert.includes('e') || wert.includes('E')) return wert
+  const gerundet = aufZweiNachkommastellen(wert)
+  const negativ = gerundet.startsWith('-') && !istNull(gerundet)
+  const ohne = gerundet.startsWith('-') ? gerundet.slice(1) : gerundet
+  const [ganz, nach = ''] = ohne.split('.')
+  const ganzMitPunkten = (ganz === '' ? '0' : ganz).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${negativ ? '−' : ''}${ganzMitPunkten},${(nach + '00').slice(0, 2)}`
+}
+
+export function geldDe(wert: string | null, waehrung: string = 'EUR'): string {
+  if (wert === null) return '—'
+  return `${betrag(wert)} ${waehrung === 'EUR' ? '€' : waehrung}`
+}
+
+// CSS-Klasse für rot/grün — leer bei null und bei allem, was in der Anzeige
+// als 0,00 erscheint (sonst stünde eine rote Null da).
+export function vorzeichen(wert: string | null): string {
+  if (wert === null || wert.includes('e') || wert.includes('E')) return ''
+  const gerundet = aufZweiNachkommastellen(wert)
+  if (istNull(gerundet)) return ''
+  return gerundet.startsWith('-') ? 'negativ' : 'positiv'
+}
+
+// JJJJ-MM-TT (auch mit Uhrzeit dahinter) → TT.MM.JJJJ.
+export function datumDe(iso: string | null): string {
+  if (!iso) return '—'
+  const [j, m, t] = iso.slice(0, 10).split('-')
+  return `${t}.${m}.${j}`
+}
+
+// Quote der API (z. B. "0.5000") als Prozent mit zwei Stellen: "50,00 %".
+// Komma um zwei Stellen verschieben — Zeichenarbeit, keine Multiplikation.
+export function prozent(wert: string | null): string {
+  if (wert === null) return '—'
+  const negativ = wert.startsWith('-')
+  const ohne = negativ ? wert.slice(1) : wert
+  const [ganz, nach = ''] = ohne.split('.')
+  const aufgefuellt = `${nach}00`
+  const verschoben = `${ganz}${aufgefuellt.slice(0, 2)}.${aufgefuellt.slice(2) || '0'}`
+  const ohneNullen = verschoben.replace(/^0+(?=\d)/, '')
+  return `${betrag((negativ ? '-' : '') + ohneNullen)} %`
+}
+
