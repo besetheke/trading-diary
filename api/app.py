@@ -37,6 +37,7 @@ Dokumentierte Annahmen (Regel 10, OF-44):
 
 import os
 import pathlib
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -44,7 +45,7 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, delete, exists, func, insert, or_, select, update
+from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, or_, select, update
 from sqlalchemy.engine import Connection
 
 from analytics.cashflows import cashflow_bericht
@@ -60,6 +61,7 @@ from journal.schema import (
     chains,
     entity_tags,
     executions,
+    instruments,
     journal_entries,
     legs,
     structures,
@@ -292,6 +294,16 @@ class AuswertungAntwort(BaseModel):
     max_drawdown_eur: str
     max_drawdown_datum: date | None
     ergebnis: AuswertungErgebnisAntwort
+
+
+# AP-07fw: wählbare Werte der Positionsfilter — nur Listen, keine Zählwerte.
+class FilterwerteAntwort(BaseModel):
+    basiswerte: list[str]
+    anlageklassen: list[str]
+    waehrungen: list[str]
+    strategien: list[str]
+    seiten: list[str]
+    endzustaende: list[str]
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -1491,6 +1503,73 @@ def erzeuge_app(
     # Kontosicht (analytics.equity, E1 — Geld ist Kontosicht-Sache). Keine
     # Parameter: die ganze Historie, wie journal kennzahlen --equity.
     # -----------------------------------------------------------------------
+
+    @applikation.get("/filterwerte", response_model=FilterwerteAntwort)
+    def filterwerte() -> FilterwerteAntwort:
+        """Die wählbaren Werte der Positionsfilter (AP-07fw), Kontosicht.
+
+        Basiswerte, Anlageklassen und Währungen schließen die Werte loser Legs
+        ein (AP-06i/AP-07f): Sie sind filterbar, also müssen sie wählbar sein.
+        Der Basiswert eines Instruments ist ``underlying``, sonst ``symbol``
+        (53 Aktien-Instrumente tragen kein ``underlying``, OF-78).
+        """
+
+        def werte(*mengen: Iterable[str | None]) -> list[str]:
+            """Vereinigt, ohne ``NULL`` und leere Zeichenketten, aufsteigend."""
+            return sorted({w for menge in mengen for w in menge if w})
+
+        lose_leg = and_(legs.c.sicht == SICHT, legs.c.structure_id.is_(None))
+        with engine.connect() as verbindung:
+            def ketten_spalte(spalte: ColumnElement[str]) -> set[str | None]:
+                return set(
+                    verbindung.execute(
+                        select(spalte).where(chains.c.sicht == SICHT).distinct()
+                    ).scalars()
+                )
+
+            lose_instrumente = verbindung.execute(
+                select(
+                    instruments.c.underlying,
+                    instruments.c.symbol,
+                    instruments.c.asset_class,
+                )
+                .select_from(legs.join(instruments, instruments.c.conid == legs.c.conid))
+                .where(lose_leg)
+                .distinct()
+            ).all()
+            lose_waehrungen = set(
+                verbindung.execute(
+                    select(executions.c.waehrung)
+                    .select_from(
+                        legs.join(
+                            executions, executions.c.exec_id == legs.c.close_exec_id
+                        )
+                    )
+                    .where(lose_leg)
+                    .distinct()
+                ).scalars()
+            )
+            struktur_waehrungen = set(
+                verbindung.execute(
+                    select(structures.c.waehrung)
+                    .where(structures.c.sicht == SICHT)
+                    .distinct()
+                ).scalars()
+            )
+            return FilterwerteAntwort(
+                basiswerte=werte(
+                    ketten_spalte(chains.c.underlying),
+                    {basis or symbol for basis, symbol, _ in lose_instrumente},
+                ),
+                anlageklassen=werte(
+                    ketten_spalte(chains.c.asset_class),
+                    {klasse for _, _, klasse in lose_instrumente},
+                ),
+                waehrungen=werte(struktur_waehrungen, lose_waehrungen),
+                strategien=werte(ketten_spalte(chains.c.oa_strategie)),
+                seiten=werte(ketten_spalte(chains.c.seite)),
+                endzustaende=werte(ketten_spalte(chains.c.endzustand)),
+            )
 
     @applikation.get("/equity", response_model=EquityAntwort)
     def equity(von: date | None = None, bis: date | None = None) -> EquityAntwort:

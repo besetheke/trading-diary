@@ -1,7 +1,7 @@
 ---
 titel: GET /filterwerte — wählbare Werte der Positionsfilter
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-07f
 aendert_tests: nein
 ---
