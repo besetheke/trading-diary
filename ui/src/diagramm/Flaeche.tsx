@@ -75,10 +75,9 @@ export default function Flaeche({ punkte, titel, farbe = 'negativ' }: Eigenschaf
               y2={RAND.oben + grafikHoehe(KURVE_HOEHE)}
             />
             {zeigerKasten(
+              [datumDe(gewaehlt.punkt.x), geldDe(gewaehlt.punkt.y)],
               geruest.px(gewaehlt.i),
               geruest.py(Number(gewaehlt.punkt.y)),
-              datumDe(gewaehlt.punkt.x),
-              geldDe(gewaehlt.punkt.y),
               `${gewaehlt.punkt.x} · ${gewaehlt.punkt.y}`,
               KURVE_BREITE,
               KURVE_HOEHE,

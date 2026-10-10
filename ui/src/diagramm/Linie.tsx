@@ -66,10 +66,9 @@ export default function Linie({ punkte, titel }: Eigenschaften): JSX.Element {
               y2={RAND.oben + grafikHoehe(KURVE_HOEHE)}
             />
             {zeigerKasten(
+              [datumDe(gewaehlt.punkt.x), geldDe(gewaehlt.punkt.y)],
               geruest.px(gewaehlt.i),
               geruest.py(Number(gewaehlt.punkt.y)),
-              datumDe(gewaehlt.punkt.x),
-              geldDe(gewaehlt.punkt.y),
               `${gewaehlt.punkt.x} · ${gewaehlt.punkt.y}`,
               KURVE_BREITE,
               KURVE_HOEHE,

@@ -219,19 +219,18 @@ export function xAchse(
   )
 }
 
-// Der Zeiger-Kasten: zwei Zeilen (Datum/Beschriftung und Betrag), der
-// Rohwert der API im <title>. Bleibt innerhalb des Rahmens.
+// Der Zeiger-Kasten: eine Zeile je Eintrag (Datum, Beträge …), der Rohwert
+// der API im <title>. Bleibt innerhalb des Rahmens.
 export function zeigerKasten(
+  zeilen: string[],
   x: number,
   y: number,
-  zeile1: string,
-  zeile2: string,
   rohwert: string,
   breite: number,
   hoehe: number,
 ): JSX.Element {
-  const kastenBreite = Math.max(zeile1.length, zeile2.length) * 6.4 + 14
-  const kastenHoehe = 40
+  const kastenBreite = Math.max(...zeilen.map((zeile) => zeile.length)) * 6.4 + 14
+  const kastenHoehe = zeilen.length * 16 + 10
   let kx = x + 9
   if (kx + kastenBreite > breite - RAND.rechts) kx = x - 9 - kastenBreite
   const ky = Math.min(Math.max(RAND.oben + 2, y - kastenHoehe - 7), hoehe - RAND.unten - kastenHoehe)
@@ -245,12 +244,11 @@ export function zeigerKasten(
         height={kastenHoehe}
         rx={3}
       />
-      <text x={kx + 7} y={ky + 16}>
-        {zeile1}
-      </text>
-      <text x={kx + 7} y={ky + 32}>
-        {zeile2}
-      </text>
+      {zeilen.map((zeile, i) => (
+        <text key={i} x={kx + 7} y={ky + 16 + i * 16}>
+          {zeile}
+        </text>
+      ))}
     </g>
   )
 }

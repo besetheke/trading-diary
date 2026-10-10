@@ -1,7 +1,7 @@
 ---
 titel: Kontowert laut IB im Dashboard (Kurve, Gewinn laut IB, Bestandteile)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-08g1, AP-06h
 aendert_tests: nein
 ---

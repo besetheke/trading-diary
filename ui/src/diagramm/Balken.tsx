@@ -104,10 +104,9 @@ export default function Balken({ balken, titel }: Eigenschaften): JSX.Element {
               y2={unten}
             />
             {zeigerKasten(
+              [monatKurz(gewaehlt.eintrag.x), geldDe(gewaehlt.eintrag.y)],
               RAND.links + gewaehlt.i * geruest.slot + geruest.slot / 2,
               geruest.py(Number(gewaehlt.eintrag.y)),
-              monatKurz(gewaehlt.eintrag.x),
-              geldDe(gewaehlt.eintrag.y),
               `${gewaehlt.eintrag.x} · ${gewaehlt.eintrag.y}`,
               BALKEN_BREITE,
               BALKEN_HOEHE,

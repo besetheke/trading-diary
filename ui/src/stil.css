@@ -697,3 +697,55 @@ p.diagramm-leer {
 .diagramm .zeiger text {
   fill: var(--tinte);
 }
+
+/* AP-08h: Umschalter der IB-Ansichten und Legende der Zwei-Linien-Diagramme. */
+.diagramm-wahl {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+}
+
+.diagramm-wahl button[aria-pressed='true'] {
+  background: var(--akzent);
+  color: #fff;
+}
+
+ul.diagramm-legende {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  margin: 0 0 0.3rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--grau);
+}
+
+.diagramm-legende li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Farbprobe vor dem Legendentext — ein Strich in der Form der Linie. */
+.diagramm-legende .probe {
+  display: inline-block;
+  width: 1.4rem;
+  border-top: 3px solid var(--akzent);
+}
+
+.diagramm-legende .probe.duenn {
+  border-top: 2px dashed var(--grau);
+}
+
+/* Die zweite Kurve läuft grau und dünner unter der kräftigen Akzentlinie. */
+.diagramm .kurve-duenn {
+  stroke: var(--grau);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+/* Bestandteile des Kontowerts — eine kleine Tabelle ohne Rahmentheater. */
+table.bestandteile {
+  max-width: 24rem;
+}

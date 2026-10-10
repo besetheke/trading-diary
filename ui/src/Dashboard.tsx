@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { fehlerText, holeEquity } from './api'
-import type { Equity } from './api'
+import { fehlerText, holeEquity, holeNav } from './api'
+import type { Equity, Nav, NavTag } from './api'
 import Betrag from './Betrag'
 import Balken from './diagramm/Balken'
 import Flaeche from './diagramm/Flaeche'
 import Linie from './diagramm/Linie'
-import { datumDe, prozent } from './format'
+import ZweiLinien from './diagramm/ZweiLinien'
+import { datumDe, prozent, vorzeichen } from './format'
 import { useZeitraum } from './zeitraum'
 
 // AP-06e/Dashboard: Equity-Kurve und Drawdown. Seit AP-08g1 (D1–D3 in
@@ -14,6 +15,17 @@ import { useZeitraum } from './zeitraum'
 // darunter (D3: Nachvollziehen geht vor). Geld bleibt Zeichenkette, nichts
 // wird hier gerechnet (Vertrag 8/9 wie überall; Ausnahme nur für Pixel in
 // den Bausteinen, D2). AP-08f1: deutsche Schreibweise, Rohwert im title.
+// AP-08h: Abschnitt „Kontowert laut IB" (GET /nav) unter der Equity-Sektion
+// — Kontowert und Einzahlungen als zwei Linien mit Fläche, umschaltbar auf
+// „Gewinn laut IB" neben der realisierten Equity; alles Werte der API.
+
+// Bestandteile des Kontowerts am letzten Tag — Feld null heißt Zeile weg.
+const BESTANDTEILE: { titel: string; feld: 'cash' | 'aktien' | 'optionen' | 'rohstoffe' }[] = [
+  { titel: 'Cash', feld: 'cash' },
+  { titel: 'Aktien', feld: 'aktien' },
+  { titel: 'Optionen', feld: 'optionen' },
+  { titel: 'Rohstoffe', feld: 'rohstoffe' },
+]
 
 export default function Dashboard(): JSX.Element {
   const [zeitraum] = useZeitraum()
@@ -36,6 +48,29 @@ export default function Dashboard(): JSX.Element {
     }
   }, [zeitraum.von, zeitraum.bis])
 
+  // AP-08h: Kontowert laut IB — eigene Quelle, eigener Fehlertext, eigener
+  // Ladezustand; der Abschnitt hängt nicht an der Equity.
+  const [nav, setzeNav] = useState<Nav | null>(null)
+  const [navFehler, setzeNavFehler] = useState<string | null>(null)
+  // Welche der beiden Ansichten des Kontowerts gezeigt wird.
+  const [ibAnsicht, setzeIbAnsicht] = useState<'kontowert' | 'gewinn'>('kontowert')
+
+  useEffect(() => {
+    let abgebrochen = false
+    setzeNav(null)
+    setzeNavFehler(null)
+    holeNav(zeitraum.von, zeitraum.bis)
+      .then((ergebnis) => {
+        if (!abgebrochen) setzeNav(ergebnis)
+      })
+      .catch((ursache: unknown) => {
+        if (!abgebrochen) setzeNavFehler(fehlerText(ursache))
+      })
+    return () => {
+      abgebrochen = true
+    }
+  }, [zeitraum.von, zeitraum.bis])
+
   const imZeitraum = zeitraum.von !== null || zeitraum.bis !== null
 
   if (fehler) {
@@ -52,6 +87,113 @@ export default function Dashboard(): JSX.Element {
   }
 
   const letzterTag = equity.tage.length > 0 ? equity.tage[equity.tage.length - 1] : null
+
+  // AP-08h: Der Abschnitt „Kontowert laut IB" — Kopf, Umschalter, Diagramm
+  // und Bestandteile. Alles Werte der API (Vertrag 8); im Zeitraum ist die
+  // Journal-Equity nicht vergleichbar und bleibt weg (keine Umrechnung im
+  // Browser).
+  function ibAbschnitt(navWert: Nav, letzter: NavTag, equityWert: Equity): JSX.Element {
+    return (
+      <>
+        <dl className="kopf">
+          <div>
+            <dt>Kontowert am Ende ({datumDe(letzter.datum)})</dt>
+            <dd>
+              <Betrag wert={navWert.endwert} />
+            </dd>
+          </div>
+          {imZeitraum && navWert.anfangswert !== null ? (
+            <div>
+              <dt>Kontowert am Anfang</dt>
+              <dd>
+                <Betrag wert={navWert.anfangswert} />
+              </dd>
+            </div>
+          ) : null}
+          <div>
+            <dt>Gewinn laut IB</dt>
+            <dd>
+              <Betrag wert={letzter.gewinn} />
+            </dd>
+          </div>
+          <div>
+            <dt>Einzahlungen kumuliert</dt>
+            <dd>
+              <Betrag wert={letzter.einzahlungen_kumuliert} />
+            </dd>
+          </div>
+        </dl>
+
+        <div className="diagramm-wahl" role="group" aria-label="Ansicht des Kontowerts">
+          <button
+            type="button"
+            aria-pressed={ibAnsicht === 'kontowert'}
+            onClick={() => setzeIbAnsicht('kontowert')}
+          >
+            Kontowert
+          </button>
+          <button
+            type="button"
+            aria-pressed={ibAnsicht === 'gewinn'}
+            onClick={() => setzeIbAnsicht('gewinn')}
+          >
+            Gewinn laut IB
+          </button>
+        </div>
+
+        {ibAnsicht === 'kontowert' ? (
+          <ZweiLinien
+            oben={navWert.tage.map((t) => ({ x: t.datum, y: t.gesamt }))}
+            unten={navWert.tage.map((t) => ({ x: t.datum, y: t.einzahlungen_kumuliert }))}
+            flaeche
+            farbe={vorzeichen(letzter.gewinn) === 'negativ' ? 'negativ' : 'positiv'}
+            legendeOben="Kontowert gesamt"
+            legendeUnten="Einzahlungen kumuliert"
+          />
+        ) : (
+          <>
+            <ZweiLinien
+              oben={navWert.tage.map((t) => ({ x: t.datum, y: t.gewinn }))}
+              unten={
+                imZeitraum || equityWert.tage.length === 0
+                  ? null
+                  : equityWert.tage.map((t) => ({ x: t.datum, y: t.kumuliert_eur }))
+              }
+              legendeOben="Gewinn laut IB (realisiert + unrealisiert)"
+              legendeUnten={
+                imZeitraum || equityWert.tage.length === 0 ? null : 'realisiert laut Journal'
+              }
+            />
+            <p className="sicht fussnote">
+              {imZeitraum
+                ? 'Im Zeitraum beginnt die Equity bei 0, der Gewinn laut IB nicht — im Zeitraum nicht vergleichbar. '
+                : ''}
+              Seit AP-06i enthält die Journal-Linie auch Aktien ohne Struktur; der verbleibende
+              Abstand ist im Wesentlichen unrealisiert und Andienungsmethode (OF-78).
+            </p>
+          </>
+        )}
+
+        {navWert.anzahl_kurs_fehlt > 0 ? (
+          <p className="sicht fussnote">{navWert.anzahl_kurs_fehlt} Einzahlungen ohne Kurs.</p>
+        ) : null}
+
+        <h4>Bestandteile am {datumDe(letzter.datum)}</h4>
+        <table className="bestandteile">
+          <tbody>
+            {BESTANDTEILE.filter((teil) => letzter[teil.feld] !== null).map((teil) => (
+              <tr key={teil.feld}>
+                <td>{teil.titel}</td>
+                <td className="zahl">
+                  <Betrag wert={letzter[teil.feld]} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    )
+  }
 
   return (
     <section>
@@ -176,6 +318,27 @@ export default function Dashboard(): JSX.Element {
             </table>
           </details>
         </>
+      )}
+
+      {/* AP-08h: Kontowert laut IB unter der Equity-Sektion — IBs eigene
+          Zahl, keine Rechnung des Journals. */}
+      <h3>Kontowert laut IB</h3>
+      {navFehler !== null ? (
+        <section className="fehler">
+          <h4>Der Kontowert konnte nicht geladen werden</h4>
+          <p>{navFehler}</p>
+        </section>
+      ) : nav === null ? (
+        <p className="laedt">Lade Kontowert laut IB …</p>
+      ) : nav.tage.length === 0 ? (
+        <section className="hinweis">
+          <p>
+            Noch kein Kontowert importiert — die Flex-Query braucht den Abschnitt NAV
+            (Net Asset Value) in Base.
+          </p>
+        </section>
+      ) : (
+        ibAbschnitt(nav, nav.tage[nav.tage.length - 1], equity)
       )}
     </section>
   )
