@@ -1,6 +1,9 @@
 """Lese-API über Ketten, Strukturen und Ausführungen (AP-07l), seit AP-08l
-mit statischer Auslieferung der gebauten Oberfläche und seit AP-08-kampagnen
-mit den bestätigten Kampagnen (``campaigns``/``campaign_links``).
+mit statischer Auslieferung der gebauten Oberfläche, seit AP-08-kampagnen mit
+den bestätigten Kampagnen (``campaigns``/``campaign_links``) und seit AP-06e
+mit der Equity-Kurve (``/equity``) — der erste echte Kennzahlen-Endpunkt
+(Plan §6, AP-07 „Rest"): er reicht nicht nur durch, sondern reicht, was
+``analytics.equity.equity_bericht`` rechnet.
 
 Umsetzung des Vertrags 1–17 aus ``auftraege/AP-07lv.md`` (Abnahmebasis:
 ``tests/test_api_lesen.py``). Die Anwendung ist ausschließlich lesend — im
@@ -44,6 +47,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.engine import Connection
 
+from analytics.equity import equity_bericht
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -233,6 +237,32 @@ class KampagneDetailAntwort(KampagneAntwort):
 class KampagnenListeAntwort(BaseModel):
     gesamt: int
     treffer: list[KampagneAntwort]
+
+
+# AP-06e: Equity-Kurve und Drawdown, immer Kontosicht (analytics.equity, E1).
+class EquityTagAntwort(BaseModel):
+    datum: date
+    netto_eur: str
+    kumuliert_eur: str
+    drawdown_eur: str
+    anzahl_strukturen: int
+    anzahl_strukturen_kurs_fehlt: int
+
+
+class EquityMonatAntwort(BaseModel):
+    monat: str
+    anzahl_strukturen: int
+    summe_netto_eur: str
+    durchschnitt_netto_eur: str | None
+    trefferquote: str | None
+    anzahl_strukturen_kurs_fehlt: int
+
+
+class EquityAntwort(BaseModel):
+    tage: list[EquityTagAntwort]
+    monate: list[EquityMonatAntwort]
+    max_drawdown_eur: str
+    max_drawdown_datum: date | None
 
 
 # ---------------------------------------------------------------------------
@@ -1214,6 +1244,45 @@ def erzeuge_app(
                 )
                 for z in ketten_zeilen
             ],
+        )
+
+    # -----------------------------------------------------------------------
+    # Equity-Kurve und Drawdown (AP-06e): rein lesend, immer aktiv, immer
+    # Kontosicht (analytics.equity, E1 — Geld ist Kontosicht-Sache). Keine
+    # Parameter: die ganze Historie, wie journal kennzahlen --equity.
+    # -----------------------------------------------------------------------
+
+    @applikation.get("/equity", response_model=EquityAntwort)
+    def equity() -> EquityAntwort:
+        """Equity-Kurve, Monatsübersicht und maximaler Drawdown über die
+        gesamte Historie (AP-06e). Rechnet nichts Neues — reicht nur durch,
+        was ``analytics.equity.equity_bericht`` liefert."""
+        ergebnis = equity_bericht(db_pfad)
+        return EquityAntwort(
+            tage=[
+                EquityTagAntwort(
+                    datum=t.datum,
+                    netto_eur=_als_text(t.netto_eur),
+                    kumuliert_eur=_als_text(t.kumuliert_eur),
+                    drawdown_eur=_als_text(t.drawdown_eur),
+                    anzahl_strukturen=t.anzahl_strukturen,
+                    anzahl_strukturen_kurs_fehlt=t.anzahl_strukturen_kurs_fehlt,
+                )
+                for t in ergebnis.tage
+            ],
+            monate=[
+                EquityMonatAntwort(
+                    monat=m.monat,
+                    anzahl_strukturen=m.anzahl_strukturen,
+                    summe_netto_eur=_als_text(m.summe_netto_eur),
+                    durchschnitt_netto_eur=_als_text(m.durchschnitt_netto_eur),
+                    trefferquote=_als_text(m.trefferquote),
+                    anzahl_strukturen_kurs_fehlt=m.anzahl_strukturen_kurs_fehlt,
+                )
+                for m in ergebnis.monate
+            ],
+            max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
+            max_drawdown_datum=ergebnis.max_drawdown_datum,
         )
 
     # -----------------------------------------------------------------------

@@ -17,6 +17,8 @@ import sys
 
 from analytics.degradation import als_csv as degradation_als_csv
 from analytics.degradation import degradations_bericht
+from analytics.equity import als_csv as equity_als_csv
+from analytics.equity import equity_bericht
 from analytics.kennzahlen import als_csv, kennzahlen_bericht
 from analytics.kommission import als_csv as kommission_als_csv
 from analytics.kommission import kommissions_bericht
@@ -182,6 +184,14 @@ def main(argv: list[str] | None = None) -> int:
         metavar="DATEI",
         help="Zusätzlich die Roll-Degradation als eigene CSV schreiben "
         "(AP-06, Tranche III; nur mit --sicht kette)",
+    )
+    kennzahl.add_argument(
+        "--equity",
+        type=pathlib.Path,
+        default=None,
+        metavar="DATEI",
+        help="Zusätzlich Equity-Kurve und Drawdown als eigene CSV schreiben "
+        "(AP-06, Tranche IV; immer Kontosicht, unabhängig von --sicht)",
     )
     steuer = unterbefehle.add_parser(
         "steuer",
@@ -461,6 +471,20 @@ def main(argv: list[str] | None = None) -> int:
                 f"Degradation nach {argumente.degradation}: "
                 f"{len(degradation.gruppen)} Gruppen, "
                 f"{degradation.abdeckung[0].offene_kandidaten} offene Kandidaten"
+            )
+        if argumente.equity is not None:
+            # Immer Kontosicht (AP-06e, E1) — unabhängig von --sicht, das nur
+            # den Hauptbericht steuert.
+            equity = equity_bericht(db_pfad, nur_qualitaetsstufe_a=argumente.nur_stufe_a)
+            # UTF-8 mit BOM wie der Kennzahlen-Bericht (Regel 13): Excel öffnet
+            # die Datei ohne Encoding-Rätsel; Zeilenende fest auf \n, damit die
+            # Datei auf jedem Betriebssystem bytgleich ausfällt (AP-06w, E6).
+            with open(argumente.equity, "w", encoding="utf-8-sig", newline="\n") as datei:
+                datei.write(equity_als_csv(equity) + "\n")
+            print(
+                f"Equity-Kurve nach {argumente.equity}: {len(equity.tage)} Tage, "
+                f"{len(equity.monate)} Monate, "
+                f"maximaler Drawdown {equity.max_drawdown_eur} EUR"
             )
     elif argumente.befehl == "steuer":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
