@@ -2,14 +2,18 @@ import { useEffect, useState } from 'react'
 import { fehlerText, holeEquity } from './api'
 import type { Equity } from './api'
 import Betrag from './Betrag'
+import Balken from './diagramm/Balken'
+import Flaeche from './diagramm/Flaeche'
+import Linie from './diagramm/Linie'
 import { datumDe, prozent } from './format'
 import { useZeitraum } from './zeitraum'
 
-// AP-06e/Dashboard: Equity-Kurve und Drawdown als Tabellen, kein Diagramm —
-// stil.css nennt das ausdrücklich als Gestaltungsprinzip der Oberfläche
-// ("Lesen und Nachvollziehen, kein Diagramm"). Geld bleibt Zeichenkette,
-// nichts wird hier gerechnet (Vertrag 8/9 wie überall). AP-08f1: deutsche
-// Schreibweise, Rohwert im title.
+// AP-06e/Dashboard: Equity-Kurve und Drawdown. Seit AP-08g1 (D1–D3 in
+// auftraege/AP-08f.md) stehen über den Tabellen eigene SVG-Diagramme —
+// Linie, Fläche, Balken, ohne Diagramm-Bibliothek; die Tabellen bleiben
+// darunter (D3: Nachvollziehen geht vor). Geld bleibt Zeichenkette, nichts
+// wird hier gerechnet (Vertrag 8/9 wie überall; Ausnahme nur für Pixel in
+// den Bausteinen, D2). AP-08f1: deutsche Schreibweise, Rohwert im title.
 
 export default function Dashboard(): JSX.Element {
   const [zeitraum] = useZeitraum()
@@ -95,7 +99,14 @@ export default function Dashboard(): JSX.Element {
             </div>
           </dl>
 
+          <h3>Equity-Kurve</h3>
+          <Linie punkte={equity.tage.map((t) => ({ x: t.datum, y: t.kumuliert_eur }))} />
+
+          <h3>Drawdown</h3>
+          <Flaeche punkte={equity.tage.map((t) => ({ x: t.datum, y: t.drawdown_eur }))} />
+
           <h3>Monatsübersicht</h3>
+          <Balken balken={equity.monate.map((m) => ({ x: m.monat, y: m.summe_netto_eur }))} />
           <table>
             <thead>
               <tr>

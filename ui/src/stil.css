@@ -1,5 +1,7 @@
 /* Erscheinungsbild der Oberfläche (AP-08l). Bewusst schlicht: Lesen und
-   Nachvollziehen, kein Diagramm, kein Framework. */
+   Nachvollziehen, kein Framework. Diagramme gibt es seit AP-08g1 als eigene
+   SVG-Bausteine (D1–D3 in auftraege/AP-08f.md) — immer zusammen mit der
+   Tabelle darunter, weil Nachvollziehen vor Sylvester-Glitzer geht. */
 
 :root {
   --rand: #d8d5cf;
@@ -607,4 +609,91 @@ table.positionen tr.kampagnendetail td {
    die Tastatur. */
 table.positionen.kampagnen > tbody > tr:not(.kampagnendetail) {
   cursor: pointer;
+}
+
+/* AP-08g1: Diagramme — eigene SVG-Bausteine (D1–D3 in auftraege/AP-08f.md),
+   feste Höhe, volle Breite über viewBox. Die Balkenfarben entsprechen
+   .positiv/.negativ oben. */
+figure.diagramm {
+  margin: 0.6rem 0 1rem;
+}
+
+figure.diagramm svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid var(--rand);
+}
+
+figure.diagramm figcaption {
+  color: var(--grau);
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Leerer Zeitraum: ein Hinweis statt eines leeren Rahmens. */
+p.diagramm-leer {
+  color: var(--grau);
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.6rem 0.9rem;
+  margin: 0.6rem 0 1rem;
+}
+
+.diagramm .kurve {
+  stroke: var(--akzent);
+  stroke-width: 2;
+  fill: none;
+}
+
+.diagramm .fuellung-negativ {
+  fill: #a33a2a;
+  fill-opacity: 0.22;
+}
+
+.diagramm .fuellung-positiv {
+  fill: #1d6b3a;
+  fill-opacity: 0.22;
+}
+
+/* Achsen: feine Rasterlinien, die Nulllinie deutlicher. */
+.diagramm .raster line {
+  stroke: var(--rand);
+}
+
+.diagramm .nulllinie line {
+  stroke: var(--tinte);
+}
+
+.diagramm .marke line {
+  stroke: #e7e3dc;
+}
+
+.diagramm text {
+  fill: var(--grau);
+  font-size: 11px;
+}
+
+.diagramm .balken-positiv {
+  fill: #1d6b3a;
+}
+
+.diagramm .balken-negativ {
+  fill: #a33a2a;
+}
+
+/* Zeiger: senkrechte Hilfslinie am nächsten Punkt, Kasten daneben. */
+.diagramm .zeiger-linie {
+  stroke: var(--grau);
+  stroke-dasharray: 3 3;
+}
+
+.diagramm .zeiger rect {
+  fill: #fff;
+  stroke: var(--rand);
+}
+
+.diagramm .zeiger text {
+  fill: var(--tinte);
 }
