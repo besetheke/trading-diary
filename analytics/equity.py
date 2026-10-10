@@ -63,12 +63,21 @@ während Durchschnitt und Trefferquote Kennzahlen über Strukturen bleiben
 ``nur_qualitaetsstufe_a`` fällt ein loses Leg weg, wenn eine seiner
 Ausführungen schlechter als A ist (I4); der Zeitraum gilt wie bei
 Strukturen (I5); die CSV bekommt keine neue Spalte (I6).
+
+AP-07f — **lose Legs unter Filtern.** Die Equity kann auf Ketten
+(``ketten_ids``) begrenzt werden; lose Legs haben keine Kette und werden
+gesondert gefiltert (``LoseLegFilter``): Werte, die ein Leg selbst kennt
+(Basiswert, Anlageklasse, Währung der Schließung, Schließungs- und
+Eröffnungszeitraum), gelten auch für es — reine Python-Prüfung, kein SQL.
+``False`` schließt sie aus (Kettenfilter, die sie nicht kennen: Strategie,
+Seite, Endzustand, Rolls); ohne Filter zählen sie weiter mit.
 """
 
 import pathlib
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from sqlalchemy import select
 
@@ -138,6 +147,26 @@ class EquityErgebnis:
     max_drawdown_datum: date | None
 
 
+@dataclass(frozen=True)
+class LoseLegFilter:
+    """AP-07f: die Filterwerte, die ein loses Leg selbst kennt.
+
+    Regel des Nutzers: Ein Filter, den ein loses Leg kennt (Basiswert,
+    Anlageklasse, Währung der schließenden Ausführung, Schließungs- und
+    Eröffnungszeitraum), gilt auch für es; Filter der Kette (Strategie,
+    Seite, Endzustand, Rolls) schließen es aus — das regelt der Aufrufer
+    mit ``lose_legs=False``. Je ``None`` heißt nicht gefiltert.
+    """
+
+    basiswert: str | None = None
+    anlageklasse: str | None = None
+    waehrung: str | None = None
+    geschlossen_ab: date | None = None
+    geschlossen_bis: date | None = None
+    eroeffnet_ab: date | None = None
+    eroeffnet_bis: date | None = None
+
+
 def equity_auswertung(
     ketten_zeilen: list[dict],
     struktur_zeilen: list[dict],
@@ -150,6 +179,8 @@ def equity_auswertung(
     nur_qualitaetsstufe_a: bool = False,
     von: date | None = None,
     bis: date | None = None,
+    ketten_ids: frozenset[int] | None = None,
+    lose_legs: LoseLegFilter | None | Literal[False] = None,
 ) -> EquityErgebnis:
     """Equity-Kurve und Drawdown nach AP-06e, E1-E6 (rein, P2).
 
@@ -160,6 +191,16 @@ def equity_auswertung(
     ``von``/``bis`` (AP-08f2, Z2/Z4): nur Strukturen, deren Schließungsdatum
     im Zeitraum liegt (beide Enden einschließlich); die Kurve beginnt am
     Zeitraumanfang bei 0, der Drawdown zählt nur innerhalb des Zeitraums.
+
+    ``ketten_ids`` (AP-07f): ist die Menge gesetzt, zählen nur Strukturen,
+    die über ``glieder_zeilen`` zu einer dieser Ketten gehören — lose Legs
+    (AP-06i) haben keine Kette und zählen dann nicht.
+
+    ``lose_legs`` (AP-07f): ``None`` zählt alle losen Legs (bisheriges
+    Verhalten), ``False`` keine (Kettenfilter, die sie nicht kennen:
+    Strategie, Seite, Endzustand, Rolls); ein ``LoseLegFilter`` prüft die
+    Werte am Leg selbst — Werte, die es kennt, gelten auch für es
+    (Regel des Nutzers; reine Python-Prüfung, kein SQL).
     """
     if sicht != "konto":
         raise ValueError(
@@ -184,6 +225,17 @@ def equity_auswertung(
     geschlossen_am_je_struktur = {
         s["structure_id"]: s["geschlossen_am"] for s in struktur_zeilen
     }
+    # AP-07f: Zuordnung Struktur -> Kette über die Glieder. ``ketten_ids``
+    # schränkt die Strukturen auf diese Ketten ein; lose Legs (keine Kette)
+    # regeln sich über ``lose_legs``, nicht über ``ketten_ids``.
+    kette_je_struktur = {
+        z["structure_id"]: z["chain_id"]
+        for z in glieder_zeilen
+        if z["structure_id"] is not None
+    }
+
+    def kette_erlaubt(structure_id: int) -> bool:
+        return ketten_ids is None or kette_je_struktur.get(structure_id) in ketten_ids
 
     # AP-06i (I1/I2): abgeschlossene lose Legs — ohne Struktur, aber mit Geld.
     # Dasselbe Fundament wie für Strukturen, keine zweite EUR-Rechnung: erst
@@ -196,6 +248,43 @@ def equity_auswertung(
     bewertete_ausfuehrungen = bewerte_barausgleich(ausfuehrungs_zeilen, instrumenten_zeilen)
     exec_je_id = {z["exec_id"]: z for z in bewertete_ausfuehrungen}
     mult_je_conid = {z["conid"]: z["multiplikator"] for z in instrumenten_zeilen}
+    instrument_je_conid = {z["conid"]: z for z in instrumenten_zeilen}
+
+    def leg_passt(leg: dict, schliessend: dict, filt: LoseLegFilter) -> bool:
+        """AP-07f: die Filterwerte, die ein loses Leg selbst kennt.
+
+        Basiswert ist ``instruments.underlying``, ersatzweise ``symbol``
+        (Aktien tragen beides); Währung ist die der schließenden Ausführung;
+        die Zeiträume vergleichen das ``handelszeit``-Datum, beide Enden
+        einschließlich — dieselbe Tag-Logik wie bei den Ketten.
+        """
+        instrument = instrument_je_conid.get(leg["conid"])
+        if filt.basiswert is not None:
+            basis = None
+            if instrument is not None:
+                basis = instrument["underlying"] or instrument["symbol"]
+            if basis != filt.basiswert:
+                return False
+        if filt.anlageklasse is not None:
+            klasse = None if instrument is None else instrument["asset_class"]
+            if klasse != filt.anlageklasse:
+                return False
+        if filt.waehrung is not None and schliessend["waehrung"] != filt.waehrung:
+            return False
+        schliessungstag = schliessend["handelszeit"].date()
+        if filt.geschlossen_ab is not None and schliessungstag < filt.geschlossen_ab:
+            return False
+        if filt.geschlossen_bis is not None and schliessungstag > filt.geschlossen_bis:
+            return False
+        if filt.eroeffnet_ab is not None or filt.eroeffnet_bis is not None:
+            if leg["open_exec_id"] is None:
+                return False  # keine Eröffnung bekannt — Filter nicht erfüllbar
+            eroeffnungstag = exec_je_id[leg["open_exec_id"]]["handelszeit"].date()
+            if filt.eroeffnet_ab is not None and eroeffnungstag < filt.eroeffnet_ab:
+                return False
+            if filt.eroeffnet_bis is not None and eroeffnungstag > filt.eroeffnet_bis:
+                return False
+        return True
     lose_je_tag: dict[date, Decimal] = {}
     lose_anzahl_je_tag: dict[date, int] = {}
     lose_mangel_je_tag: dict[date, int] = {}
@@ -203,6 +292,12 @@ def equity_auswertung(
     lose_anzahl_je_monat: dict[str, int] = {}
     lose_mangel_je_monat: dict[str, int] = {}
     for leg in leg_zeilen:
+        # AP-07f: ``False`` schließt lose Legs aus (Kettenfilter, die sie
+        # nicht kennen: Strategie, Seite, Endzustand, Rolls); ein
+        # LoseLegFilter prüft unten die Werte am Leg — Werte, die es kennt,
+        # gelten auch für es. Ohne beides zählt es mit (AP-06i).
+        if lose_legs is False:
+            continue
         if leg["structure_id"] is not None or leg["close_exec_id"] is None:
             continue
         # _wirtschaftlich zuerst: es prüft die referenzierten Ausführungen
@@ -214,6 +309,8 @@ def equity_auswertung(
             # keine zweite EUR-Rechnung).
             betrag = betrag.quantize(_ZWEI_STELLEN, rounding=ROUND_HALF_UP)
         schliessend = exec_je_id[leg["close_exec_id"]]
+        if lose_legs is not None and not leg_passt(leg, schliessend, lose_legs):
+            continue
         if nur_qualitaetsstufe_a:
             beteiligte = [
                 exec_je_id[exec_id]
@@ -243,6 +340,8 @@ def equity_auswertung(
     for struktur in grundlage.strukturen:
         zeitpunkt = geschlossen_am_je_struktur.get(struktur.structure_id)
         if zeitpunkt is None:
+            continue
+        if not kette_erlaubt(struktur.structure_id):
             continue
         tag = zeitpunkt.date()
         if not im_zeitraum(tag):
@@ -293,6 +392,8 @@ def equity_auswertung(
     for struktur in grundlage.strukturen:
         zeitpunkt = geschlossen_am_je_struktur.get(struktur.structure_id)
         if zeitpunkt is None:
+            continue
+        if not kette_erlaubt(struktur.structure_id):
             continue
         if not im_zeitraum(zeitpunkt.date()):
             continue
@@ -398,10 +499,14 @@ def equity_bericht(
     nur_qualitaetsstufe_a: bool = False,
     von: date | None = None,
     bis: date | None = None,
+    ketten_ids: frozenset[int] | None = None,
+    lose_legs: LoseLegFilter | None | Literal[False] = None,
 ) -> EquityErgebnis:
     """Liest die Zeilen der Kontosicht und wertet aus (P3, Hülle).
 
     Schreibt nichts in die Datenbank (wie ``degradations_bericht``).
+    ``ketten_ids`` (AP-07f) reicht ``equity_auswertung`` unverändert durch;
+    ``lose_legs`` ebenso — ``None``/``False``/``LoseLegFilter`` wie dort.
     """
     engine = create_db_engine(db_pfad)
     with engine.begin() as verbindung:
@@ -482,6 +587,11 @@ def equity_bericht(
                     instruments.c.conid,
                     instruments.c.multiplikator,
                     instruments.c.abwicklungsart,
+                    # AP-07f: Werte, die ein loses Leg selbst kennt —
+                    # Grundlage des LoseLegFilter.
+                    instruments.c.underlying,
+                    instruments.c.asset_class,
+                    instruments.c.symbol,
                 )
             ).mappings()
         ]
@@ -496,4 +606,6 @@ def equity_bericht(
         nur_qualitaetsstufe_a=nur_qualitaetsstufe_a,
         von=von,
         bis=bis,
+        ketten_ids=ketten_ids,
+        lose_legs=lose_legs,
     )

@@ -44,11 +44,11 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import delete, exists, func, insert, select, update
+from sqlalchemy import ColumnElement, delete, exists, func, insert, or_, select, update
 from sqlalchemy.engine import Connection
 
 from analytics.cashflows import cashflow_bericht
-from analytics.equity import equity_bericht
+from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
 from journal.db import create_db_engine
@@ -273,6 +273,25 @@ class EquityAntwort(BaseModel):
     monate: list[EquityMonatAntwort]
     max_drawdown_eur: str
     max_drawdown_datum: date | None
+
+
+# AP-07f: Verlauf und Ergebnis der gefilterten Ketten — ``tage``, ``monate``
+# und ``max_drawdown_*`` sind die Equity-Modelle (denselben Bericht, dieselbe
+# Kurve), dazu der Kopf mit der Summe der gefilterten Auswahl.
+class AuswertungErgebnisAntwort(BaseModel):
+    anzahl_ketten: int
+    anzahl_strukturen: int
+    summe_netto_eur: str
+    anzahl_kurs_fehlt: int
+    lose_legs_eingeschlossen: bool
+
+
+class AuswertungAntwort(BaseModel):
+    tage: list[EquityTagAntwort]
+    monate: list[EquityMonatAntwort]
+    max_drawdown_eur: str
+    max_drawdown_datum: date | None
+    ergebnis: AuswertungErgebnisAntwort
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -828,6 +847,142 @@ def _ketten_zuschuesse(
     return zuschuesse
 
 
+def _mitternacht(tag: date) -> datetime:
+    """AP-07f: Tagesgrenze gegen ``DateTime``-Spalten — halboffene
+    Intervalle ``[Mitternacht(ab), Mitternacht(bis + 1 Tag))`` fassen den Tag
+    an beiden Enden einschließlich."""
+    return datetime(tag.year, tag.month, tag.day)
+
+
+def _datumspaar_pruefen(
+    ab: date | None, bis: date | None, ab_name: str, bis_name: str
+) -> None:
+    """AP-07f: Ein auf dem Kopf stehendes Datumspaar ist 422 — nicht
+    stillschweigend zurechtbiegen (wie ``von`` nach ``bis`` bei ``/equity``,
+    Vertrag 16/17). Ungültige Einzelwerte wirft bereits FastAPI beim
+    ``date``-Parsing (422)."""
+    if ab is not None and bis is not None and ab > bis:
+        raise HTTPException(status_code=422, detail=f"{ab_name} liegt nach {bis_name}")
+
+
+def _ketten_bedingungen(
+    *,
+    basiswert: str | None = None,
+    anlageklasse: str | None = None,
+    seite: str | None = None,
+    endzustand: str | None = None,
+    min_rolls: int | None = None,
+    max_rolls: int | None = None,
+    eroeffnet_ab: date | None = None,
+    eroeffnet_bis: date | None = None,
+    geschlossen_ab: date | None = None,
+    geschlossen_bis: date | None = None,
+    waehrung: str | None = None,
+    strategie: str | None = None,
+    von: date | None = None,
+    bis: date | None = None,
+) -> list[ColumnElement[bool]]:
+    """Die gemeinsamen Kettenfilter für ``/ketten`` und ``/auswertung``
+    (AP-07f) — immer mit der Kontosicht (AP-04sw, Plan §5).
+
+    Die ersten acht Parameter sind unverändert aus ``/ketten`` übernommen
+    (stellenidentisch; ``eroeffnet_ab``/``eroeffnet_bis`` unangetastet).
+
+    Neu (AP-07f): ``geschlossen_ab``/``geschlossen_bis`` am Ende der Kette
+    (``beendet_am``, beide Enden einschließlich des Tages; offene Ketten
+    fallen heraus, sobald einer gesetzt ist — der NULL-Vergleich ist nie
+    wahr), ``waehrung`` (mindestens ein Glied über ``chain_links`` in dieser
+    Währung), ``strategie`` (``chains.oa_strategie``) sowie ``von``/``bis``
+    als Z3 (AP-08f): aktiv im Zeitraum — eröffnet bis ``bis`` (Tag
+    einschließlich) und offen oder beendet ab ``von`` (Tag einschließlich).
+    ``/auswertung`` ruft sie ohne ``von``/``bis``: Dort gilt der Zeitraum am
+    Schließungstag (Z2/Z4 wie ``/equity``), nicht auf der Kette.
+    """
+    bedingungen: list[ColumnElement[bool]] = [chains.c.sicht == SICHT]
+    if basiswert:
+        bedingungen.append(chains.c.underlying == basiswert)
+    if anlageklasse:
+        bedingungen.append(chains.c.asset_class == anlageklasse)
+    if seite:
+        bedingungen.append(chains.c.seite == seite)
+    if endzustand:
+        bedingungen.append(chains.c.endzustand == endzustand)
+    if min_rolls is not None:
+        bedingungen.append(chains.c.anzahl_rolls >= min_rolls)
+    if max_rolls is not None:
+        bedingungen.append(chains.c.anzahl_rolls <= max_rolls)
+    if eroeffnet_ab is not None:
+        bedingungen.append(chains.c.eroeffnet_am >= eroeffnet_ab)
+    if eroeffnet_bis is not None:
+        bedingungen.append(chains.c.eroeffnet_am <= eroeffnet_bis)
+    if geschlossen_ab is not None:
+        bedingungen.append(chains.c.beendet_am >= _mitternacht(geschlossen_ab))
+    if geschlossen_bis is not None:
+        bedingungen.append(
+            chains.c.beendet_am < _mitternacht(geschlossen_bis) + timedelta(days=1)
+        )
+    if waehrung:
+        bedingungen.append(
+            exists().where(
+                chain_links.c.sicht == SICHT,
+                chain_links.c.chain_id == chains.c.chain_id,
+                structures.c.structure_id == chain_links.c.structure_id,
+                structures.c.waehrung == waehrung,
+            )
+        )
+    if strategie:
+        bedingungen.append(chains.c.oa_strategie == strategie)
+    if von is not None:
+        bedingungen.append(
+            or_(
+                chains.c.beendet_am.is_(None),
+                chains.c.beendet_am >= _mitternacht(von),
+            )
+        )
+    if bis is not None:
+        bedingungen.append(
+            chains.c.eroeffnet_am < _mitternacht(bis) + timedelta(days=1)
+        )
+    return bedingungen
+
+
+def _equity_als_antwort(ergebnis: EquityErgebnis) -> EquityAntwort:
+    """AP-07f: dieselbe Umwandlung eines Equity-Berichts für ``/equity`` und
+    ``/auswertung`` — kein kopierter Block. Geld als Zeichenkette
+    (Entscheidung 1), leere Werte bleiben leer (Vertrag 13)."""
+    return EquityAntwort(
+        tage=[
+            EquityTagAntwort(
+                datum=t.datum,
+                netto_eur=_als_text(t.netto_eur),
+                kumuliert_eur=_als_text(t.kumuliert_eur),
+                drawdown_eur=_als_text(t.drawdown_eur),
+                anzahl_strukturen=t.anzahl_strukturen,
+                anzahl_strukturen_kurs_fehlt=t.anzahl_strukturen_kurs_fehlt,
+                anzahl_lose_legs=t.anzahl_lose_legs,
+                anzahl_lose_legs_kurs_fehlt=t.anzahl_lose_legs_kurs_fehlt,
+            )
+            for t in ergebnis.tage
+        ],
+        monate=[
+            EquityMonatAntwort(
+                monat=m.monat,
+                anzahl_strukturen=m.anzahl_strukturen,
+                summe_netto_eur=_als_text(m.summe_netto_eur),
+                durchschnitt_netto_eur=_als_text(m.durchschnitt_netto_eur),
+                trefferquote=_als_text(m.trefferquote),
+                anzahl_strukturen_kurs_fehlt=m.anzahl_strukturen_kurs_fehlt,
+                lose_legs_eur=_als_text(m.lose_legs_eur),
+                anzahl_lose_legs=m.anzahl_lose_legs,
+                anzahl_lose_legs_kurs_fehlt=m.anzahl_lose_legs_kurs_fehlt,
+            )
+            for m in ergebnis.monate
+        ],
+        max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
+        max_drawdown_datum=ergebnis.max_drawdown_datum,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Anwendung
 # ---------------------------------------------------------------------------
@@ -876,6 +1031,15 @@ def erzeuge_app(
         max_rolls: Annotated[int | None, Query(ge=0)] = None,
         eroeffnet_ab: date | None = None,
         eroeffnet_bis: date | None = None,
+        # AP-07f: neue Positionsfilter — Schließung der Kette, Währung eines
+        # Glieds, Strategie und „aktiv im Zeitraum“ (Z3, AP-08f). Bedeutung
+        # und Tagesgrenzen stehen bei ``_ketten_bedingungen``.
+        geschlossen_ab: date | None = None,
+        geschlossen_bis: date | None = None,
+        waehrung: str | None = None,
+        strategie: str | None = None,
+        von: date | None = None,
+        bis: date | None = None,
         sortierung: Sortierspalte = "eroeffnet_am",
         richtung: Richtung = "desc",
         limit: Annotated[int, Query(ge=1, le=500)] = 50,
@@ -885,23 +1049,29 @@ def erzeuge_app(
         # AP-04sw, Plan §5: „Keine Abfrage liefert Zeilen aus beiden Sichten
         # in einer Summe." Die Lese-API zeigt ausschließlich die Kontosicht
         # — die Kettensicht hat noch keine eigene Oberfläche/Route.
-        bedingungen = [chains.c.sicht == "konto"]
-        if basiswert:
-            bedingungen.append(chains.c.underlying == basiswert)
-        if anlageklasse:
-            bedingungen.append(chains.c.asset_class == anlageklasse)
-        if seite:
-            bedingungen.append(chains.c.seite == seite)
-        if endzustand:
-            bedingungen.append(chains.c.endzustand == endzustand)
-        if min_rolls is not None:
-            bedingungen.append(chains.c.anzahl_rolls >= min_rolls)
-        if max_rolls is not None:
-            bedingungen.append(chains.c.anzahl_rolls <= max_rolls)
-        if eroeffnet_ab is not None:
-            bedingungen.append(chains.c.eroeffnet_am >= eroeffnet_ab)
-        if eroeffnet_bis is not None:
-            bedingungen.append(chains.c.eroeffnet_am <= eroeffnet_bis)
+        # AP-07f: ungültige Paare sind 422 — nicht stillschweigend
+        # zurechtbiegen (Vertrag 16/17). ``eroeffnet_ab``/``eroeffnet_bis``
+        # bleiben ohne solche Prüfung (Auftrag: unangetastet).
+        _datumspaar_pruefen(
+            geschlossen_ab, geschlossen_bis, "geschlossen_ab", "geschlossen_bis"
+        )
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        bedingungen = _ketten_bedingungen(
+            basiswert=basiswert,
+            anlageklasse=anlageklasse,
+            seite=seite,
+            endzustand=endzustand,
+            min_rolls=min_rolls,
+            max_rolls=max_rolls,
+            eroeffnet_ab=eroeffnet_ab,
+            eroeffnet_bis=eroeffnet_bis,
+            geschlossen_ab=geschlossen_ab,
+            geschlossen_bis=geschlossen_bis,
+            waehrung=waehrung,
+            strategie=strategie,
+            von=von,
+            bis=bis,
+        )
         with engine.connect() as verbindung:
             gesamt = verbindung.execute(
                 select(func.count()).select_from(chains).where(*bedingungen)
@@ -1330,37 +1500,133 @@ def erzeuge_app(
         ``analytics.equity.equity_bericht`` liefert."""
         if von is not None and bis is not None and von > bis:
             raise HTTPException(status_code=422, detail="von liegt nach bis")
-        ergebnis = equity_bericht(db_pfad, von=von, bis=bis)
-        return EquityAntwort(
-            tage=[
-                EquityTagAntwort(
-                    datum=t.datum,
-                    netto_eur=_als_text(t.netto_eur),
-                    kumuliert_eur=_als_text(t.kumuliert_eur),
-                    drawdown_eur=_als_text(t.drawdown_eur),
-                    anzahl_strukturen=t.anzahl_strukturen,
-                    anzahl_strukturen_kurs_fehlt=t.anzahl_strukturen_kurs_fehlt,
-                    anzahl_lose_legs=t.anzahl_lose_legs,
-                    anzahl_lose_legs_kurs_fehlt=t.anzahl_lose_legs_kurs_fehlt,
+        # AP-07f: die Umwandlung teilen sich ``/equity`` und ``/auswertung``.
+        return _equity_als_antwort(equity_bericht(db_pfad, von=von, bis=bis))
+
+    @applikation.get("/auswertung", response_model=AuswertungAntwort)
+    def auswertung(
+        basiswert: str | None = None,
+        anlageklasse: str | None = None,
+        seite: str | None = None,
+        endzustand: str | None = None,
+        min_rolls: Annotated[int | None, Query(ge=0)] = None,
+        max_rolls: Annotated[int | None, Query(ge=0)] = None,
+        eroeffnet_ab: date | None = None,
+        eroeffnet_bis: date | None = None,
+        geschlossen_ab: date | None = None,
+        geschlossen_bis: date | None = None,
+        waehrung: str | None = None,
+        strategie: str | None = None,
+        von: date | None = None,
+        bis: date | None = None,
+    ) -> AuswertungAntwort:
+        """Equity-Kurve und Ergebnis der gefilterten Ketten (AP-07f).
+
+        Die Kettenfilter sind die von ``/ketten`` — ohne Sortierung und
+        Blättern. ``von``/``bis`` bedeuten hier Z2/Z4 wie bei ``/equity``:
+        Gezählt wird am Schließungstag, die Kurve beginnt im Zeitraum bei 0;
+        die Z3-Bedingung (aktiv im Zeitraum) greift nicht auf die Ketten.
+
+        ``anzahl_ketten`` zählt die Ketten, die die Kettenfilter erfüllen —
+        unabhängig von ``von``/``bis``, offene Ketten mit. Ist mindestens ein
+        Kettenfilter gesetzt, rechnet die Equity nur noch mit diesen Ketten.
+        Lose Legs (AP-06i) folgen der Nutzerregel: Filter, die nur die Kette
+        kennt (Strategie, Seite, Endzustand, Rolls), schließen sie aus; die
+        übrigen Filter gelten auch für sie — ``lose_legs_eingeschlossen``
+        sagt, ob sie mitrechnen dürfen, nicht ob eines vorkam.
+        """
+        _datumspaar_pruefen(
+            geschlossen_ab, geschlossen_bis, "geschlossen_ab", "geschlossen_bis"
+        )
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        bedingungen = _ketten_bedingungen(
+            basiswert=basiswert,
+            anlageklasse=anlageklasse,
+            seite=seite,
+            endzustand=endzustand,
+            min_rolls=min_rolls,
+            max_rolls=max_rolls,
+            eroeffnet_ab=eroeffnet_ab,
+            eroeffnet_bis=eroeffnet_bis,
+            geschlossen_ab=geschlossen_ab,
+            geschlossen_bis=geschlossen_bis,
+            waehrung=waehrung,
+            strategie=strategie,
+        )
+        # „Ein Filter ist gesetzt“ heißt hier so viel wie in
+        # ``_ketten_bedingungen``: Zeichenketten wirkungsleer, Rest nicht-None.
+        hat_kettenfilter = bool(
+            basiswert or anlageklasse or seite or endzustand or waehrung or strategie
+        ) or any(
+            wert is not None
+            for wert in (
+                min_rolls,
+                max_rolls,
+                eroeffnet_ab,
+                eroeffnet_bis,
+                geschlossen_ab,
+                geschlossen_bis,
+            )
+        )
+        # AP-07f, Regel des Nutzers: Filter, die nur die Kette kennt
+        # (Strategie, Seite, Endzustand, Rolls), schließen lose Legs aus;
+        # die übrigen Filter prüft das Leg selbst (LoseLegFilter).
+        schliesst_loese_legs_aus = (
+            bool(strategie or seite or endzustand)
+            or min_rolls is not None
+            or max_rolls is not None
+        )
+        lose_legs: LoseLegFilter | None | Literal[False]
+        if schliesst_loese_legs_aus:
+            lose_legs = False
+        elif hat_kettenfilter:
+            lose_legs = LoseLegFilter(
+                basiswert=basiswert or None,
+                anlageklasse=anlageklasse or None,
+                waehrung=waehrung or None,
+                geschlossen_ab=geschlossen_ab,
+                geschlossen_bis=geschlossen_bis,
+                eroeffnet_ab=eroeffnet_ab,
+                eroeffnet_bis=eroeffnet_bis,
+            )
+        else:
+            lose_legs = None
+        with engine.connect() as verbindung:
+            anzahl_ketten = verbindung.execute(
+                select(func.count()).select_from(chains).where(*bedingungen)
+            ).scalar_one()
+            ketten_ids = None
+            if hat_kettenfilter:
+                ketten_ids = frozenset(
+                    verbindung.execute(
+                        select(chains.c.chain_id).where(*bedingungen)
+                    ).scalars()
                 )
-                for t in ergebnis.tage
-            ],
-            monate=[
-                EquityMonatAntwort(
-                    monat=m.monat,
-                    anzahl_strukturen=m.anzahl_strukturen,
-                    summe_netto_eur=_als_text(m.summe_netto_eur),
-                    durchschnitt_netto_eur=_als_text(m.durchschnitt_netto_eur),
-                    trefferquote=_als_text(m.trefferquote),
-                    anzahl_strukturen_kurs_fehlt=m.anzahl_strukturen_kurs_fehlt,
-                    lose_legs_eur=_als_text(m.lose_legs_eur),
-                    anzahl_lose_legs=m.anzahl_lose_legs,
-                    anzahl_lose_legs_kurs_fehlt=m.anzahl_lose_legs_kurs_fehlt,
-                )
-                for m in ergebnis.monate
-            ],
-            max_drawdown_eur=_als_text(ergebnis.max_drawdown_eur),
-            max_drawdown_datum=ergebnis.max_drawdown_datum,
+        bericht = equity_bericht(
+            db_pfad, von=von, bis=bis, ketten_ids=ketten_ids, lose_legs=lose_legs
+        )
+        basis = _equity_als_antwort(bericht)
+        summe_netto_eur = Decimal("0.00")
+        anzahl_strukturen = 0
+        anzahl_kurs_fehlt = 0
+        for tag in bericht.tage:
+            summe_netto_eur += tag.netto_eur
+            anzahl_strukturen += tag.anzahl_strukturen
+            anzahl_kurs_fehlt += (
+                tag.anzahl_strukturen_kurs_fehlt + tag.anzahl_lose_legs_kurs_fehlt
+            )
+        return AuswertungAntwort(
+            tage=basis.tage,
+            monate=basis.monate,
+            max_drawdown_eur=basis.max_drawdown_eur,
+            max_drawdown_datum=basis.max_drawdown_datum,
+            ergebnis=AuswertungErgebnisAntwort(
+                anzahl_ketten=anzahl_ketten,
+                anzahl_strukturen=anzahl_strukturen,
+                summe_netto_eur=_als_text(summe_netto_eur),
+                anzahl_kurs_fehlt=anzahl_kurs_fehlt,
+                lose_legs_eingeschlossen=not schliesst_loese_legs_aus,
+            ),
         )
 
     @applikation.get("/nav", response_model=NavAntwort)

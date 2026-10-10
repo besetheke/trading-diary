@@ -1,7 +1,7 @@
 ---
 titel: Filter an /ketten und GET /auswertung (Verlauf und Ergebnis der gefilterten Ketten)
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-06e, AP-06i, AP-08f2
 aendert_tests: nein
 ---
