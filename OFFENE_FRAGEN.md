@@ -3089,6 +3089,22 @@ Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
   noch gehaltenen Aktien), EUR-Methode (Journal: Kurs je Ausführung; IB:
   Fremdwährungsergebnis getrennt). Noch nicht belegt.
 
+**Nachtrag 10.10.2026, nach AP-06i (Abgleich nur Summen, EUR):**
+
+- Journal (Strukturen + lose Legs) minus IB-realisiert je Jahr: 2022 +29.109,
+  2023 +836, 2024 +10.630, 2025 +29.984, 2026 +21.162; Summe +91.721
+  (Journal 102.335, IB 10.614). Kein Kurs fehlt.
+- **Hypothese „Prämie in noch gehaltenen Aktien" widerlegt:** je Basiswert
+  getrennt (alle geschlossenen Legs): 20 Basiswerte mit offenem Aktienbestand
+  Diff −13.132; 279 Basiswerte ohne Aktienbestand Diff **+109.315**. Die Lücke
+  sitzt also nicht in gehaltenen Aktien. Die größten Einzelabweichungen
+  (anonym #1 bis #8) sind +/− 6.000 bis 62.000, davon nur drei mit Bestand.
+- Offen, Kandidaten (noch nicht belegt): Behandlung von Zuteilung/Ausübung
+  (Prämie bei IB im Einstand, nicht doppelt zählen), Reihenfolge FIFO bei
+  Teilverkäufen, Währungsteil. Nächster Schritt: je Basiswert ohne Bestand
+  die Einzelgeschäfte der größten Abweichungen gegenüberstellen
+  (starkes Modell, nur Summen je Ereignistyp).
+
 **Folge:** Bis zur Korrektur sind alle realisierten Geldsummen des Journals
 zu hoch. Teil 1 der Korrektur: AP-06i (lose Legs ins Geld; Abnahmebasis
 liegt, Umsetzung Cline). Danach Echtabgleich je Jahr durch das starke
