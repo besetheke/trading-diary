@@ -3069,7 +3069,27 @@ Web-Service-Abruf der erweiterten Query (Last365CalendarDays) wurde auch nach
 - Rest rund 22.000 €: Währung (Fremdwährungs-Cash, EUR-Methode) und Methode
   bei Andienung — noch nicht zerlegt.
 
+**Nachtrag 10.10.2026, Zerlegung (nur Summen):**
+
+- Lose Legs (geschlossen, Kontosicht) je Schließungsjahr in EUR:
+  2022 −969, 2023 −20.767, 2024 −3.232, 2025 −35.366, 2026 −3.905.
+  Herkunft: 139 Aktien aus Zuteilung, 26 aus Ausübung; offen 20 + 4.
+  52 der Zuteilungs-Legs teilen ihre Eröffnung mit einem strukturierten
+  Leg (Teilverkäufe derselben Zuteilung — `_zuteilungs_fortsetzungen`
+  verbraucht je Struktur nur ein Leg); Ausübungen behandelt Schritt 2a gar
+  nicht. → Kettenbildung: eigenes Paket (starkes Modell), später.
+- Je Klasse in USD (IB `fifoPnlRealized` vs. Journal je Leg): Optionen im
+  Journal jedes Jahr weit höher, Aktien weit niedriger (2023: OPT +93.144,
+  STK −77.374). **Methode:** IB rechnet die Prämie bei Zuteilung in den
+  Einstand der Aktie ein; das Journal realisiert sie bei der Option. Über
+  die Zeit gleicht sich das aus — außer für Aktien, die noch im Bestand
+  sind: dort steckt die Prämie bei IB im Unrealisierten.
+- Rest nach losen Legs (Journal − IB, EUR): 2022 +29.109, 2023 +836,
+  2024 +10.630, 2025 +29.984, 2026 +21.162. Kandidaten: Methode (Prämien in
+  noch gehaltenen Aktien), EUR-Methode (Journal: Kurs je Ausführung; IB:
+  Fremdwährungsergebnis getrennt). Noch nicht belegt.
+
 **Folge:** Bis zur Korrektur sind alle realisierten Geldsummen des Journals
-zu hoch. Korrektur ist ein eigenes Paket (starkes Modell): Ergebnis
-unstrukturierter Legs in den Geldsummen der Kontosicht ausweisen, mit
-Abnahme gegen IBs realisiertes Ergebnis je Jahr.
+zu hoch. Teil 1 der Korrektur: AP-06i (lose Legs ins Geld; Abnahmebasis
+liegt, Umsetzung Cline). Danach Echtabgleich je Jahr durch das starke
+Modell.
