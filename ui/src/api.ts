@@ -667,6 +667,9 @@ export interface Ueberleitung {
     anzahl_legs_offene_strukturen: number
     zeilen_gleich: number
     zeilen_abweichend: number
+    // AP-08u3: der Rest im Einzelnen.
+    kurseffekt_praemien: string
+    einzelreste: { gruppe: string; waehrung: string; nativ: string; eur: string }[]
   } | null
 }
 
@@ -680,4 +683,42 @@ export interface UeberleitungSpalte {
 
 export function holeUeberleitung(): Promise<Ueberleitung> {
   return hole('/ueberleitung') as Promise<Ueberleitung>
+}
+
+// AP-08p: Wertentwicklung des Kontos — zeitgewichteter Index, Drawdown in % vom
+// Höchststand, Wochen und Monate. Werte der API.
+export interface PerformanceTag {
+  datum: string
+  kontowert: string
+  gewinn_ib: string
+  index: string
+  drawdown_quote: string
+  drawdown_prozent: string
+}
+
+export interface Periode {
+  schluessel: string
+  beginn: string
+  ende: string
+  gewinn_ib: string
+  realisiert: string
+  rendite_quote: string
+}
+
+export interface Performance {
+  tage: PerformanceTag[]
+  max_drawdown_quote: string
+  max_drawdown_prozent: string
+  max_drawdown_datum: string | null
+  kontowert_ende: string | null
+  gewinn_ib_zeitraum: string
+  rendite_zeitraum_quote: string
+  realisiert_zeitraum: string
+  wochen: Periode[]
+  monate: Periode[]
+  realisiert_kumuliert: { datum: string; wert: string }[]
+}
+
+export function holePerformance(von?: string | null, bis?: string | null): Promise<Performance> {
+  return hole(`/performance${zeitraumQuery(von, bis)}`) as Promise<Performance>
 }

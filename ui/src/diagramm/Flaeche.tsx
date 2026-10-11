@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react'
 import type { MouseEvent } from 'react'
-import { datumDe, geldDe } from '../format'
+import { betrag, datumDe, geldDe } from '../format'
 import {
   KURVE_BREITE,
   KURVE_HOEHE,
@@ -26,9 +26,16 @@ interface Eigenschaften {
   // Füllfarbe nach Inhalt: Drawdown (Werte ≤ 0) rot. Vorgabe rot, weil
   // dieser Baustein für den Drawdown gebaut wurde.
   farbe?: 'negativ' | 'positiv'
+  // Achse und Zeiger als Geld (Vorgabe) oder als Prozent (Werte schon in %).
+  einheit?: 'geld' | 'prozent'
 }
 
-export default function Flaeche({ punkte, titel, farbe = 'negativ' }: Eigenschaften): JSX.Element {
+export default function Flaeche({
+  punkte,
+  titel,
+  farbe = 'negativ',
+  einheit = 'geld',
+}: Eigenschaften): JSX.Element {
   const [aktiv, setzeAktiv] = useState<number | null>(null)
 
   const geruest = useMemo(() => (punkte.length === 0 ? null : kurvenGeruest(punkte)), [punkte])
@@ -61,7 +68,7 @@ export default function Flaeche({ punkte, titel, farbe = 'negativ' }: Eigenschaf
         onMouseMove={zeigeMaus}
         onMouseLeave={() => setzeAktiv(null)}
       >
-        {yAchse(geruest.raster, KURVE_HOEHE, KURVE_BREITE)}
+        {yAchse(geruest.raster, KURVE_HOEHE, KURVE_BREITE, einheit)}
         {xAchse(geruest.marken, geruest.msVon, geruest.msBis, KURVE_BREITE, KURVE_HOEHE)}
         <path className={`fuellung-${farbe}`} d={fuellung} />
         <path className="kurve" d={geruest.pfad} />
@@ -75,7 +82,10 @@ export default function Flaeche({ punkte, titel, farbe = 'negativ' }: Eigenschaf
               y2={RAND.oben + grafikHoehe(KURVE_HOEHE)}
             />
             {zeigerKasten(
-              [datumDe(gewaehlt.punkt.x), geldDe(gewaehlt.punkt.y)],
+              [
+                datumDe(gewaehlt.punkt.x),
+                einheit === 'prozent' ? `${betrag(gewaehlt.punkt.y)} %` : geldDe(gewaehlt.punkt.y),
+              ],
               geruest.px(gewaehlt.i),
               geruest.py(Number(gewaehlt.punkt.y)),
               `${gewaehlt.punkt.x} · ${gewaehlt.punkt.y}`,

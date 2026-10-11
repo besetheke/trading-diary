@@ -79,3 +79,13 @@ def test_beitraege_summieren_sich_zum_unterschied(klient):  # noqa: F811
     teile = (_d(a["praemien_im_einstand"]) + _d(a["waehrungsmethode"])
              + _d(a["zeitpunkt_beitrag"]) + _d(a["nicht_zugeordnet"]))
     assert teile == _d(daten["journal"]["differenz_realisiert"])
+
+
+def test_rest_im_einzelnen(klient):  # noqa: F811
+    """AP-08u3: In der Welt ist der ganze Rest ein Einzelrest der Gruppe TST
+    (nativ 6.00 EUR = 6.00 EUR, frei erfundene IB-Werte); kein Kurseffekt."""
+    a = klient.get("/ueberleitung").json()["abgleich_realisiert"]
+    assert _d(a["kurseffekt_praemien"]) == 0
+    reste = [(r["gruppe"], r["waehrung"], _d(r["nativ"]), _d(r["eur"])) for r in a["einzelreste"]]
+    assert reste == [("TST", "EUR", Decimal("6.00"), Decimal("6.00"))]
+

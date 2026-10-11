@@ -186,11 +186,45 @@ export default function Ueberleitung(): JSX.Element | null {
             </td>
           </tr>
           <tr>
-            <td>Nicht zugeordnet</td>
+            <td>Rest</td>
             <td className="zahl">
               <Betrag wert={a.nicht_zugeordnet} />
             </td>
-            <td>Was nach den drei belegten Ursachen bleibt — ausgewiesen, nicht verteilt.</td>
+            <td>
+              Was nach den drei Ursachen bleibt, zerlegt je Basiswert (Aktie und ihre Optionen über
+              die ISIN, alte und neue Kennung über Kapitalmaßnahmen verbunden):
+              <details className="rest-details">
+                <summary>
+                  Kurseffekt <Betrag wert={a.kurseffekt_praemien} /> und{' '}
+                  {a.einzelreste.length} Einstandsabweichungen
+                </summary>
+                <p>
+                  <strong>Kurseffekt</strong>: Die verschobene Prämie gleicht sich in Positionswährung
+                  aus, nicht in Euro — das Journal rechnet sie zum Kurs der Zuteilung, IB zum Kurs
+                  des späteren Aktienverkaufs.
+                </p>
+                <p>
+                  <strong>Einstandsabweichungen</strong> in Positionswährung: IB führt den Einstand
+                  anders — z. B. der Barteil einer Fusion (PARA → PSKY), Kapitalrückzahlungen bei
+                  Ausschüttungswerten (IB senkt den Einstand nachträglich), Devisentausch.
+                </p>
+                <table>
+                  <tbody>
+                    {a.einzelreste.map((r) => (
+                      <tr key={r.gruppe}>
+                        <td>{r.gruppe}</td>
+                        <td className="zahl">
+                          <Betrag wert={r.nativ} waehrung={r.waehrung} />
+                        </td>
+                        <td className="zahl">
+                          <Betrag wert={r.eur} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            </td>
           </tr>
           <tr className="summe">
             <td>= Unterschied realisiert (Journal − IB)</td>

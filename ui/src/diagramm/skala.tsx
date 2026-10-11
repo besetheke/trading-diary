@@ -167,6 +167,7 @@ export function yAchse(
   raster: { von: number; bis: number; striche: number[] },
   hoehe: number,
   breite: number,
+  einheit: 'geld' | 'prozent' = 'geld',
 ): JSX.Element {
   return (
     <g className="raster">
@@ -184,6 +185,7 @@ export function yAchse(
             />
             <text x={RAND.links - 6} y={y + 4} textAnchor="end">
               {betrag(String(wert))}
+              {einheit === 'prozent' ? ' %' : ''}
             </text>
           </g>
         )

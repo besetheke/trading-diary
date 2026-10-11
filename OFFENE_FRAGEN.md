@@ -3285,3 +3285,11 @@ Journal − IB 10.530,64 € = Prämien im Einstand gehaltener Aktien 30.163,48 
 Währungsmethode −14.745,89 + Zeitpunkt (16 Legs in offenen Strukturen)
 −4.461,65 + **nicht zugeordnet −425,30 €**. 15.584 schließende Ausführungen
 stimmen mit IB genau. Offen ist nur noch der Rest von −425 €.
+
+**Nachtrag 11.10.2026 (AP-08u3), Rest −425,30 € zerlegt:** Kurseffekt auf
+verschobene Prämien +1.188,72; Barteil PARA-Fusion −775,26 (913,89 USD, OF-80);
+Ausschüttungswerte −822,26 (IB senkt den Einstand mit der Haltedauer —
+vermutlich Kapitalrückzahlungen; in den Cash-Buchungen nur „Ordinary Dividend",
+**nicht belegt**); Devisentausch EUR.PLN −16,47. Offen: Nachweis der
+Kapitalrückzahlungen (IB-Jahresreklassifizierung) und die Buchung des
+Barteils von Fusionen im Journal.

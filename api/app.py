@@ -54,6 +54,7 @@ from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht
 from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
+from analytics.performance import performance_bericht
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -384,6 +385,13 @@ class UeberleitungSpalteAntwort(BaseModel):
     rest: str
 
 
+class UeberleitungEinzelrestAntwort(BaseModel):
+    gruppe: str
+    waehrung: str
+    nativ: str
+    eur: str
+
+
 class UeberleitungAbgleichAntwort(BaseModel):
     praemien_im_einstand: str
     waehrungsmethode: str
@@ -394,6 +402,10 @@ class UeberleitungAbgleichAntwort(BaseModel):
     anzahl_legs_offene_strukturen: int
     zeilen_gleich: int
     zeilen_abweichend: int
+    # AP-08u3: der Rest im Einzelnen — Kurseffekt auf verschobene Prämien und
+    # Einzelreste je Basiswert-Gruppe in Positionswährung.
+    kurseffekt_praemien: str = "0"
+    einzelreste: list[UeberleitungEinzelrestAntwort] = []
 
 
 class UeberleitungAntwort(BaseModel):
@@ -410,6 +422,46 @@ class UeberleitungAntwort(BaseModel):
     # Journal minus IB je Zeile (die Anzeige rechnet nichts, Vertrag 8).
     unterschied_spalte: UeberleitungSpalteAntwort | None = None
     abgleich_realisiert: UeberleitungAbgleichAntwort | None = None
+
+
+# AP-08p: Wertentwicklung — zeitgewichteter Index, Drawdown in % vom Höchststand,
+# Wochen und Monate (analytics.performance).
+class PunktAntwort(BaseModel):
+    datum: date
+    wert: str
+
+
+class PerformanceTagAntwort(BaseModel):
+    datum: date
+    kontowert: str
+    gewinn_ib: str
+    index: str
+    drawdown_quote: str
+    drawdown_prozent: str
+
+
+class PeriodeAntwort(BaseModel):
+    schluessel: str
+    beginn: date
+    ende: date
+    gewinn_ib: str
+    realisiert: str
+    rendite_quote: str
+
+
+class PerformanceAntwort(BaseModel):
+    tage: list[PerformanceTagAntwort]
+    max_drawdown_quote: str
+    max_drawdown_prozent: str
+    max_drawdown_datum: date | None
+    kontowert_ende: str | None
+    gewinn_ib_zeitraum: str
+    rendite_zeitraum_quote: str
+    realisiert_zeitraum: str
+    wochen: list[PeriodeAntwort]
+    monate: list[PeriodeAntwort]
+    # Realisiertes Ergebnis kumuliert (Equity), je Tag mit Schließung.
+    realisiert_kumuliert: list[PunktAntwort] = []
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -1212,6 +1264,14 @@ def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungA
             anzahl_legs_offene_strukturen=abgleich.anzahl_legs_offene_strukturen,
             zeilen_gleich=abgleich.zeilen_gleich,
             zeilen_abweichend=abgleich.zeilen_abweichend,
+            kurseffekt_praemien=_als_text(abgleich.kurseffekt_praemien),
+            einzelreste=[
+                UeberleitungEinzelrestAntwort(
+                    gruppe=r.gruppe, waehrung=r.waehrung,
+                    nativ=_als_text(r.nativ), eur=_als_text(r.eur),
+                )
+                for r in abgleich.einzelreste
+            ],
         ),
     )
 
@@ -1923,6 +1983,49 @@ def erzeuge_app(
         unrealisiert, sonstigen Buchungen und Rest — daneben das realisierte
         Ergebnis des Journals (AP-08u). Nur lesend."""
         return _ueberleitung_aufbauen(engine, db_pfad)
+
+    @applikation.get("/performance", response_model=PerformanceAntwort)
+    def performance(von: date | None = None, bis: date | None = None) -> PerformanceAntwort:
+        """Wertentwicklung des Kontos (AP-08p): je Tag Kontowert, Gewinn laut IB,
+        zeitgewichteter Index und Drawdown vom Höchststand; Wochen und Monate.
+        Im Zeitraum ist der Vortag die Basis. Nur lesend."""
+        if von is not None and bis is not None and von > bis:
+            raise HTTPException(status_code=422, detail="von liegt nach bis")
+        e = performance_bericht(db_pfad, von=von, bis=bis)
+        hundert = Decimal(100)
+
+        def periode(p) -> PeriodeAntwort:
+            return PeriodeAntwort(
+                schluessel=p.schluessel, beginn=p.beginn, ende=p.ende,
+                gewinn_ib=_als_text(p.gewinn_ib), realisiert=_als_text(p.realisiert),
+                rendite_quote=_als_text(p.rendite_quote),
+            )
+
+        return PerformanceAntwort(
+            tage=[
+                PerformanceTagAntwort(
+                    datum=t.datum, kontowert=_als_text(t.kontowert),
+                    gewinn_ib=_als_text(t.gewinn_ib), index=_als_text(t.index),
+                    drawdown_quote=_als_text(t.drawdown_quote),
+                    drawdown_prozent=_als_text(t.drawdown_quote * hundert),
+                )
+                for t in e.tage
+            ],
+            max_drawdown_quote=_als_text(e.max_drawdown_quote),
+            max_drawdown_prozent=_als_text(e.max_drawdown_quote * hundert),
+            max_drawdown_datum=e.max_drawdown_datum,
+            kontowert_ende=_als_text(e.tage[-1].kontowert) if e.tage else None,
+            gewinn_ib_zeitraum=_als_text(sum((t.gewinn_ib for t in e.tage), Decimal("0"))),
+            rendite_zeitraum_quote=_als_text(
+                (e.tage[-1].index if e.tage else Decimal("1")) - Decimal("1")
+            ),
+            realisiert_zeitraum=_als_text(sum((m.realisiert for m in e.monate), Decimal("0"))),
+            wochen=[periode(p) for p in e.wochen],
+            monate=[periode(p) for p in e.monate],
+            realisiert_kumuliert=[
+                PunktAntwort(datum=d, wert=_als_text(w)) for d, w in e.realisiert_kumuliert
+            ],
+        )
 
     @applikation.get("/equity", response_model=EquityAntwort)
     def equity(von: date | None = None, bis: date | None = None) -> EquityAntwort:

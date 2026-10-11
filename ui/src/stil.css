@@ -891,11 +891,13 @@ table.kosten {
 
 /* AP-08g2b: Kennzahlenkopf der gefilterten Auswahl — breitere Zellen, Beträge brechen nicht um. */
 section.auswertung dl.kopf,
+section.dashboard dl.kopf,
 section.depot-seite dl.kopf {
   grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
 }
 
 section.auswertung dl.kopf dd,
+section.dashboard dl.kopf dd,
 section.depot-seite dl.kopf dd {
   white-space: nowrap;
 }
@@ -915,4 +917,27 @@ section.ueberleitung table.ueberleitung td.zahl {
 section.ueberleitung table.ueberleitung tr.summe td {
   font-weight: 600;
   border-top: 2px solid var(--tinte);
+}
+
+/* Dashboard (11.10.2026): eine Diagrammkarte mit Ansichten. */
+section.diagramm-karte {
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.6rem 1rem 0.8rem;
+  margin: 1rem 0;
+}
+
+.diagramm-zeile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+}
+
+details.perioden-tabelle,
+details.rest-details {
+  margin: 0.5rem 0;
+}
+
+details.rest-details table {
+  margin-top: 0.4rem;
 }

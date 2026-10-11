@@ -33,6 +33,8 @@ export default defineConfig({
       '/depot': 'http://localhost:8000',
       // AP-08u: Überleitung vom Ergebnis zum Kontostand.
       '/ueberleitung': 'http://localhost:8000',
+      // AP-08p: Wertentwicklung (Drawdown %, Wochen, Monate).
+      '/performance': 'http://localhost:8000',
       // AP-07f/AP-07fw: Positionsfilter.
       '/auswertung': 'http://localhost:8000',
       '/filterwerte': 'http://localhost:8000',

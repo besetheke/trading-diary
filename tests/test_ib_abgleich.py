@@ -112,3 +112,77 @@ def test_zeitpunkt_legs_in_offenen_strukturen():
 def test_gleiche_und_abweichende_zeilen():
     e = _ergebnis()
     assert (e.zeilen_gleich, e.zeilen_abweichend) == (2, 1)
+
+
+# ------------------------------------------------- AP-08u3: der Rest im Einzelnen
+#
+# S4  Put USD, Multiplikator 100, Lieferung: SELL 2.00 (Kurs 0.90), Zuteilung
+#     (Kurs 0.90); die Aktie (100 zu 40.00, Kurs 0.90) wird später VERKAUFT zu
+#     45.00 (Kurs 0.80). IB: Option 0; Aktie (45 − (40 − 2))·100 = 700.00.
+#     Journal: Option 200.00, Aktie (45 − 40)·100 = 500.00.
+#     Nativ gleicht sich die Verschiebung aus: (200 − 0) + (500 − 700) = 0.
+#     In EUR nicht: 200·0.90 − 200·0.80 = 180 − 160 = 20.00 → Kurseffekt.
+# S5  Aktie USD, Kurs 1: IB führt den Einstand 30.00 niedriger (z. B. eine
+#     Kapitalrückzahlung): Journal (60 − 50)·100 = 1000.00, IB 1030.00 →
+#     Einzelrest −30.00 USD = −30.00 EUR in der Gruppe „R".
+# Gruppen: conids 5/6 gehören zu „P" (Option und Aktie desselben Basiswerts),
+# conid 7 zu „R".
+
+S45_AUSF = [
+    _ausf("F1", 5, "SELL", "-1", "2.00", "0.90"),
+    _ausf("F2", 5, "BUY", "1", "0.00", "0.90", "assignment"),
+    _ausf("F3", 6, "BUY", "100", "40.00", "0.90", "assignment"),
+    _ausf("F4", 6, "SELL", "-100", "45.00", "0.80"),
+    _ausf("G1", 7, "BUY", "100", "50.00", "1"),
+    _ausf("G2", 7, "SELL", "-100", "60.00", "1"),
+]
+S45_INSTR = [
+    dict(conid=5, multiplikator=D("100"), abwicklungsart="lieferung"),
+    dict(conid=6, multiplikator=D("1"), abwicklungsart=None),
+    dict(conid=7, multiplikator=D("1"), abwicklungsart=None),
+]
+S45_LEGS = [
+    _leg(50, 5, "F1", "F2", "-1", "200.00"),
+    _leg(60, 6, "F3", "F4", "100", "500.00"),
+    _leg(70, 7, "G1", "G2", "100", "1000.00"),
+]
+S45_IB = {
+    "F2": (D("0"), D("0.90")),
+    "F4": (D("700.00"), D("0.80")),
+    "G2": (D("1030.00"), D("1")),
+}
+S45_GRUPPEN = {5: "P", 6: "P", 7: "R"}
+
+
+def _s45():
+    return ib_abgleich(S45_LEGS, set(), S45_AUSF, S45_INSTR, S45_IB, [],
+                       gruppe_je_conid=S45_GRUPPEN)
+
+
+def test_kurseffekt_auf_verschobene_praemien():
+    e = _s45()
+    assert e.kurseffekt_praemien == D("20.00")
+
+
+def test_einzelreste_je_gruppe():
+    e = _s45()
+    assert [(r.gruppe, r.nativ, r.eur) for r in e.einzelreste] == [("R", D("-30.00"), D("-30.00"))]
+
+
+def test_rest_ist_kurseffekt_plus_einzelreste():
+    """Ohne gehaltene Aktien ist der ganze Methodenteil Rest:
+    Methode = (200·0.90) + (500 − 700)·0.80 + (1000 − 1030)·1 = 180 − 160 − 30 = −10.00."""
+    e = _s45()
+    assert e.methode_einstand == D("-10.00")
+    assert e.praemien_im_einstand == 0
+    rest = e.methode_einstand - e.praemien_im_einstand
+    assert rest == e.kurseffekt_praemien + sum(r.eur for r in e.einzelreste)
+
+
+def test_ohne_gruppen_gilt_die_conid_als_gruppe():
+    """Ohne Zuordnung bildet jede conid ihre eigene Gruppe — dann gleicht sich
+    die Verschiebung zwischen Option (5) und Aktie (6) nicht aus und erscheint
+    als zwei Einzelreste."""
+    e = ib_abgleich(S45_LEGS, set(), S45_AUSF, S45_INSTR, S45_IB, [])
+    assert e.kurseffekt_praemien == 0
+    assert sorted(r.gruppe for r in e.einzelreste) == ["5", "6", "7"]

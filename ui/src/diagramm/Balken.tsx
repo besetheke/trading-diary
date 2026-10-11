@@ -26,9 +26,15 @@ import type { Punkt } from './skala'
 interface Eigenschaften {
   balken: Punkt[]
   titel?: string
+  // Beschriftung der x-Achse und des Zeigers; Vorgabe Monat (JJJJ-MM).
+  beschriftung?: (x: string) => string
 }
 
-export default function Balken({ balken, titel }: Eigenschaften): JSX.Element {
+export default function Balken({
+  balken,
+  titel,
+  beschriftung = monatKurz,
+}: Eigenschaften): JSX.Element {
   const [aktiv, setzeAktiv] = useState<number | null>(null)
 
   const geruest = useMemo(() => {
@@ -88,7 +94,7 @@ export default function Balken({ balken, titel }: Eigenschaften): JSX.Element {
                   y={unten + 16}
                   textAnchor="middle"
                 >
-                  {monatKurz(eintrag.x)}
+                  {beschriftung(eintrag.x)}
                 </text>
               ) : null}
             </g>
@@ -104,7 +110,7 @@ export default function Balken({ balken, titel }: Eigenschaften): JSX.Element {
               y2={unten}
             />
             {zeigerKasten(
-              [monatKurz(gewaehlt.eintrag.x), geldDe(gewaehlt.eintrag.y)],
+              [beschriftung(gewaehlt.eintrag.x), geldDe(gewaehlt.eintrag.y)],
               RAND.links + gewaehlt.i * geruest.slot + geruest.slot / 2,
               geruest.py(Number(gewaehlt.eintrag.y)),
               `${gewaehlt.eintrag.x} · ${gewaehlt.eintrag.y}`,
