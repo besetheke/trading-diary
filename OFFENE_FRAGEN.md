@@ -3300,3 +3300,21 @@ Oberfläche nennt die Ursache dort als offen.
 Prüfung CAR (Nutzer, Vergleich mit dem bisherigen Tool 6.470,50): Journal
 6.464,41 USD = IB 6.464,41 USD; das bisherige Tool zeigt vor Kommissionen
 (6,09 USD) und in USD, das Journal in EUR (5.501,95 €).
+
+**Nachtrag 11.10.2026 (Durchsicht OF-79/OF-80, Stand nach AP-07fm):**
+- OF-79 Befund 5, „53 Aktien ohne `underlying`": **ohne Wirkung.** Ketten,
+  Filter (`/filterwerte`, lose Legs) und der IB-Abgleich nehmen bei fehlendem
+  `underlying` das Symbol (keine Kette ohne Basiswert). Der Import übernimmt,
+  was IB liefert (`underlyingSymbol` ist bei Aktien leer) — kein Eingriff.
+- OF-80 Punkt 4 / OF-79 Befund 4, „vier Optionen mit Verfall vor dem Stichtag
+  offen": Es sind die **angepassten Kontrakte** nach den Splits (SMCI 9 Stück
+  P35/C45.75, Verfall 04.10.2024; FAST je 1 P30/P37.5, Verfall 15.08.2025). Ihre
+  einzige Ausführung ist die Verfallsbuchung zu 0 — sie eröffnet ein Leg, weil
+  die Position unter der alten conid stand (OF-80 Punkt 3, Optionsanpassungen).
+  Wirkung aufs Ergebnis: 0. Sie erscheinen als offen und im Unrealisierten als
+  „ohne Bestand". Behebung gehört zu OF-80 Punkt 3 — bleibt offen (Regel 10).
+- OF-79 Befund 2 (Rollkandidaten): Durchsicht jetzt in der Oberfläche
+  („Rolls prüfen", AP-08r).
+- OF-79 Befund 3 (Strategie nur bei 18 %): Ursache ist vor allem der fehlende
+  OA-Export für 685 OA-Trades (meist 2025). Neuer Export nach `C:\Trading\oa`
+  (AP-13r2); die Positionsliste zeigt, wie viele noch fehlen.
