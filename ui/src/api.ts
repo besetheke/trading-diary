@@ -418,6 +418,50 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-13ab: Abgleich OA ↔ IB — Beträge als Text in der Währung des Trades.
+export interface OaTradeVergleich {
+  oa_trade: string
+  strategie: string | null
+  status: string
+  schluss_zeit: string | null
+  waehrung: string
+  oa_profit: string
+  ib_netto: string | null
+  differenz: string | null
+  grund: string
+}
+
+export interface OaStrategieVergleich {
+  strategie: string | null
+  waehrung: string
+  anzahl: number
+  gleich: number
+  verrechnet: number
+  gering: number
+  abweichend: number
+  offen: number
+  fehlt: number
+  waehrung_unklar: number
+  summe_oa: string
+  summe_ib: string
+  differenz: string
+}
+
+export interface OaAbgleich {
+  strategien: OaStrategieVergleich[]
+  abweichungen: OaTradeVergleich[]
+  anzahl_trades: number
+  anzahl_gleich: number
+}
+
+export function holeOaAbgleich(von?: string | null, bis?: string | null): Promise<OaAbgleich> {
+  const suche = new URLSearchParams()
+  if (von) suche.set('von', von)
+  if (bis) suche.set('bis', bis)
+  const text = suche.toString()
+  return hole(`/oa-abgleich${text ? `?${text}` : ''}`) as Promise<OaAbgleich>
+}
+
 // AP-06sc: Strategie-Scorecard — Beträge und Quoten als Text.
 export interface StrategieZeile {
   strategie: string | null

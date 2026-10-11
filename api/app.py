@@ -54,6 +54,7 @@ from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht, im_f
 from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
+from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
 from analytics.strategien import strategie_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
@@ -367,6 +368,44 @@ class AuswertungAntwort(BaseModel):
     verlauf: list[VerlaufPunktAntwort] = []
     # AP-07fv: realisiert netto je Positionswährung (nativ), nach Währung sortiert.
     netto_je_waehrung: list[WaehrungsbetragAntwort] = []
+
+
+# AP-13ab: Abgleich OA ↔ IB — Geld als Text (Vertrag 8).
+class OaTradeVergleichAntwort(BaseModel):
+    oa_trade: str
+    strategie: str | None
+    status: str
+    schluss_zeit: datetime | None
+    waehrung: str
+    oa_profit: str
+    ib_netto: str | None
+    differenz: str | None
+    grund: str
+
+
+class OaStrategieVergleichAntwort(BaseModel):
+    strategie: str | None
+    waehrung: str
+    anzahl: int
+    gleich: int
+    verrechnet: int
+    gering: int
+    abweichend: int
+    offen: int
+    fehlt: int
+    waehrung_unklar: int
+    summe_oa: str
+    summe_ib: str
+    differenz: str
+
+
+class OaAbgleichAntwort(BaseModel):
+    strategien: list[OaStrategieVergleichAntwort]
+    # Nur die Trades, die nicht „gleich" sind — nach |Δ| absteigend, offene
+    # und fehlende danach.
+    abweichungen: list[OaTradeVergleichAntwort]
+    anzahl_trades: int
+    anzahl_gleich: int
 
 
 # AP-06sc: Strategie-Scorecard — Geld und Quoten als Text (Vertrag 8).
@@ -2371,6 +2410,39 @@ def erzeuge_app(
                 seiten=werte(ketten_spalte(chains.c.seite)),
                 endzustaende=werte(ketten_spalte(chains.c.endzustand)),
             )
+
+    @applikation.get("/oa-abgleich", response_model=OaAbgleichAntwort)
+    def oa_abgleich(von: date | None = None, bis: date | None = None) -> OaAbgleichAntwort:
+        """Abgleich OA ↔ IB (AP-13ab) je Strategie und die abweichenden
+        Trades; ``von``/``bis`` am OA-Schlusstag."""
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        e = oa_vergleich_bericht(db_pfad, von=von, bis=bis)
+        abweichungen = sorted(
+            (t for t in e.trades if t.grund != "gleich"),
+            key=lambda t: (t.differenz is None, -abs(t.differenz or 0), t.oa_trade),
+        )
+        return OaAbgleichAntwort(
+            strategien=[
+                OaStrategieVergleichAntwort(**{
+                    **s.__dict__,
+                    "summe_oa": _als_text(s.summe_oa),
+                    "summe_ib": _als_text(s.summe_ib),
+                    "differenz": _als_text(s.differenz),
+                })
+                for s in e.strategien
+            ],
+            abweichungen=[
+                OaTradeVergleichAntwort(**{
+                    **t.__dict__,
+                    "oa_profit": _als_text(t.oa_profit),
+                    "ib_netto": _als_text(t.ib_netto),
+                    "differenz": _als_text(t.differenz),
+                })
+                for t in abweichungen
+            ],
+            anzahl_trades=len(e.trades),
+            anzahl_gleich=sum(1 for t in e.trades if t.grund == "gleich"),
+        )
 
     @applikation.get("/strategien", response_model=StrategienAntwort)
     def strategien(von: date | None = None, bis: date | None = None) -> StrategienAntwort:

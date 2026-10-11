@@ -12,6 +12,7 @@ import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
 import Rollkandidaten from './Rollkandidaten'
 import Strategien from './Strategien'
+import OaAbgleich from './OaAbgleich'
 import Tag from './Tag'
 import Uebersicht from './Uebersicht'
 import './stil.css'
@@ -29,7 +30,7 @@ function heuteDatum(): string {
 // Wähler trotzdem (Z1: ein Zeitraum für alles) und sagen ehrlich, dass er
 // dort noch nichts filtert. AP-08g2: /kosten wirkt ebenfalls; AP-08z: die
 // Positionsliste (/) ebenso.
-const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten', '/strategie']
+const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten', '/strategie', '/abgleich']
 
 function Kopf(): JSX.Element {
   const ort = useLocation()
@@ -49,6 +50,7 @@ function Kopf(): JSX.Element {
         <Link to={`/bestand${mit}`}>Depot</Link>
         <Link to={`/${mit}`}>Positionen</Link>
         <Link to={`/strategie${mit}`}>Strategien</Link>
+        <Link to={`/abgleich${mit}`}>Abgleich OA</Link>
         <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
         <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
         <Link to={`/monat${mit}`}>Kalender</Link>
@@ -103,6 +105,8 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             <Route path="/rolls" element={<Rollkandidaten />} />
             {/* AP-06sc: /strategien ist der API-Endpunkt, die Seite /strategie. */}
             <Route path="/strategie" element={<Strategien />} />
+            {/* AP-13ab: /oa-abgleich ist der API-Endpunkt, die Seite /abgleich. */}
+            <Route path="/abgleich" element={<OaAbgleich />} />
             <Route path="*" element={<Unbekannt />} />
           </Routes>
         </main>

@@ -3367,3 +3367,21 @@ Zuteilungen hängen am Leg, alle Lots der Lieferung gehören zur Kette, Wheels
 (Covered Calls, Erkennung `heuristik`) sind eine Position. Trade 5213 jetzt
 −56,47 USD. Offen bleiben 21 Aktien-Legs aus Zuteilung ohne Options-Ausführung
 zur selben Zeit (Daten 2022/23, Optionsseite fehlt) — lose, weiter im Ergebnis.
+
+## OF-82 · Vorgemerkte Pakete (Nutzer, 11.10.2026)
+
+1. **Steuer** — eigener Bereich, später (Wunsch des Nutzers: „parke das in einem
+   späteren AP"). Vorhanden ist bereits `tests/test_steuer.py` / Steuerlogik;
+   Umfang (Anlage KAP, Verlustverrechnungstöpfe Termingeschäfte/Aktien,
+   Währungsumrechnung zum Tageskurs) mit dem Nutzer klären.
+2. **OA-Sicht** — Paarung je OA-Trade statt Konto-FIFO, damit Ergebnisse nicht
+   zwischen Bots/Strategien wandern (Befund AP-13ab: 471 verrechnete Trades,
+   Strategie-Summen um bis zu ±22.600 USD verschoben). Grundlage für eine
+   faire Strategie-Scorecard.
+3. **Kurs des Basiswerts zum Zeitpunkt des Trades** (Nutzerwunsch) — aufzeichnen
+   und anzeigen; Quelle offen (IB-Kurshistorie über den IBKR-Zugang, nur lesend;
+   OO-Backtests tragen den Eröffnungskurs).
+4. **Option-Omega-Backtests** einbauen (Nutzerwunsch) — Vergleich Live gegen
+   Backtest je Strategie. Offen: Zuordnung Backtest → OA-Strategie
+   (`trade-log1145-1315.csv`: SPX, 0DTE IC/Fly, Einstieg 11:45/12:15/12:45/13:15,
+   05/2022–07/2026, Spalte „Strategy" leer).

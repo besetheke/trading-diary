@@ -177,10 +177,16 @@ class ImportErgebnis:
     # AP-13r3: Nummern, deren Inhalt vom gespeicherten Stand abweicht und die
     # auf Wunsch (``abweichende_behalten``) unverändert blieben.
     abweichend: tuple[str, ...] = ()
+    # AP-13ab: gleiche Trades, deren Zeilenbild durch das vollständigere des
+    # neuen Exports ersetzt wurde (Inhalt unverändert).
+    zeilen_angereichert: int = 0
 
     @property
     def zeilen_uebersprungen(self) -> int:
-        return self.zeilen_gesamt - self.zeilen_neu - self.zeilen_fortgeschrieben
+        return (
+            self.zeilen_gesamt - self.zeilen_neu - self.zeilen_fortgeschrieben
+            - self.zeilen_angereichert
+        )
 
 
 @dataclass
@@ -643,6 +649,7 @@ def import_optionapp_ordner(
     ordner: str | pathlib.Path,
     *,
     abweichende_behalten: bool = False,
+    anreichern: bool = False,
 ) -> list[tuple[str, ImportErgebnis]]:
     """Importiert alle XLSX-Exporte eines Ordners (AP-13r2), nach Name sortiert.
     Bekannte Dateien ändern nichts; jede Datei ist ein eigener Lauf."""
@@ -651,10 +658,28 @@ def import_optionapp_ordner(
         raise FileNotFoundError(f"OA-Ordner nicht gefunden: {pfad}")
     return [
         (datei.name, import_optionapp_file(
-            db_pfad, datei, abweichende_behalten=abweichende_behalten))
+            db_pfad, datei, abweichende_behalten=abweichende_behalten,
+            anreichern=anreichern))
         for datei in sorted(pfad.glob("*.xlsx"), key=lambda d: d.name)
         if not datei.name.startswith("~$")  # Sperrdatei eines geöffneten Excel
     ]
+
+
+def _anreichern(verbindung, gespeichert: "_TradeInhalt", trade: "_TradeInhalt") -> bool:
+    """AP-13ab: Ist das gespeicherte Zeilenbild eine Liste (alter Export) und
+    das neue ein Objekt mit Spaltennamen (AP-13r3), wird es übernommen; der
+    alte Rohstand bleibt unter ``_vorher``. Nur das Zeilenbild ändert sich."""
+    alt = json.loads(gespeichert.felder["roh_json"])
+    neu = json.loads(trade.felder["roh_json"])
+    if not isinstance(alt, list) or not isinstance(neu, dict):
+        return False
+    neu["_vorher"] = alt
+    verbindung.execute(
+        update(optionapp_trades)
+        .where(optionapp_trades.c.id == gespeichert.felder["id"])
+        .values(roh_json=json.dumps(neu, ensure_ascii=False))
+    )
+    return True
 
 
 def import_optionapp_file(
@@ -662,6 +687,7 @@ def import_optionapp_file(
     datei_pfad: str | pathlib.Path,
     *,
     abweichende_behalten: bool = False,
+    anreichern: bool = False,
 ) -> ImportErgebnis:
     """Importiert einen OptionApp-Trade-Export idempotent (AP-13, Teil 1).
 
@@ -684,8 +710,8 @@ def import_optionapp_file(
                 import_runs.c.quelle == "optionapp", import_runs.c.datei_hash == datei_hash
             )
         ).first()
-        if bekannter_lauf is not None:
-            # Gleicher Dateiinhalt: nichts zu tun.
+        if bekannter_lauf is not None and not anreichern:
+            # Gleicher Dateiinhalt: nichts zu tun (AP-13ab: außer beim Anreichern).
             return ImportErgebnis(zeilen_gesamt=len(inhalt.trades), zeilen_neu=0)
 
         # Ein OA-Lauf trägt keine IB-Ergebnisse; kein Vergleich darf hier
@@ -708,11 +734,14 @@ def import_optionapp_file(
         zeilen_neu = 0
         fortgeschrieben = 0
         abweichend: list[str] = []
+        angereichert = 0
         for trade in inhalt.trades:
             oa_trade = trade.felder["oa_trade"]
             vorhanden = _vorhandener_trade(verbindung, oa_trade)
             if vorhanden is not None:
                 if vorhanden.ist_gleich(trade):
+                    if anreichern and _anreichern(verbindung, vorhanden, trade):
+                        angereichert += 1
                     continue  # Bereits gebucht, identischer Inhalt
                 derselbe = all(
                     vorhanden.felder[f] == trade.felder[f] for f in _IDENTITAET
@@ -746,4 +775,5 @@ def import_optionapp_file(
         zeilen_neu=zeilen_neu,
         zeilen_fortgeschrieben=fortgeschrieben,
         abweichend=tuple(abweichend),
+        zeilen_angereichert=angereichert,
     )

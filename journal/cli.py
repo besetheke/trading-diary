@@ -43,6 +43,8 @@ def _oa_bericht(name: str, ergebnis) -> None:
         f"OptionApp-Import {name}: {ergebnis.zeilen_gesamt} Trades gelesen, "
         f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen{zusatz}"
     )
+    if ergebnis.zeilen_angereichert:
+        print(f"  Angereichert (Zeilenbild des neuen Exports): {ergebnis.zeilen_angereichert}")
     if ergebnis.abweichend:
         print(
             f"  Abweichend vom gespeicherten Stand, unverändert gelassen: "
@@ -85,6 +87,12 @@ def main(argv: list[str] | None = None) -> int:
         "datei",
         type=pathlib.Path,
         help="Pfad zur XLSX-Exportdatei oder zu einem Ordner mit Exporten (AP-13r2)",
+    )
+    oa_importer.add_argument(
+        "--anreichern",
+        action="store_true",
+        help="Gleiche Trades übernehmen das vollständigere Zeilenbild des neuen "
+        "Exports (Gewinn in Originalwährung; AP-13ab)",
     )
     oa_importer.add_argument(
         "--abweichende-behalten",
@@ -278,14 +286,16 @@ def main(argv: list[str] | None = None) -> int:
             behalten = argumente.abweichende_behalten
             if argumente.datei.is_dir():
                 ergebnisse = import_optionapp_ordner(
-                    db_pfad, argumente.datei, abweichende_behalten=behalten
+                    db_pfad, argumente.datei, abweichende_behalten=behalten,
+                    anreichern=argumente.anreichern,
                 )
             else:
                 ergebnisse = [
                     (
                         argumente.datei.name,
                         import_optionapp_file(
-                            db_pfad, argumente.datei, abweichende_behalten=behalten
+                            db_pfad, argumente.datei, abweichende_behalten=behalten,
+                            anreichern=argumente.anreichern,
                         ),
                     )
                 ]
