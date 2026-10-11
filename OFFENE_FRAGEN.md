@@ -3271,3 +3271,11 @@ gemeldet):
    Detailansicht noch nicht als ein Ereignis im Zeitstrahl.
 
 OF-79, Befund 1 (Kapitalmaßnahmen fehlen): **behoben** durch AP-03vz/AP-03vz2.
+
+**Nachtrag 11.10.2026 (AP-02p/AP-08u):** IBs realisiertes Ergebnis liegt jetzt je
+Ausführung in `flex_ib_realized` (34.510 von 34.510, Summe 77.853,98 €); die
+Überleitung im Dashboard zeigt die Zerlegung des Gewinns laut IB und den
+Unterschied des Journals (+10.530,64 € auf Equity-Basis, +14.992 € auf Basis
+geschlossener Legs). Abgleichswerkzeuge dürfen nicht mehr auf `roh_json` bauen.
+Der Rest der Überleitung (−5.692,73 €: Währung, Abgrenzungen) ist ein Saldo, den
+IB nicht einzeln ausweist.

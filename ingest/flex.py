@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from journal.db import create_db_engine
@@ -59,6 +59,7 @@ from journal.schema import (
     flex_cash_transactions,
     flex_change_in_nav,
     flex_corporate_actions,
+    flex_ib_realized,
     flex_nav_tage,
     flex_open_positions,
     flex_securities_info,
@@ -142,6 +143,8 @@ class _DateiInhalt:
     nav_tage: list[dict] = field(default_factory=list)
     change_in_nav: list[dict] = field(default_factory=list)
     cash_report: list[dict] = field(default_factory=list)
+    # AP-02p: IBs realisiertes Ergebnis je Ausführung (nur Zeilen mit Wert).
+    ib_realized: list[dict] = field(default_factory=list)
     # conid → zusammengeführte Instrumentendaten; Trades zuerst, dann
     # SecuritiesInfo (liefert den Multiplikator).
     instruments: dict[int, dict] = field(default_factory=dict)
@@ -508,6 +511,27 @@ def _ereignis_zeile(konto: str, ereignis: ET.Element, sektion: str) -> dict:
     }
 
 
+def _ib_realized_zeile(konto: str, ausfuehrung: dict, attribute: dict) -> dict | None:
+    """IBs ``fifoPnlRealized`` einer Ausführung (AP-02p) oder ``None``, wenn die
+    Datei keinen Wert liefert — leer heißt „nicht geliefert", ``0`` ist ein Wert.
+    Der Wert steht in Positionswährung, netto nach Kommission; ``fxRateToBase`` ist
+    IBs Kurs in die Basiswährung."""
+    kontext = f"Ausführung {ausfuehrung['exec_id']}"
+    wert = _dezimalwert(attribute, "fifoPnlRealized", kontext)
+    if wert is None:
+        return None
+    return {
+        "konto": konto,
+        "quell_schluessel": f"trade:{ausfuehrung['exec_id']}",
+        "exec_id": ausfuehrung["exec_id"],
+        "handelstag": ausfuehrung["handelszeit"].date(),
+        "conid": ausfuehrung["conid"],
+        "waehrung": ausfuehrung["waehrung"],
+        "fifo_pnl_realized": wert,
+        "fx_rate_to_base": _dezimalwert(attribute, "fxRateToBase", kontext),
+    }
+
+
 def _nav_zeile(konto: str, element: ET.Element) -> dict:
     """Ein Kontowert je Tag (``EquitySummaryByReportDateInBase``, AP-02n).
     Pflicht sind ``reportDate``, ``currency`` und ``total``; leere
@@ -735,6 +759,9 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
                 raise ValueError(f"{datei}: tradeID {zeile['exec_id']} mehrfach in der Datei")
             gesehene_exec_ids.add(zeile["exec_id"])
             inhalt.executions.append(zeile)
+            ib_zeile = _ib_realized_zeile(konto, zeile, attribute)
+            if ib_zeile is not None:
+                inhalt.ib_realized.append(ib_zeile)
             _instrument_uebernehmen(
                 inhalt, dict(trade.attrib), f"Ausführung {zeile['exec_id']}", bis
             )
@@ -926,6 +953,40 @@ def _instrumente_schreiben(verbindung, daten_je_conid: dict[int, dict]) -> None:
         _stammsatz_schreiben(verbindung, instruments, daten)
 
 
+def nachtragen_realisiert(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path) -> int:
+    """Trägt IBs ``fifoPnlRealized`` aus einer **bereits importierten** Datei nach
+    (AP-02p). Der Import überspringt eine bekannte Datei vollständig; für Dateien,
+    die vor Einführung der Tabelle ``flex_ib_realized`` eingelesen wurden, liest
+    dieser Weg nur dieses Feld und ergänzt, was fehlt. Nichts anderes wird
+    geschrieben, vorhandene Zeilen bleiben (Regel 4); wiederholbar.
+
+    Rückgabe: Zahl der neu eingefügten Zeilen.
+    """
+    datei = pathlib.Path(datei_pfad)
+    if not datei.is_file():
+        raise FileNotFoundError(f"Importdatei nicht gefunden: {datei}")
+    datei_hash = hashlib.sha256(datei.read_bytes()).hexdigest()
+    inhalt = _parse_datei(datei)
+    engine = create_db_engine(db_pfad)
+    with engine.begin() as verbindung:
+        lauf = verbindung.execute(
+            select(import_runs.c.id).where(import_runs.c.datei_hash == datei_hash)
+        ).first()
+        if lauf is None:
+            raise ValueError(
+                f"{datei.name}: Datei ist noch nicht importiert — erst `journal import`, "
+                "dann nachtragen"
+            )
+        vorher = verbindung.execute(
+            select(func.count()).select_from(flex_ib_realized)
+        ).scalar_one()
+        _sektionszeilen_schreiben(verbindung, flex_ib_realized, inhalt.ib_realized, lauf[0])
+        nachher = verbindung.execute(
+            select(func.count()).select_from(flex_ib_realized)
+        ).scalar_one()
+    return nachher - vorher
+
+
 def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path) -> ImportErgebnis:
     """Importiert eine Flex-XML-Datei idempotent in die Datenbank (AP-02).
 
@@ -970,6 +1031,7 @@ def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
         _sektionszeilen_schreiben(verbindung, flex_nav_tage, inhalt.nav_tage, lauf_id)
         _sektionszeilen_schreiben(verbindung, flex_change_in_nav, inhalt.change_in_nav, lauf_id)
         _sektionszeilen_schreiben(verbindung, flex_cash_report, inhalt.cash_report, lauf_id)
+        _sektionszeilen_schreiben(verbindung, flex_ib_realized, inhalt.ib_realized, lauf_id)
         _securities_info_schreiben(verbindung, inhalt.securities_info)
         _instrumente_schreiben(verbindung, inhalt.instruments)
 

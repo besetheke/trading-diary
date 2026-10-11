@@ -62,6 +62,7 @@ from journal.schema import (
     chains,
     entity_tags,
     executions,
+    flex_ib_realized,
     flex_open_positions,
     instruments,
     journal_entries,
@@ -350,6 +351,39 @@ class DepotAntwort(BaseModel):
     stichtag: date | None
     positionen: list[DepotPositionAntwort]
     summen: DepotSummenAntwort
+
+
+# AP-08u: Überleitung vom Ergebnis zum Kontostand. Jede Zahl hat eine Quelle
+# (Kontowert/Einzahlungen: /nav, IB realisiert: flex_ib_realized, unrealisiert:
+# /depot, sonstige Buchungen und Journal-Ergebnis: /kapital); der Rest ist die
+# Differenz — nichts wird frei erfunden.
+class UeberleitungIbAntwort(BaseModel):
+    realisiert: str
+    unrealisiert: str
+    sonstige_buchungen: str
+    rest: str
+
+
+class UeberleitungJournalAntwort(BaseModel):
+    realisiert: str
+    differenz_realisiert: str
+
+
+class UeberleitungAbdeckungAntwort(BaseModel):
+    ausfuehrungen: int
+    mit_ib_wert: int
+
+
+class UeberleitungAntwort(BaseModel):
+    stichtag: date | None
+    bestand_stichtag: date | None
+    kontowert: str | None
+    einzahlungen: str | None
+    gewinn_ib: str | None
+    ib: UeberleitungIbAntwort | None
+    journal: UeberleitungJournalAntwort | None
+    abdeckung: UeberleitungAbdeckungAntwort
+    anzahl_kurs_fehlt: int
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -1055,6 +1089,69 @@ def _equity_als_antwort(ergebnis: EquityErgebnis) -> EquityAntwort:
     )
 
 
+def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungAntwort:
+    """Vom Gewinn laut IB zu seinen Bestandteilen (AP-08u), nur lesend."""
+    nav = nav_bericht(db_pfad)
+    with engine.connect() as verbindung:
+        ausfuehrungen = verbindung.execute(
+            select(func.count()).select_from(executions).where(
+                executions.c.ereignistyp.in_(["trade", "expiry", "exercise", "assignment"])
+            )
+        ).scalar_one()
+        mit_ib_wert = verbindung.execute(
+            select(func.count()).select_from(executions).where(
+                executions.c.ereignistyp.in_(["trade", "expiry", "exercise", "assignment"]),
+                executions.c.exec_id.in_(select(flex_ib_realized.c.exec_id)),
+            )
+        ).scalar_one()
+        abdeckung = UeberleitungAbdeckungAntwort(
+            ausfuehrungen=ausfuehrungen, mit_ib_wert=mit_ib_wert
+        )
+        if not nav.tage:
+            return UeberleitungAntwort(
+                stichtag=None, bestand_stichtag=None, kontowert=None, einzahlungen=None,
+                gewinn_ib=None, ib=None, journal=None, abdeckung=abdeckung, anzahl_kurs_fehlt=0,
+            )
+        letzter = nav.tage[-1]
+        realisiert = Decimal("0.00")
+        kurs_fehlt = 0
+        for pnl, kurs in verbindung.execute(
+            select(flex_ib_realized.c.fifo_pnl_realized, flex_ib_realized.c.fx_rate_to_base).where(
+                flex_ib_realized.c.handelstag <= letzter.datum
+            )
+        ):
+            if kurs is None:
+                kurs_fehlt += 1
+            else:
+                realisiert += pnl * kurs
+        depot = _depot_aufbauen(verbindung)
+    unrealisiert = Decimal(depot.summen.unrealisiert_eur)
+    kapital = kapital_bericht(db_pfad)
+    sonstige = kapital.cash_im_zeitraum
+    gewinn = letzter.gewinn
+    rest = gewinn - (realisiert + unrealisiert + sonstige)
+    journal = kapital.ergebnis_im_zeitraum
+    return UeberleitungAntwort(
+        stichtag=letzter.datum,
+        bestand_stichtag=depot.stichtag,
+        kontowert=_als_text(letzter.gesamt),
+        einzahlungen=_als_text(letzter.einzahlungen_kumuliert),
+        gewinn_ib=_als_text(gewinn),
+        ib=UeberleitungIbAntwort(
+            realisiert=_als_text(realisiert),
+            unrealisiert=_als_text(unrealisiert),
+            sonstige_buchungen=_als_text(sonstige),
+            rest=_als_text(rest),
+        ),
+        journal=UeberleitungJournalAntwort(
+            realisiert=_als_text(journal),
+            differenz_realisiert=_als_text(journal - realisiert),
+        ),
+        abdeckung=abdeckung,
+        anzahl_kurs_fehlt=kurs_fehlt,
+    )
+
+
 _SEITE_JE_RIGHT = {"C": "Call", "P": "Put"}
 
 
@@ -1755,6 +1852,13 @@ def erzeuge_app(
         unrealisiertes Ergebnis — in Positionswährung und in EUR. Nur lesend."""
         with engine.connect() as verbindung:
             return _depot_aufbauen(verbindung)
+
+    @applikation.get("/ueberleitung", response_model=UeberleitungAntwort)
+    def ueberleitung() -> UeberleitungAntwort:
+        """Vom Gewinn laut IB (Kontowert − Einzahlungen) zu realisiert,
+        unrealisiert, sonstigen Buchungen und Rest — daneben das realisierte
+        Ergebnis des Journals (AP-08u). Nur lesend."""
+        return _ueberleitung_aufbauen(engine, db_pfad)
 
     @applikation.get("/equity", response_model=EquityAntwort)
     def equity(von: date | None = None, bis: date | None = None) -> EquityAntwort:

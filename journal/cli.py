@@ -24,7 +24,7 @@ from analytics.kommission import als_csv as kommission_als_csv
 from analytics.kommission import kommissions_bericht
 from analytics.steuer import als_csv as steuer_als_csv
 from ingest import flex_abruf
-from ingest.flex import import_flex_file
+from ingest.flex import import_flex_file, nachtragen_realisiert
 from ingest.optionapp import import_optionapp_file
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.kampagnen_durchsicht import kampagnen_ausschreiben, kampagnen_urteile_einlesen
@@ -44,6 +44,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     importer.add_argument("datei", type=pathlib.Path, help="Pfad zur Flex-XML-Datei")
     importer.add_argument(
+        "--db",
+        default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    nachtrager = unterbefehle.add_parser(
+        "nachtragen-realisiert",
+        help="IBs fifoPnlRealized aus bereits importierten Flex-Dateien nachtragen (AP-02p)",
+    )
+    nachtrager.add_argument("dateien", type=pathlib.Path, nargs="+", help="Flex-XML-Dateien")
+    nachtrager.add_argument(
         "--db",
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
@@ -224,6 +234,15 @@ def main(argv: list[str] | None = None) -> int:
             f"Import {argumente.datei.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
             f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
         )
+    elif argumente.befehl == "nachtragen-realisiert":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        for datei in argumente.dateien:
+            try:
+                neu = nachtragen_realisiert(db_pfad, datei)
+            except (FileNotFoundError, ValueError) as fehler:
+                print(f"Nachtragen fehlgeschlagen: {fehler}", file=sys.stderr)
+                return 1
+            print(f"Nachgetragen {datei.name}: {neu} Zeilen mit IB-Wert neu")
     elif argumente.befehl == "import-optionapp":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         try:

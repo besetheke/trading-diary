@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AP-02p: dieselben vier Ausfuehrungen wie activity_realisiert.xml aus einer neueren Abfrage:
+     Trade 8000002 traegt jetzt fifoPnlRealized="10.00" (Nachtrag). -->
+<FlexQueryResponse queryname="Activity" type="Statement">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U7777777" fromDate="20260105" toDate="20260106"
+                   period="CustomDateRange" whenGenerated="20260108;060000">
+      <Trades>
+        <Trade levelOfDetail="EXECUTION" transactionID="8100001" tradeID="8000001" ibExecID="0001.0003.01.01"
+               ibOrderID="6660001" orderReference="" conid="110001" symbol="IDX2 150P"
+               underlyingSymbol="IDX2" assetCategory="OPT" putCall="P" strike="150" expiry="20260220"
+               buySell="BUY" quantity="2" tradePrice="1.10" proceeds="-220.00" ibCommission="-2.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="-222.00"
+               dateTime="20260105;153100" orderTime="20260105;153000" exchange="CBOE" notes=""
+               openCloseIndicator="C" fifoPnlRealized="150.00" />
+        <Trade levelOfDetail="EXECUTION" transactionID="8100002" tradeID="8000002" ibExecID="0001.0003.01.02"
+               ibOrderID="6660002" orderReference="" conid="110002" symbol="IDX2 140P"
+               underlyingSymbol="IDX2" assetCategory="OPT" putCall="P" strike="140" expiry="20260220"
+               buySell="BUY" quantity="1" tradePrice="0.50" proceeds="-50.00" ibCommission="-1.00"
+               ibCommissionCurrency="USD" currency="USD" fxRateToBase="0.9300" netCash="-51.00"
+               dateTime="20260105;153200" orderTime="20260105;153000" exchange="CBOE" notes=""
+               openCloseIndicator="C" fifoPnlRealized="10.00" />
+        <Trade levelOfDetail="EXECUTION" transactionID="8100003" tradeID="8000003" ibExecID="0001.0003.01.03"
+               ibOrderID="6660003" orderReference="" conid="110003" symbol="IDX3 3000C"
+               underlyingSymbol="IDX3" assetCategory="OPT" putCall="C" strike="3000" expiry="20260220"
+               buySell="BUY" quantity="1" tradePrice="12.00" proceeds="-120.00" ibCommission="-1.50"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000" netCash="-121.50"
+               dateTime="20260106;100000" orderTime="20260106;095900" exchange="EUREX" notes=""
+               openCloseIndicator="C" fifoPnlRealized="-40.50" />
+        <Trade levelOfDetail="EXECUTION" transactionID="8100004" tradeID="8000004" ibExecID="0001.0003.01.04"
+               ibOrderID="6660004" orderReference="" conid="110004" symbol="IDX3 3100C"
+               underlyingSymbol="IDX3" assetCategory="OPT" putCall="C" strike="3100" expiry="20260220"
+               buySell="SELL" quantity="1" tradePrice="9.00" proceeds="90.00" ibCommission="-1.50"
+               ibCommissionCurrency="EUR" currency="EUR" fxRateToBase="1.0000" netCash="88.50"
+               dateTime="20260106;100100" orderTime="20260106;095900" exchange="EUREX" notes=""
+               openCloseIndicator="O" fifoPnlRealized="0" />
+      </Trades>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

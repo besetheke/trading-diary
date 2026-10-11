@@ -899,3 +899,20 @@ section.auswertung dl.kopf dd,
 section.depot-seite dl.kopf dd {
   white-space: nowrap;
 }
+
+/* AP-08u: Überleitung vom Ergebnis zum Kontostand. */
+section.ueberleitung table.ueberleitung td:last-child {
+  color: var(--grau);
+  font-size: 0.85rem;
+}
+
+section.ueberleitung table.ueberleitung td.zahl {
+  white-space: nowrap;
+  color: inherit;
+  font-size: inherit;
+}
+
+section.ueberleitung table.ueberleitung tr.summe td {
+  font-weight: 600;
+  border-top: 2px solid var(--tinte);
+}

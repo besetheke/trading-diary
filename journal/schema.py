@@ -413,6 +413,30 @@ flex_cash_report = Table(
     UniqueConstraint("konto", "quell_schluessel", name="uq_flex_cash_report_quell_schluessel"),
 )
 
+# AP-02p: IBs realisiertes Ergebnis je Ausführung (``fifoPnlRealized``, netto nach
+# Kommission, in Positionswährung) mit IBs Kurs in die Basiswährung. Eigene
+# Tabelle, weil ``executions`` nie überschrieben wird (Regel 4) und die erste
+# Quelle gewinnt: Eine ältere Abfrage ohne dieses Feld ließ es dort für immer
+# leer (OF-78, 11.949 Zeilen). Hier wird der Wert aufgenommen, sobald irgendeine
+# Datei ihn liefert; ``0`` ist ein Wert (eröffnende Zeile), „nicht geliefert"
+# erzeugt keine Zeile.
+flex_ib_realized = Table(
+    "flex_ib_realized",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False, index=True),
+    Column("konto", Text, nullable=False),
+    # trade:<tradeID> — eine Zeile je Ausführung und Konto.
+    Column("quell_schluessel", Text, nullable=False),
+    Column("exec_id", Text, nullable=False, index=True),
+    Column("handelstag", Date, nullable=False, index=True),
+    Column("conid", BigInteger, nullable=False),
+    Column("waehrung", Text, nullable=False),
+    Column("fifo_pnl_realized", ExactDecimal, nullable=False),
+    Column("fx_rate_to_base", ExactDecimal, nullable=True),
+    UniqueConstraint("konto", "quell_schluessel", name="uq_flex_ib_realized_quell_schluessel"),
+)
+
 flex_corporate_actions = Table(
     "flex_corporate_actions",
     metadata,

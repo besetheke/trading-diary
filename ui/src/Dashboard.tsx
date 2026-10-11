@@ -7,6 +7,7 @@ import Balken from './diagramm/Balken'
 import Flaeche from './diagramm/Flaeche'
 import Linie from './diagramm/Linie'
 import ZweiLinien from './diagramm/ZweiLinien'
+import Ueberleitung from './Ueberleitung'
 import { datumDe, prozent, vorzeichen } from './format'
 import { useZeitraum } from './zeitraum'
 
@@ -240,6 +241,8 @@ export default function Dashboard(): JSX.Element {
   return (
     <section>
       <h2>Dashboard</h2>
+      {/* AP-08u: die Zusammenführung — vom Ergebnis zum Kontostand. */}
+      <Ueberleitung />
       <p className="sicht fussnote">
         Equity-Kurve und Monatsübersicht, Kontosicht, in EUR — Ergebnis am Tag der
         Schließung.

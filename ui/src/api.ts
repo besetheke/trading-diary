@@ -636,3 +636,27 @@ export interface Depot {
 export function holeDepot(): Promise<Depot> {
   return hole('/depot') as Promise<Depot>
 }
+
+// AP-08u: vom Ergebnis zum Kontostand. IBs Gewinn (Kontowert minus
+// Einzahlungen) in realisiert, unrealisiert, sonstige Buchungen und Rest
+// zerlegt, daneben das realisierte Ergebnis des Journals. Werte der API.
+export interface Ueberleitung {
+  stichtag: string | null
+  bestand_stichtag: string | null
+  kontowert: string | null
+  einzahlungen: string | null
+  gewinn_ib: string | null
+  ib: {
+    realisiert: string
+    unrealisiert: string
+    sonstige_buchungen: string
+    rest: string
+  } | null
+  journal: { realisiert: string; differenz_realisiert: string } | null
+  abdeckung: { ausfuehrungen: number; mit_ib_wert: number }
+  anzahl_kurs_fehlt: number
+}
+
+export function holeUeberleitung(): Promise<Ueberleitung> {
+  return hole('/ueberleitung') as Promise<Ueberleitung>
+}
