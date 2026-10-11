@@ -3324,8 +3324,9 @@ Prüfung CAR (Nutzer, Vergleich mit dem bisherigen Tool 6.470,50): Journal
 Wörtlich: „Schiebe das zuerst zurück und erinnere mich daran, sobald ich etwas
 mehr Erfahrung / Vertrauen habe." Betrifft die eigenen Schritte des Nutzers:
 
-1. OptionApp-Export (ab 08/2025 bis heute) nach `C:\Trading\oa\` legen — 685
-   OA-Trades ohne Strategie (AP-13r2).
+1. ~~OptionApp-Export (ab 08/2025 bis heute) nach `C:\Trading\oa\` legen~~ —
+   **erledigt 11.10.2026**: Export der neuen OA-Version eingelesen (AP-13r3), 685
+   neu, 0 OA-Trades ohne Strategie. Künftige Exporte nach `C:\Trading\oa\`.
 2. Rollkandidaten unter „Rolls prüfen" (`/rolls`) entscheiden — 719 Vorschläge
    (AP-08r).
 3. Alten Projektordner auf G: löschen, sobald das zugehörige VS-Code-Fenster
