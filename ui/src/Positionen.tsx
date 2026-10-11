@@ -332,7 +332,7 @@ export default function Positionen(): JSX.Element {
   // Die Filter der Adresse; als Text, damit Effekte nur bei echter Änderung
   // neu laden.
   const filterText = JSON.stringify(entwurfAusAdresse(suche))
-  const limit = Math.min(Math.max(zahlOderVorgabe(suche.get('limit'), 25), 1), 500)
+  const limit = Math.min(Math.max(zahlOderVorgabe(suche.get('limit'), 100), 1), 500)
   const offset = Math.max(zahlOderVorgabe(suche.get('offset'), 0), 0)
 
   // AP-08s: Die Sortierung steht in der Adresse — Neuladen und Lesezeichen

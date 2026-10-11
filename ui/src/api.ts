@@ -496,6 +496,14 @@ export interface AuswertungErgebnis {
 
 export interface Auswertung extends Equity {
   ergebnis: AuswertungErgebnis
+  // AP-07fu: Wochen (ISO) und das unrealisierte Ergebnis offener Positionen.
+  wochen: { schluessel: string; beginn: string; ende: string; summe_netto_eur: string }[]
+  unrealisiert: {
+    stichtag: string | null
+    eur: string
+    anzahl_legs: number
+    ohne_kurs: number
+  } | null
 }
 
 export function holeAuswertung(

@@ -55,6 +55,7 @@ from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
 from analytics.performance import performance_bericht
+from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -296,12 +297,29 @@ class AuswertungErgebnisAntwort(BaseModel):
     lose_legs_eingeschlossen: bool
 
 
+class AuswertungWocheAntwort(BaseModel):
+    schluessel: str
+    beginn: date
+    ende: date
+    summe_netto_eur: str
+
+
+class AuswertungUnrealisiertAntwort(BaseModel):
+    stichtag: date | None
+    eur: str
+    anzahl_legs: int
+    ohne_kurs: int
+
+
 class AuswertungAntwort(BaseModel):
     tage: list[EquityTagAntwort]
     monate: list[EquityMonatAntwort]
     max_drawdown_eur: str
     max_drawdown_datum: date | None
     ergebnis: AuswertungErgebnisAntwort
+    # AP-07fu: Wochen (ISO) und das unrealisierte Ergebnis offener Positionen.
+    wochen: list[AuswertungWocheAntwort] = []
+    unrealisiert: AuswertungUnrealisiertAntwort | None = None
 
 
 # AP-07fw: wählbare Werte der Positionsfilter — nur Listen, keine Zählwerte.
@@ -1276,6 +1294,124 @@ def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungA
     )
 
 
+def _offene_legs_der_auswahl(
+    verbindung: Connection,
+    ketten_ids: frozenset[int] | None,
+    lose_legs: "LoseLegFilter | None | Literal[False]",
+) -> list[dict]:
+    """AP-07fu: offene Legs der Kontosicht, die zur Auswahl gehören — dieselbe
+    Regel wie für das realisierte Ergebnis (AP-07f): Ketten der Auswahl; lose
+    Legs nur, wenn kein Filter sie ausschließt, und dann nach den Werten, die ein
+    offenes Leg kennt (Basiswert, Klasse, Währung und Tag der Eröffnung). Ein
+    Schließungsfilter schließt offene lose Legs aus (sie sind nicht geschlossen)."""
+    zeilen = [
+        dict(z)
+        for z in verbindung.execute(
+            select(
+                legs.c.structure_id, legs.c.conid, legs.c.open_exec_id, legs.c.menge,
+                legs.c.kommission_gesamt, legs.c.open_faktor,
+            ).where(legs.c.sicht == SICHT, legs.c.close_exec_id.is_(None))
+        ).mappings()
+    ]
+    if ketten_ids is None and lose_legs is None:
+        return zeilen
+    kette_je_struktur = {
+        s: k
+        for s, k in verbindung.execute(
+            select(chain_links.c.structure_id, chain_links.c.chain_id).where(
+                chain_links.c.sicht == SICHT
+            )
+        )
+    }
+    instrumente = {
+        z["conid"]: z
+        for z in verbindung.execute(
+            select(instruments.c.conid, instruments.c.underlying, instruments.c.symbol,
+                   instruments.c.asset_class)
+        ).mappings()
+    }
+    auswahl = []
+    for leg in zeilen:
+        if leg["structure_id"] is not None:
+            if ketten_ids is None or kette_je_struktur.get(leg["structure_id"]) in ketten_ids:
+                auswahl.append(leg)
+            continue
+        if lose_legs is False:
+            continue
+        if lose_legs is not None:
+            if lose_legs.geschlossen_ab is not None or lose_legs.geschlossen_bis is not None:
+                continue
+            i = instrumente.get(leg["conid"], {})
+            if lose_legs.basiswert is not None and (
+                i.get("underlying") or i.get("symbol")
+            ) != lose_legs.basiswert:
+                continue
+            klasse = i.get("asset_class")
+            if lose_legs.anlageklasse is not None and klasse != lose_legs.anlageklasse:
+                continue
+            if (
+                lose_legs.waehrung is not None
+                or lose_legs.eroeffnet_ab is not None
+                or lose_legs.eroeffnet_bis is not None
+            ):
+                a = verbindung.execute(
+                    select(executions.c.waehrung, executions.c.handelszeit).where(
+                        executions.c.exec_id == leg["open_exec_id"]
+                    )
+                ).first()
+                if lose_legs.waehrung is not None and a[0] != lose_legs.waehrung:
+                    continue
+                tag = a[1].date()
+                if lose_legs.eroeffnet_ab is not None and tag < lose_legs.eroeffnet_ab:
+                    continue
+                if lose_legs.eroeffnet_bis is not None and tag > lose_legs.eroeffnet_bis:
+                    continue
+        auswahl.append(leg)
+    return auswahl
+
+
+def _unrealisiert_der_auswahl(
+    verbindung: Connection, offene: list[dict], bis: date | None
+) -> AuswertungUnrealisiertAntwort:
+    """AP-07fu: bewertet die offenen Legs mit dem jüngsten Bestand laut IB. Liegt
+    ``bis`` vor dem Stichtag, gibt es keinen passenden Bestand — dann nichts."""
+    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    if stichtag is not None and bis is not None and bis < stichtag:
+        stichtag = None
+    bestand: dict[int, dict] = {}
+    if stichtag is not None:
+        for z in verbindung.execute(
+            select(flex_open_positions.c.conid, flex_open_positions.c.menge,
+                   flex_open_positions.c.roh_json).where(
+                flex_open_positions.c.stichtag == stichtag)
+        ).mappings():
+            roh = json.loads(z["roh_json"])
+            if roh.get("levelOfDetail") not in (None, "SUMMARY"):
+                continue
+            wert = _dezimal_oder_none(roh.get("positionValue"))
+            kurs = _dezimal_oder_none(roh.get("fxRateToBase"))
+            if wert is None or kurs is None:
+                continue
+            bestand[z["conid"]] = dict(menge=z["menge"], wert=wert, kurs=kurs)
+    exec_ids = list({leg["open_exec_id"] for leg in offene})
+    exec_je_id = {
+        z["exec_id"]: dict(z)
+        for z in verbindung.execute(
+            select(executions.c.exec_id, executions.c.conid, executions.c.side,
+                   executions.c.preis).where(executions.c.exec_id.in_(exec_ids))
+        ).mappings()
+    } if exec_ids else {}
+    mult = {
+        c: m
+        for c, m in verbindung.execute(select(instruments.c.conid, instruments.c.multiplikator))
+    }
+    e = unrealisiert_auswertung(offene, exec_je_id, mult, bestand, stichtag)
+    return AuswertungUnrealisiertAntwort(
+        stichtag=e.stichtag, eur=_als_text(e.eur), anzahl_legs=e.anzahl_legs,
+        ohne_kurs=e.ohne_kurs,
+    )
+
+
 _SEITE_JE_RIGHT = {"C": "Call", "P": "Put"}
 
 
@@ -2150,6 +2286,19 @@ def erzeuge_app(
             anzahl_kurs_fehlt += (
                 tag.anzahl_strukturen_kurs_fehlt + tag.anzahl_lose_legs_kurs_fehlt
             )
+        # AP-07fu: Wochen (ISO, Mo–So) aus den Tagen — als Decimal summiert.
+        wochen: dict[str, list] = {}
+        for tag in bericht.tage:
+            jahr, woche, _ = tag.datum.isocalendar()
+            montag = tag.datum - timedelta(days=tag.datum.weekday())
+            eintrag = wochen.setdefault(
+                f"{jahr}-W{woche:02d}", [montag, montag + timedelta(days=6), Decimal("0")]
+            )
+            eintrag[2] += tag.netto_eur
+        with engine.connect() as verbindung:
+            unrealisiert = _unrealisiert_der_auswahl(
+                verbindung, _offene_legs_der_auswahl(verbindung, ketten_ids, lose_legs), bis
+            )
         return AuswertungAntwort(
             tage=basis.tage,
             monate=basis.monate,
@@ -2162,6 +2311,13 @@ def erzeuge_app(
                 anzahl_kurs_fehlt=anzahl_kurs_fehlt,
                 lose_legs_eingeschlossen=not schliesst_loese_legs_aus,
             ),
+            wochen=[
+                AuswertungWocheAntwort(
+                    schluessel=s, beginn=w[0], ende=w[1], summe_netto_eur=_als_text(w[2])
+                )
+                for s, w in sorted(wochen.items())
+            ],
+            unrealisiert=unrealisiert,
         )
 
     @applikation.get("/nav", response_model=NavAntwort)

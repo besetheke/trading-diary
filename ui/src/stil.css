@@ -941,3 +941,10 @@ details.rest-details {
 details.rest-details table {
   margin-top: 0.4rem;
 }
+
+/* AP-07fu: Balken für Unrealisiertes — gleiche Farbe, aber hell und gestrichelt. */
+rect.balken-offen {
+  fill-opacity: 0.35;
+  stroke: currentColor;
+  stroke-dasharray: 3 2;
+}

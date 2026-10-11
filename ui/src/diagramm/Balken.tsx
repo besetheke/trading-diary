@@ -28,12 +28,15 @@ interface Eigenschaften {
   titel?: string
   // Beschriftung der x-Achse und des Zeigers; Vorgabe Monat (JJJJ-MM).
   beschriftung?: (x: string) => string
+  // Balken (x-Werte), die anders dargestellt werden — z. B. unrealisiert.
+  hervorheben?: string[]
 }
 
 export default function Balken({
   balken,
   titel,
   beschriftung = monatKurz,
+  hervorheben = [],
 }: Eigenschaften): JSX.Element {
   const [aktiv, setzeAktiv] = useState<number | null>(null)
 
@@ -82,13 +85,16 @@ export default function Balken({
           return (
             <g key={eintrag.x}>
               <rect
-                className={wert < 0 ? 'balken-negativ' : 'balken-positiv'}
+                className={`${wert < 0 ? 'balken-negativ' : 'balken-positiv'}${
+                  hervorheben.includes(eintrag.x) ? ' balken-offen' : ''
+                }`}
                 x={x.toFixed(1)}
                 y={oben.toFixed(1)}
                 width={geruest.breite.toFixed(1)}
                 height={hoehe.toFixed(1)}
               />
-              {i % geruest.schritt === 0 || i === balken.length - 1 ? (
+              {i === balken.length - 1 ||
+              (i % geruest.schritt === 0 && balken.length - 1 - i >= geruest.schritt / 2) ? (
                 <text
                   x={(RAND.links + i * geruest.slot + geruest.slot / 2).toFixed(1)}
                   y={unten + 16}

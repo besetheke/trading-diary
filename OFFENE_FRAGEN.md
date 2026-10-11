@@ -3293,3 +3293,10 @@ vermutlich Kapitalrückzahlungen; in den Cash-Buchungen nur „Ordinary Dividend
 **nicht belegt**); Devisentausch EUR.PLN −16,47. Offen: Nachweis der
 Kapitalrückzahlungen (IB-Jahresreklassifizierung) und die Buchung des
 Barteils von Fusionen im Journal.
+
+**Nachtrag 11.10.2026:** Die Vermutung „Kapitalrückzahlungen" bei den
+Ausschüttungswerten ist auf Wunsch des Nutzers **zurückgestellt**; die
+Oberfläche nennt die Ursache dort als offen.
+Prüfung CAR (Nutzer, Vergleich mit dem bisherigen Tool 6.470,50): Journal
+6.464,41 USD = IB 6.464,41 USD; das bisherige Tool zeigt vor Kommissionen
+(6,09 USD) und in USD, das Journal in EUR (5.501,95 €).

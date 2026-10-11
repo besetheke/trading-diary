@@ -70,7 +70,7 @@ export default function Dashboard(): JSX.Element {
   const [depot, setzeDepot] = useState<Depot | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
   const [ansicht, setzeAnsicht] = useState<Ansicht>('kontowert')
-  const [einteilung, setzeEinteilung] = useState<Einteilung>('monat')
+  const [einteilung, setzeEinteilung] = useState<Einteilung>('woche')
   const [kennzahl, setzeKennzahl] = useState<Kennzahl>('gewinn_ib')
 
   useEffect(() => {

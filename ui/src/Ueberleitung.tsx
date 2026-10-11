@@ -205,8 +205,8 @@ export default function Ueberleitung(): JSX.Element | null {
                 </p>
                 <p>
                   <strong>Einstandsabweichungen</strong> in Positionswährung: IB führt den Einstand
-                  anders — z. B. der Barteil einer Fusion (PARA → PSKY), Kapitalrückzahlungen bei
-                  Ausschüttungswerten (IB senkt den Einstand nachträglich), Devisentausch.
+                  anders — belegt beim Barteil der Fusion PARA → PSKY; bei den
+                  Ausschüttungswerten ist die Ursache noch offen (zurückgestellt, OF-78).
                 </p>
                 <table>
                   <tbody>
