@@ -35,6 +35,7 @@ Dokumentierte Annahmen (Regel 10, OF-44):
   (Vertrag 4) wäre nicht mehr prüfbar (OF-45).
 """
 
+import json
 import os
 import pathlib
 from collections.abc import Iterable
@@ -61,6 +62,7 @@ from journal.schema import (
     chains,
     entity_tags,
     executions,
+    flex_open_positions,
     instruments,
     journal_entries,
     legs,
@@ -307,6 +309,47 @@ class FilterwerteAntwort(BaseModel):
     strategien: list[str]
     seiten: list[str]
     endzustaende: list[str]
+
+
+# AP-08d: Bestand laut IB mit letztem bekanntem Kurs und unrealisiertem
+# Ergebnis (flex_open_positions, jüngster Stichtag) — Werte der Quelle, nichts
+# neu bewertet; EUR mit IBs fxRateToBase der Zeile.
+class DepotPositionAntwort(BaseModel):
+    conid: int
+    symbol: str
+    basiswert: str
+    anlageklasse: str
+    seite: str | None
+    verfall: date | None
+    strike: str | None
+    multiplikator: str | None
+    menge: str
+    waehrung: str
+    einstandskurs: str | None
+    kurs: str | None
+    marktwert: str | None
+    unrealisiert: str | None
+    marktwert_eur: str | None
+    unrealisiert_eur: str | None
+
+
+class DepotKlasseAntwort(BaseModel):
+    anlageklasse: str
+    anzahl: int
+    marktwert_eur: str
+    unrealisiert_eur: str
+
+
+class DepotSummenAntwort(BaseModel):
+    marktwert_eur: str
+    unrealisiert_eur: str
+    je_klasse: list[DepotKlasseAntwort]
+
+
+class DepotAntwort(BaseModel):
+    stichtag: date | None
+    positionen: list[DepotPositionAntwort]
+    summen: DepotSummenAntwort
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -1012,6 +1055,123 @@ def _equity_als_antwort(ergebnis: EquityErgebnis) -> EquityAntwort:
     )
 
 
+_SEITE_JE_RIGHT = {"C": "Call", "P": "Put"}
+
+
+def _dezimal_oder_none(wert: object) -> Decimal | None:
+    """Rohwert der Quelle als Decimal; leer oder fehlend bleibt leer — kein
+    stilles 0 (Regel 5)."""
+    if wert is None or str(wert).strip() == "":
+        return None
+    return Decimal(str(wert))
+
+
+def _depot_aufbauen(verbindung: Connection) -> DepotAntwort:
+    """Bestand des jüngsten Stichtags aus ``flex_open_positions`` (AP-08d)."""
+    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    if stichtag is None:
+        return DepotAntwort(
+            stichtag=None,
+            positionen=[],
+            summen=DepotSummenAntwort(
+                marktwert_eur=_als_text(Decimal("0.00")),
+                unrealisiert_eur=_als_text(Decimal("0.00")),
+                je_klasse=[],
+            ),
+        )
+    zeilen = verbindung.execute(
+        select(flex_open_positions).where(flex_open_positions.c.stichtag == stichtag)
+    ).mappings().all()
+    stamm = {
+        z["conid"]: z
+        for z in verbindung.execute(
+            select(
+                instruments.c.conid,
+                instruments.c.underlying,
+                instruments.c.expiry,
+                instruments.c.strike,
+                instruments.c.right,
+                instruments.c.multiplikator,
+            )
+        ).mappings()
+    }
+    eintraege: list[tuple[DepotPositionAntwort, Decimal | None, Decimal | None]] = []
+    for z in zeilen:
+        roh = json.loads(z["roh_json"])
+        # Die Summenebene trägt je conid genau eine Zeile; Einzellots (LOT)
+        # gehören nicht in diese Ansicht.
+        if roh.get("levelOfDetail") not in (None, "SUMMARY"):
+            continue
+        kurs_zu_eur = _dezimal_oder_none(roh.get("fxRateToBase"))
+        wert = _dezimal_oder_none(roh.get("positionValue"))
+        unrealisiert = _dezimal_oder_none(roh.get("fifoPnlUnrealized"))
+        wert_eur = wert * kurs_zu_eur if wert is not None and kurs_zu_eur is not None else None
+        unreal_eur = (
+            unrealisiert * kurs_zu_eur
+            if unrealisiert is not None and kurs_zu_eur is not None
+            else None
+        )
+        s = stamm.get(z["conid"])
+        position = DepotPositionAntwort(
+            conid=z["conid"],
+            symbol=z["symbol"],
+            basiswert=(s["underlying"] if s and s["underlying"] else z["symbol"]),
+            anlageklasse=z["asset_class"],
+            seite=_SEITE_JE_RIGHT.get(s["right"]) if s and s["right"] else None,
+            verfall=s["expiry"] if s else None,
+            strike=_als_text(s["strike"]) if s else None,
+            multiplikator=_als_text(s["multiplikator"]) if s else None,
+            menge=_als_text(z["menge"]),
+            waehrung=z["waehrung"],
+            einstandskurs=_als_text(_dezimal_oder_none(roh.get("costBasisPrice"))),
+            kurs=_als_text(_dezimal_oder_none(roh.get("markPrice"))),
+            marktwert=_als_text(wert),
+            unrealisiert=_als_text(unrealisiert),
+            marktwert_eur=_als_text(wert_eur),
+            unrealisiert_eur=_als_text(unreal_eur),
+        )
+        eintraege.append((position, wert_eur, unreal_eur))
+
+    # Aktien zuerst, innerhalb nach Betrag des EUR-Marktwerts absteigend; ohne
+    # Kurs ans Ende der jeweiligen Gruppe.
+    def sortierschluessel(e: tuple) -> tuple:
+        position, wert_eur, _ = e
+        return (
+            0 if position.anlageklasse == "STK" else 1,
+            wert_eur is None,
+            -abs(wert_eur) if wert_eur is not None else Decimal(0),
+            position.symbol,
+        )
+
+    eintraege.sort(key=sortierschluessel)
+    summe_wert = sum((w for _, w, _ in eintraege if w is not None), Decimal("0.00"))
+    summe_unreal = sum((u for _, _, u in eintraege if u is not None), Decimal("0.00"))
+    je_klasse: dict[str, list] = {}
+    for position, wert_eur, unreal_eur in eintraege:
+        k = je_klasse.setdefault(position.anlageklasse, [0, Decimal("0.00"), Decimal("0.00")])
+        k[0] += 1
+        k[1] += wert_eur if wert_eur is not None else Decimal(0)
+        k[2] += unreal_eur if unreal_eur is not None else Decimal(0)
+    klassen_reihenfolge = sorted(je_klasse, key=lambda name: (name != "STK", name))
+    return DepotAntwort(
+        stichtag=stichtag,
+        positionen=[e[0] for e in eintraege],
+        summen=DepotSummenAntwort(
+            marktwert_eur=_als_text(summe_wert),
+            unrealisiert_eur=_als_text(summe_unreal),
+            je_klasse=[
+                DepotKlasseAntwort(
+                    anlageklasse=name,
+                    anzahl=je_klasse[name][0],
+                    marktwert_eur=_als_text(je_klasse[name][1]),
+                    unrealisiert_eur=_als_text(je_klasse[name][2]),
+                )
+                for name in klassen_reihenfolge
+            ],
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Anwendung
 # ---------------------------------------------------------------------------
@@ -1587,6 +1747,14 @@ def erzeuge_app(
                 seiten=werte(ketten_spalte(chains.c.seite)),
                 endzustaende=werte(ketten_spalte(chains.c.endzustand)),
             )
+
+    @applikation.get("/depot", response_model=DepotAntwort)
+    def depot() -> DepotAntwort:
+        """Der Bestand laut IB (AP-08d): jüngster Stichtag der Flex-Auswertung,
+        je Position Menge, Einstandskurs, letzter bekannter Kurs, Marktwert und
+        unrealisiertes Ergebnis — in Positionswährung und in EUR. Nur lesend."""
+        with engine.connect() as verbindung:
+            return _depot_aufbauen(verbindung)
 
     @applikation.get("/equity", response_model=EquityAntwort)
     def equity(von: date | None = None, bis: date | None = None) -> EquityAntwort:

@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import Dashboard from './Dashboard'
+import Depot from './Depot'
 import Zeitraumwahl from './Zeitraumwahl'
 import { useZeitraum, zeitraumSuche } from './zeitraum'
 import Kalender from './Kalender'
@@ -41,6 +42,7 @@ function Kopf(): JSX.Element {
       </p>
       <nav className="hauptnav">
         <Link to={`/dashboard${mit}`}>Dashboard</Link>
+        <Link to={`/bestand${mit}`}>Depot</Link>
         <Link to={`/${mit}`}>Positionen</Link>
         <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
         <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
@@ -74,6 +76,9 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             {/* AP-06e: eigene Adresse, kollidiert mit keinem API-Pfad
                 (anders als /kalender, /kampagnen — /equity bleibt API). */}
             <Route path="/dashboard" element={<Dashboard />} />
+            {/* AP-08d: Bestand laut IB. /depot ist der API-Endpunkt, die Seite
+                heißt /bestand. */}
+            <Route path="/bestand" element={<Depot />} />
             {/* AP-08j2: /kalender ist der API-Endpunkt (AP-07t). Die Seite
                 heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
                 erreichen und nicht den JSON-Fehler 422 des Endpunkts. */}

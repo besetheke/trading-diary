@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { fehlerText, holeEquity, holeKapital, holeNav } from './api'
-import type { Equity, Kapital, Nav, NavTag } from './api'
+import { Link } from 'react-router-dom'
+import { fehlerText, holeDepot, holeEquity, holeKapital, holeNav } from './api'
+import type { Depot, Equity, Kapital, Nav, NavTag } from './api'
 import Betrag from './Betrag'
 import Balken from './diagramm/Balken'
 import Flaeche from './diagramm/Flaeche'
@@ -56,6 +57,14 @@ export default function Dashboard(): JSX.Element {
   const [navFehler, setzeNavFehler] = useState<string | null>(null)
   // Welche der beiden Ansichten des Kontowerts gezeigt wird.
   const [ibAnsicht, setzeIbAnsicht] = useState<'kontowert' | 'gewinn'>('kontowert')
+  // AP-08d: unrealisiertes Ergebnis der offenen Positionen laut IB (letzter
+  // Stichtag, kein Zeitverlauf) — eigene Quelle, fällt still weg, wenn sie fehlt.
+  const [depot, setzeDepot] = useState<Depot | null>(null)
+  useEffect(() => {
+    holeDepot()
+      .then(setzeDepot)
+      .catch(() => setzeDepot(null))
+  }, [])
 
   useEffect(() => {
     let abgebrochen = false
@@ -145,6 +154,16 @@ export default function Dashboard(): JSX.Element {
               <Betrag wert={letzter.einzahlungen_kumuliert} />
             </dd>
           </div>
+          {depot !== null && depot.stichtag !== null ? (
+            <div>
+              <dt title="Unrealisiertes Ergebnis aller offenen Positionen laut IB, Stand des letzten Berichts">
+                Unrealisiert laut IB ({datumDe(depot.stichtag)}) · <Link to="/bestand">Depot</Link>
+              </dt>
+              <dd>
+                <Betrag wert={depot.summen.unrealisiert_eur} />
+              </dd>
+            </div>
+          ) : null}
         </dl>
 
         <div className="diagramm-wahl" role="group" aria-label="Ansicht des Kontowerts">

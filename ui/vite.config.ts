@@ -29,6 +29,8 @@ export default defineConfig({
       '/kapital': 'http://localhost:8000',
       // AP-06h: Kontowert laut IB.
       '/nav': 'http://localhost:8000',
+      // AP-08d: Bestand laut IB; die Seite heißt /bestand (wie /monat bei /kalender).
+      '/depot': 'http://localhost:8000',
       // AP-07f/AP-07fw: Positionsfilter.
       '/auswertung': 'http://localhost:8000',
       '/filterwerte': 'http://localhost:8000',

@@ -597,3 +597,42 @@ export interface Nav {
 export function holeNav(von?: string | null, bis?: string | null): Promise<Nav> {
   return hole(`/nav${zeitraumQuery(von, bis)}`) as Promise<Nav>
 }
+
+// AP-08d: der Bestand laut IB mit letztem bekanntem Kurs und unrealisiertem
+// Ergebnis (jüngster Stichtag der Flex-Auswertung). Werte der Quelle, nichts
+// neu bewertet; die EUR-Werte kommen mit IBs Kurs der Zeile.
+export interface DepotPosition {
+  conid: number
+  symbol: string
+  basiswert: string
+  anlageklasse: string
+  seite: string | null
+  verfall: string | null
+  strike: string | null
+  multiplikator: string | null
+  menge: string
+  waehrung: string
+  einstandskurs: string | null
+  kurs: string | null
+  marktwert: string | null
+  unrealisiert: string | null
+  marktwert_eur: string | null
+  unrealisiert_eur: string | null
+}
+
+export interface DepotKlasse {
+  anlageklasse: string
+  anzahl: number
+  marktwert_eur: string
+  unrealisiert_eur: string
+}
+
+export interface Depot {
+  stichtag: string | null
+  positionen: DepotPosition[]
+  summen: { marktwert_eur: string; unrealisiert_eur: string; je_klasse: DepotKlasse[] }
+}
+
+export function holeDepot(): Promise<Depot> {
+  return hole('/depot') as Promise<Depot>
+}
