@@ -417,13 +417,17 @@ def kennzahlen_auswertung(
             gesamt.extend(legs_je_struktur.get(structure_id, ()))
         return gesamt
 
+    # Strukturen je Kette einmal vorab gruppiert (vorher je Kette ein Lauf über
+    # alle Glieder — quadratisch, bei ~17.000 Ketten über eine Sekunde).
+    strukturen_je_kette: dict[int, list[int]] = {}
+    for sid, cid in chain_je_struktur.items():
+        strukturen_je_kette.setdefault(cid, []).append(sid)
+
     ketten_ergebnisse: list[KennzahlKette] = []
     fehler_menge: set[tuple[str, str]] = set()
     for chain_id in sorted(kette_je_id):
         zeile = kette_je_id[chain_id]
-        structure_ids = sorted(
-            sid for sid, cid in chain_je_struktur.items() if cid == chain_id
-        )
+        structure_ids = sorted(strukturen_je_kette.get(chain_id, ()))
         betroffene = [struktur_je_id[sid] for sid in structure_ids if sid in struktur_je_id]
         fehlende_strukturen = [sid for sid in structure_ids if sid not in struktur_je_id]
         if fehlende_strukturen:
