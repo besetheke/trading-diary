@@ -872,6 +872,24 @@ ul.diagramm-legende {
   fill: none;
 }
 
+/* AP-07fv: Verlängerung um das Unrealisierte — gestrichelt im Akzent. */
+.diagramm .kurve-duenn.gestrichelt {
+  stroke: var(--akzent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.diagramm-legende .probe.duenn.gestrichelt {
+  border-top: 2px dashed var(--akzent);
+}
+
+/* AP-07fv: Beträge je Währung untereinander im Kopf. */
+.kopf .je-waehrung {
+  display: block;
+  font-size: 0.85em;
+  color: var(--grau);
+}
+
 /* Bestandteile des Kontowerts — eine kleine Tabelle ohne Rahmentheater. */
 table.bestandteile {
   max-width: 24rem;

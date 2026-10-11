@@ -297,6 +297,16 @@ class AuswertungErgebnisAntwort(BaseModel):
     lose_legs_eingeschlossen: bool
 
 
+class WaehrungsbetragAntwort(BaseModel):
+    waehrung: str
+    summe: str
+
+
+class VerlaufPunktAntwort(BaseModel):
+    datum: date
+    kumuliert_eur: str
+
+
 class AuswertungWocheAntwort(BaseModel):
     schluessel: str
     beginn: date
@@ -309,6 +319,9 @@ class AuswertungUnrealisiertAntwort(BaseModel):
     eur: str
     anzahl_legs: int
     ohne_kurs: int
+    # AP-07fv: realisiert der Auswahl + unrealisiert — Endpunkt der gestrichelten
+    # Verlängerung im Diagramm (das Frontend rechnet kein Geld, Vertrag 8).
+    mit_realisiert_eur: str = "0.00"
 
 
 class AuswertungAntwort(BaseModel):
@@ -320,6 +333,11 @@ class AuswertungAntwort(BaseModel):
     # AP-07fu: Wochen (ISO) und das unrealisierte Ergebnis offener Positionen.
     wochen: list[AuswertungWocheAntwort] = []
     unrealisiert: AuswertungUnrealisiertAntwort | None = None
+    # AP-07fv: aufsummiert realisiert für jeden Kalendertag vom ersten bis zum
+    # letzten Schließungstag (Tage ohne Schließung tragen den Vortageswert).
+    verlauf: list[VerlaufPunktAntwort] = []
+    # AP-07fv: realisiert netto je Positionswährung (nativ), nach Währung sortiert.
+    netto_je_waehrung: list[WaehrungsbetragAntwort] = []
 
 
 # AP-07fw: wählbare Werte der Positionsfilter — nur Listen, keine Zählwerte.
@@ -2295,6 +2313,14 @@ def erzeuge_app(
                 f"{jahr}-W{woche:02d}", [montag, montag + timedelta(days=6), Decimal("0")]
             )
             eintrag[2] += tag.netto_eur
+        verlauf: list[VerlaufPunktAntwort] = []
+        if bericht.tage:
+            je_tag = {t.datum: t.kumuliert_eur for t in bericht.tage}
+            tag, stand = bericht.tage[0].datum, bericht.tage[0].kumuliert_eur
+            while tag <= bericht.tage[-1].datum:
+                stand = je_tag.get(tag, stand)
+                verlauf.append(VerlaufPunktAntwort(datum=tag, kumuliert_eur=_als_text(stand)))
+                tag += timedelta(days=1)
         with engine.connect() as verbindung:
             unrealisiert = _unrealisiert_der_auswahl(
                 verbindung, _offene_legs_der_auswahl(verbindung, ketten_ids, lose_legs), bis
@@ -2311,13 +2337,24 @@ def erzeuge_app(
                 anzahl_kurs_fehlt=anzahl_kurs_fehlt,
                 lose_legs_eingeschlossen=not schliesst_loese_legs_aus,
             ),
+            verlauf=verlauf,
+            netto_je_waehrung=[
+                WaehrungsbetragAntwort(waehrung=w, summe=_als_text(s))
+                for w, s in bericht.netto_je_waehrung
+            ],
             wochen=[
                 AuswertungWocheAntwort(
                     schluessel=s, beginn=w[0], ende=w[1], summe_netto_eur=_als_text(w[2])
                 )
                 for s, w in sorted(wochen.items())
             ],
-            unrealisiert=unrealisiert,
+            unrealisiert=unrealisiert.model_copy(
+                update={
+                    "mit_realisiert_eur": _als_text(
+                        summe_netto_eur + Decimal(unrealisiert.eur)
+                    )
+                }
+            ),
         )
 
     @applikation.get("/nav", response_model=NavAntwort)

@@ -145,6 +145,9 @@ class EquityErgebnis:
     monate: tuple[EquityMonat, ...]  # chronologisch aufsteigend
     max_drawdown_eur: Decimal        # Minimum der Tagesreihe; 0 ohne Tage
     max_drawdown_datum: date | None
+    # AP-07fv: realisiertes Ergebnis je Positionswährung (nativ, netto nach
+    # Kommission) — dieselbe Auswahl wie die EUR-Werte, sortiert nach Währung.
+    netto_je_waehrung: tuple[tuple[str, Decimal], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -286,6 +289,7 @@ def equity_auswertung(
                 return False
         return True
     lose_je_tag: dict[date, Decimal] = {}
+    netto_nativ: dict[str, Decimal] = {}
     lose_anzahl_je_tag: dict[date, int] = {}
     lose_mangel_je_tag: dict[date, int] = {}
     lose_je_monat: dict[str, Decimal] = {}
@@ -323,6 +327,11 @@ def equity_auswertung(
         if not im_zeitraum(tag):
             continue  # I5: Schließungstag im Zeitraum, wie bei Strukturen
         monat = f"{tag.year:04d}-{tag.month:02d}"
+        if leg.get("brutto_pnl") is not None:
+            w = schliessend["waehrung"]
+            netto_nativ[w] = netto_nativ.get(w, _NULL) + leg["brutto_pnl"] + (
+                leg.get("kommission_gesamt") or _NULL
+            )
         if betrag is None:
             lose_mangel_je_tag[tag] = lose_mangel_je_tag.get(tag, 0) + 1
             lose_mangel_je_monat[monat] = lose_mangel_je_monat.get(monat, 0) + 1
@@ -334,6 +343,7 @@ def equity_auswertung(
 
     # E2/E3: je Tag Summe mit Kurs und Anzahl ohne Kurs, nur abgeschlossene
     # Strukturen (geschlossen_am gesetzt) der zugelassenen Qualitätsstufe.
+    struktur_je_id_nativ = {s["structure_id"]: s for s in struktur_zeilen}
     netto_je_tag: dict[date, Decimal] = {}
     anzahl_je_tag: dict[date, int] = {}
     mangel_je_tag: dict[date, int] = {}
@@ -346,6 +356,10 @@ def equity_auswertung(
         tag = zeitpunkt.date()
         if not im_zeitraum(tag):
             continue
+        zeile = struktur_je_id_nativ.get(struktur.structure_id)
+        if zeile is not None and zeile.get("netto_pnl") is not None:
+            w = zeile["waehrung"]
+            netto_nativ[w] = netto_nativ.get(w, _NULL) + zeile["netto_pnl"]
         if struktur.netto_eur_wirtschaftlich is None:
             mangel_je_tag[tag] = mangel_je_tag.get(tag, 0) + 1
             continue
@@ -441,6 +455,7 @@ def equity_auswertung(
         monate=tuple(monate),
         max_drawdown_eur=max_drawdown,
         max_drawdown_datum=max_drawdown_datum,
+        netto_je_waehrung=tuple(sorted(netto_nativ.items())),
     )
 
 
@@ -559,6 +574,8 @@ def equity_bericht(
                     legs.c.menge,
                     legs.c.open_faktor,
                     legs.c.close_faktor,
+                    legs.c.brutto_pnl,
+                    legs.c.kommission_gesamt,
                 ).where(legs.c.sicht == "konto")
             ).mappings()
         ]

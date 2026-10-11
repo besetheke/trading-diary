@@ -38,6 +38,8 @@ interface Eigenschaften {
   legendeOben?: string
   legendeUnten?: string | null
   titel?: string
+  // AP-07fv: zweite Linie gestrichelt (z. B. Ausblick mit Unrealisiertem).
+  gestrichelt?: boolean
 }
 
 export default function ZweiLinien({
@@ -48,6 +50,7 @@ export default function ZweiLinien({
   legendeOben,
   legendeUnten,
   titel,
+  gestrichelt = false,
 }: Eigenschaften): JSX.Element {
   const [aktiv, setzeAktiv] = useState<number | null>(null)
 
@@ -132,7 +135,7 @@ export default function ZweiLinien({
           ) : null}
           {legendeUnten ? (
             <li>
-              <span className="probe duenn" />
+              <span className={gestrichelt ? 'probe duenn gestrichelt' : 'probe duenn'} />
               {legendeUnten}
             </li>
           ) : null}
@@ -147,7 +150,10 @@ export default function ZweiLinien({
         {yAchse(geruest.raster, KURVE_HOEHE, KURVE_BREITE)}
         {xAchse(geruest.marken, geruest.msVon, geruest.msBis, KURVE_BREITE, KURVE_HOEHE)}
         {geruest.fuellung ? <path className={`fuellung-${farbe}`} d={geruest.fuellung} /> : null}
-        {geruest.pfadUnten ? <path className="kurve-duenn" d={geruest.pfadUnten} /> : null}
+        {geruest.pfadUnten ? <path
+            className={gestrichelt ? 'kurve-duenn gestrichelt' : 'kurve-duenn'}
+            d={geruest.pfadUnten}
+          /> : null}
         <path className="kurve" d={geruest.pfadOben} />
         {gewaehlt ? (
           <g>

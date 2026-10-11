@@ -503,7 +503,12 @@ export interface Auswertung extends Equity {
     eur: string
     anzahl_legs: number
     ohne_kurs: number
+    // AP-07fv: realisiert + unrealisiert, Endpunkt der gestrichelten Linie.
+    mit_realisiert_eur: string
   } | null
+  // AP-07fv: aufsummiert realisiert für jeden Kalendertag; je Positionswährung.
+  verlauf: { datum: string; kumuliert_eur: string }[]
+  netto_je_waehrung: { waehrung: string; summe: string }[]
 }
 
 export function holeAuswertung(
