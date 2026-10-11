@@ -75,6 +75,51 @@ KOPFZEILE = (
     "Status",
 )
 
+# AP-13r3: Exportformat der neuen OA-Version (Oktober 2026). Eigene Spalte `Id`
+# (die Tradenummer), `Name` ohne Klammernummer, Zeiten als Datum, `Profit (USD)`
+# als Zahl, leeres `Stops` heißt „kein Stop". Geprüft wird der Anfang der
+# Kopfzeile bis „Status" — dahinter darf OA weitere Spalten anfügen.
+KOPFZEILE_V3 = (
+    "Id", "Entry Time", "Strategy", "Name", "Entry Cond.", "Strikes", "Quantity",
+    "Open", "Close", "Stops", "Profit (USD)", "Return on Risk (%)", "Risk (USD)",
+    "Commission (USD)", "Entry Slip. (USD)", "Exit Slip. (USD)", "Long P&L (USD)",
+    "Duration (min)", "DTE", "Close Time", "Status",
+)
+
+
+def _als_zeittext(zelle):
+    """Datum aus der Zelle in das Textformat des alten Exports (Vertrag 7)."""
+    if isinstance(zelle, datetime):
+        return zelle.strftime("%Y/%m/%d %H:%M:%S")
+    return zelle
+
+
+def _zeile_v3_abbilden(zeile: tuple, kopf: list[str], zeilen_nummer: int) -> tuple:
+    """AP-13r3: Zeile der neuen OA-Version auf die elf Zellen des bisherigen
+    Formats abbilden — danach gelten dieselben Prüfungen (Vertrag 1)."""
+    wert = dict(zip(kopf, zeile, strict=False))
+    nummer = wert.get("Id")
+    if nummer is None or str(nummer).strip() == "":
+        raise ValueError(f"Zeile {zeilen_nummer}: 'Id' fehlt — ohne Nummer nicht verknüpfbar")
+    if isinstance(nummer, float) and nummer.is_integer():
+        nummer = int(nummer)
+    name = "" if wert.get("Name") is None else str(wert["Name"]).strip()
+    stops = wert.get("Stops")
+    return (
+        _als_zeittext(wert.get("Entry Time")),
+        wert.get("Strategy"),
+        f"{name} [{nummer}]",
+        wert.get("Strikes"),
+        wert.get("Quantity"),
+        wert.get("Open"),
+        wert.get("Close"),
+        "-" if stops is None or (isinstance(stops, str) and not stops.strip()) else stops,
+        wert.get("Profit (USD)"),
+        _als_zeittext(wert.get("Close Time")),
+        wert.get("Status"),
+    )
+
+
 # Je Leg: [-]<Menge>x[<Produktcode> ]<C|P><Strike> (<JJMMTT>) — Strike mit
 # optionalem Dezimalteil, weil Strike-Konventionen halbe Punkte kennen
 # (Anhang). Vor dem Recht optional ein Eurex-Produktcode: drei bis sechs
@@ -129,6 +174,9 @@ class ImportErgebnis:
     # AP-13r2: laufende Trades (RUNNING), die auf ihren späteren Stand gebracht
     # wurden — weder neu noch übersprungen.
     zeilen_fortgeschrieben: int = 0
+    # AP-13r3: Nummern, deren Inhalt vom gespeicherten Stand abweicht und die
+    # auf Wunsch (``abweichende_behalten``) unverändert blieben.
+    abweichend: tuple[str, ...] = ()
 
     @property
     def zeilen_uebersprungen(self) -> int:
@@ -143,8 +191,15 @@ class _TradeInhalt:
     legs: list[dict] = field(default_factory=list)
 
     def ist_gleich(self, andere: "_TradeInhalt") -> bool:
+        # AP-13r3: Leerzeichen im Namen tragen keine Bedeutung (der alte Export
+        # setzt vor die Klammernummer teils zwei, der neue eines).
+        def wert(felder, f):
+            if f == "name_roh" and felder[f] is not None:
+                return " ".join(felder[f].split())
+            return felder[f]
+
         return (
-            all(self.felder[f] == andere.felder[f] for f in VERGLEICHSFELDER)
+            all(wert(self.felder, f) == wert(andere.felder, f) for f in VERGLEICHSFELDER)
             and self.legs == andere.legs
         )
 
@@ -458,7 +513,8 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
     if not zeilen:
         raise ValueError(f"{datei}: Datei ohne Kopfzeile")
     gefunden = ["" if zelle is None else str(zelle).strip() for zelle in zeilen[0]]
-    if gefunden != list(KOPFZEILE):
+    variante_v3 = gefunden[: len(KOPFZEILE_V3)] == list(KOPFZEILE_V3)
+    if gefunden != list(KOPFZEILE) and not variante_v3:
         raise ValueError(
             f"{datei}: Kopfzeile weicht ab — gefunden: {gefunden!r}, erwartet: "
             f"{list(KOPFZEILE)!r}. Kein Raten über Spaltenpositionen."
@@ -469,7 +525,18 @@ def _parse_datei(datei: pathlib.Path) -> _DateiInhalt:
     for zeilen_nummer, zeile in enumerate(zeilen[1:], start=2):
         if all(zelle is None for zelle in zeile):
             continue  # Leere Nachlaufzeilen sind kein Trade
-        trade = _trade_zeile(zeile, zeilen_nummer)
+        if variante_v3:
+            trade = _trade_zeile(_zeile_v3_abbilden(zeile, gefunden, zeilen_nummer),
+                                 zeilen_nummer)
+            # `Profit (USD)`: Die Spalte nennt die Währung — gespeichert wie
+            # bisher als „$". Das Zeilenbild bleibt vollständig, mit Spaltennamen.
+            trade.felder["profit_waehrung"] = "$"
+            trade.felder["roh_json"] = json.dumps(
+                {k: None if z is None else str(z) for k, z in zip(gefunden, zeile, strict=False)},
+                ensure_ascii=False,
+            )
+        else:
+            trade = _trade_zeile(zeile, zeilen_nummer)
         oa_trade = trade.felder["oa_trade"]
         bekannter = gesehene.get(oa_trade)
         if bekannter is not None:
@@ -572,7 +639,10 @@ def _fortschreiben(
 
 
 def import_optionapp_ordner(
-    db_pfad: str | pathlib.Path, ordner: str | pathlib.Path
+    db_pfad: str | pathlib.Path,
+    ordner: str | pathlib.Path,
+    *,
+    abweichende_behalten: bool = False,
 ) -> list[tuple[str, ImportErgebnis]]:
     """Importiert alle XLSX-Exporte eines Ordners (AP-13r2), nach Name sortiert.
     Bekannte Dateien ändern nichts; jede Datei ist ein eigener Lauf."""
@@ -580,14 +650,18 @@ def import_optionapp_ordner(
     if not pfad.is_dir():
         raise FileNotFoundError(f"OA-Ordner nicht gefunden: {pfad}")
     return [
-        (datei.name, import_optionapp_file(db_pfad, datei))
+        (datei.name, import_optionapp_file(
+            db_pfad, datei, abweichende_behalten=abweichende_behalten))
         for datei in sorted(pfad.glob("*.xlsx"), key=lambda d: d.name)
         if not datei.name.startswith("~$")  # Sperrdatei eines geöffneten Excel
     ]
 
 
 def import_optionapp_file(
-    db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
+    db_pfad: str | pathlib.Path,
+    datei_pfad: str | pathlib.Path,
+    *,
+    abweichende_behalten: bool = False,
 ) -> ImportErgebnis:
     """Importiert einen OptionApp-Trade-Export idempotent (AP-13, Teil 1).
 
@@ -633,6 +707,7 @@ def import_optionapp_file(
 
         zeilen_neu = 0
         fortgeschrieben = 0
+        abweichend: list[str] = []
         for trade in inhalt.trades:
             oa_trade = trade.felder["oa_trade"]
             vorhanden = _vorhandener_trade(verbindung, oa_trade)
@@ -650,6 +725,11 @@ def import_optionapp_file(
                 if derselbe and trade.felder["status"] == LAUFEND:
                     # Vertrag 2: älterer Export nach dem endgültigen Stand.
                     continue
+                if abweichende_behalten:
+                    # AP-13r3, Vertrag 4: ausdrücklich gewünscht — gespeicherter
+                    # Stand bleibt, die Nummer wird gemeldet (nicht still).
+                    abweichend.append(oa_trade)
+                    continue
                 raise ValueError(
                     f"Nummer {oa_trade} bereits mit abweichendem Inhalt gebucht — "
                     "keine stille Entscheidung, kein Überschreiben (Vertrag 10)."
@@ -665,4 +745,5 @@ def import_optionapp_file(
         zeilen_gesamt=len(inhalt.trades),
         zeilen_neu=zeilen_neu,
         zeilen_fortgeschrieben=fortgeschrieben,
+        abweichend=tuple(abweichend),
     )

@@ -3334,3 +3334,29 @@ mehr Erfahrung / Vertrauen habe." Betrifft die eigenen Schritte des Nutzers:
 
 Erinnern, sobald die Zahlen stabil wirken oder der Nutzer Vertrauen äußert —
 nicht drängen.
+
+## OF-81 · Zuteilungen gehören zur Kette — Ergebnis je Position ohne Aktienteil (11.10.2026)
+
+Anlass: Nutzerhinweis auf OA-Trade 5213 („SPY: 30DTE Strangle", +12.406,46 USD,
+„Fehler bei Zuteilung"). Befund: Der Short Put 895 wurde am Eröffnungstag
+zugeteilt (100 SPY zu 895), die Aktien am 30.09.2026 zu 766,89 verkauft. Die
+Kette zeigt nur die Prämie (+12.406,46); die Aktien stehen als loses Leg
+(−12.812,72) daneben. Wirtschaftlich ≈ −406 USD. Die Kontosumme stimmt
+(Prämienverschiebung, siehe OF-78), die **Positionssicht** nicht.
+
+Ausmaß (journal.db, 11.10.2026): 180 Aktien-Legs aus Zuteilung/Ausübung ohne
+Struktur (174 geschlossen, Σ brutto ≈ −67.787 in Positionswährung), weitere 335
+in eigenen Aktienstrukturen — in beiden Fällen nicht Teil der Optionskette. Die
+Verknüpfung Option ↔ Aktie liegt vor (`assignment_links`, 339 Zeilen).
+
+Offen (fachlich, nicht raten — Regel 10):
+1. Soll das Ergebnis der zugeteilten Aktien der Kette der Option zugerechnet
+   werden (Kette endet erst mit dem Verkauf der Aktien), oder als eigene,
+   verknüpfte Position mit Summe „Option + Aktie"?
+2. Teilverkäufe und Aktien, die mit anderen Lots vermischt verkauft werden
+   (FIFO über Ketten hinweg): Zurechnung nach dem Lot der Zuteilung?
+3. Covered Calls auf zugeteilte Aktien (Wheel): eine Kette über Put → Aktie →
+   Call?
+
+Vorschlag: eigenes Paket (starkes Modell) mit Abnahmebasis aus 5213 und zwei
+Wheel-Fällen; bis dahin zeigt die Positionsliste die Prämie allein.

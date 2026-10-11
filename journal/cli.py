@@ -43,6 +43,12 @@ def _oa_bericht(name: str, ergebnis) -> None:
         f"OptionApp-Import {name}: {ergebnis.zeilen_gesamt} Trades gelesen, "
         f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen{zusatz}"
     )
+    if ergebnis.abweichend:
+        print(
+            f"  Abweichend vom gespeicherten Stand, unverändert gelassen: "
+            f"{', '.join(ergebnis.abweichend)}",
+            file=sys.stderr,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,6 +85,12 @@ def main(argv: list[str] | None = None) -> int:
         "datei",
         type=pathlib.Path,
         help="Pfad zur XLSX-Exportdatei oder zu einem Ordner mit Exporten (AP-13r2)",
+    )
+    oa_importer.add_argument(
+        "--abweichende-behalten",
+        action="store_true",
+        help="Trades, die vom gespeicherten Stand abweichen, unverändert lassen und "
+        "melden statt abzubrechen (AP-13r3)",
     )
     oa_importer.add_argument(
         "--db",
@@ -263,11 +275,19 @@ def main(argv: list[str] | None = None) -> int:
     elif argumente.befehl == "import-optionapp":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         try:
+            behalten = argumente.abweichende_behalten
             if argumente.datei.is_dir():
-                ergebnisse = import_optionapp_ordner(db_pfad, argumente.datei)
+                ergebnisse = import_optionapp_ordner(
+                    db_pfad, argumente.datei, abweichende_behalten=behalten
+                )
             else:
                 ergebnisse = [
-                    (argumente.datei.name, import_optionapp_file(db_pfad, argumente.datei))
+                    (
+                        argumente.datei.name,
+                        import_optionapp_file(
+                            db_pfad, argumente.datei, abweichende_behalten=behalten
+                        ),
+                    )
                 ]
         except (FileNotFoundError, ValueError) as fehler:
             # Defekt der Quelle: benannt abbrechen, kein Traceback — die
@@ -330,7 +350,11 @@ def main(argv: list[str] | None = None) -> int:
         oa_ordner = pathlib.Path(os.environ.get("OA_ORDNER") or ziel_pfad.parent / "oa")
         if oa_ordner.is_dir():
             try:
-                for name, oa_ergebnis in import_optionapp_ordner(db_pfad, oa_ordner):
+                # AP-13r3: Im nächtlichen Lauf hält ein abweichender alter Trade
+                # die neuen nicht auf — er bleibt und wird gemeldet.
+                for name, oa_ergebnis in import_optionapp_ordner(
+                    db_pfad, oa_ordner, abweichende_behalten=True
+                ):
                     _oa_bericht(name, oa_ergebnis)
             except (FileNotFoundError, ValueError) as fehler:
                 # Ein defekter OA-Export hält den Flex-Abruf nicht auf; er
