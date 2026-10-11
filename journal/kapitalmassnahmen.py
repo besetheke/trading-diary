@@ -1,4 +1,4 @@
-"""Kapitalmaßnahmen aus den Flex-Rohzeilen ableiten (AP-03vk).
+"""Kapitalmaßnahmen aus den Flex-Rohzeilen ableiten (AP-03vz).
 
 ``flex_corporate_actions`` trägt die Rohzeilen (AP-02); die Engine
 (``engine.matching.bilde_legs``, AP-03vm) erwartet Maßnahmen als **Transfer**

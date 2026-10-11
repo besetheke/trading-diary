@@ -1,5 +1,5 @@
-"""Abnahmetests für AP-03vk2: Kapitalmaßnahmen und die EUR-Analytik.
-Unveränderlich — Vertrag in auftraege/AP-03vk2.md.
+"""Abnahmetests für AP-03vz2: Kapitalmaßnahmen und die EUR-Analytik.
+Unveränderlich — Vertrag in auftraege/AP-03vz2.md.
 
 Befund (11.10.2026): Nach einer Kapitalmaßnahme trägt ein Leg die Menge in
 **neuen** Stücken, die Ausführung aber noch Menge und Preis der **alten**.

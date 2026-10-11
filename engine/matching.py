@@ -100,7 +100,7 @@ class Leg:
     # Synthetisches Zugangslot einer Kapitalmaßnahme ohne Kostenangabe
     # (OF-23): keine stille Nullbasis, siehe Vertrag Regel 6.
     basis_ungeklaert: bool = False
-    # AP-03vk2: Faktor der Kapitalmaßnahmen (neue ÷ alte Menge, mehrere
+    # AP-03vz2: Faktor der Kapitalmaßnahmen (neue ÷ alte Menge, mehrere
     # multiplizieren sich), den die Eröffnungs- bzw. Schließungsausführung
     # durchlaufen hat; 1 ohne Maßnahme. ``menge`` steht in neuen Stücken, die
     # Ausführung noch in alten: Wer Preis × ``menge`` aus der Ausführung neu
@@ -152,7 +152,7 @@ class _Buchung:
     # None bei gewöhnlichen Ausführungen und bei Lieferung.
     schlusskurs: Decimal | None
     teilmengen: list[Decimal] = field(default_factory=list)
-    # AP-03vk2: Produkt der Faktoren aller Kapitalmaßnahmen, die diese
+    # AP-03vz2: Produkt der Faktoren aller Kapitalmaßnahmen, die diese
     # Ausführung auf eine neue conid verschoben haben.
     faktor: Decimal = Decimal("1")
 

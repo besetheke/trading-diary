@@ -157,7 +157,7 @@ class LegSeite:
     multiplikator: Decimal
     kommissionsanteil: Decimal  # Kommission × menge / Gesamtmenge der Ausführung
     buchungskurs: Decimal
-    # AP-03vk2: Faktor der Kapitalmaßnahmen an dieser Ausführung (1 ohne).
+    # AP-03vz2: Faktor der Kapitalmaßnahmen an dieser Ausführung (1 ohne).
     # ``menge`` ist in neuen Stücken, ``ausfuehrung['preis']`` in alten: der
     # Stückpreis in neuen Stücken ist ``preis / faktor`` (``stueckpreis``).
     faktor: Decimal = Decimal("1")

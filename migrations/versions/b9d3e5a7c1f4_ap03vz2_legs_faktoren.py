@@ -1,4 +1,4 @@
-"""AP-03vk2: legs.open_faktor und legs.close_faktor (Kapitalmaßnahmen und EUR-Analytik)
+"""AP-03vz2: legs.open_faktor und legs.close_faktor (Kapitalmaßnahmen und EUR-Analytik)
 
 Revision ID: b9d3e5a7c1f4
 Revises: aacd88fb9269

@@ -3244,9 +3244,9 @@ Summen, Einzelfälle anonym). Ergebnis in drei Teilen.
 Preis zu / belegte Rolls, (c) Durchsicht der Rollkandidaten, (d) Import:
 `fifoPnlRealized` ergänzen, Aktien-`underlying`, fehlender Verfall.
 
-## OF-80 · Kapitalmaßnahmen: was AP-03vk noch nicht abbildet (11.10.2026)
+## OF-80 · Kapitalmaßnahmen: was AP-03vz noch nicht abbildet (11.10.2026)
 
-Stand nach AP-03vk/AP-03vk2: 6 von 11 Aktionen sind als Transfer angewendet
+Stand nach AP-03vz/AP-03vz2: 6 von 11 Aktionen sind als Transfer angewendet
 (Aktien: UNG, SMCI, CHPT, VERU, PARA → PARA.CSH → PSKY). Nicht abgebildet
 (Regel 10 — nicht geraten, in `journal.kapitalmassnahmen` als „übersprungen"
 gemeldet):
@@ -3270,4 +3270,4 @@ gemeldet):
    Struktur-/Kettenerkennung: alte und neue `conid` erscheinen in der
    Detailansicht noch nicht als ein Ereignis im Zeitstrahl.
 
-OF-79, Befund 1 (Kapitalmaßnahmen fehlen): **behoben** durch AP-03vk/AP-03vk2.
+OF-79, Befund 1 (Kapitalmaßnahmen fehlen): **behoben** durch AP-03vz/AP-03vz2.

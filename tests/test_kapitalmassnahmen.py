@@ -1,6 +1,6 @@
-"""Abnahmetests für AP-03vk: Kapitalmaßnahmen aus den Flex-Rohzeilen ableiten
+"""Abnahmetests für AP-03vz: Kapitalmaßnahmen aus den Flex-Rohzeilen ableiten
 (`flex_corporate_actions` → `corporate_actions`) und im Rebuild anwenden.
-Unveränderlich — Vertrag in auftraege/AP-03vk.md.
+Unveränderlich — Vertrag in auftraege/AP-03vz.md.
 
 Teil 1 (reine Funktion `journal.kapitalmassnahmen.kapitalmassnahmen_ableiten`):
 Gruppen nach (konto, actionID); je Gruppe genau ein Abgang plus ein Zugang auf

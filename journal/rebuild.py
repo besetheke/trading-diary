@@ -629,7 +629,7 @@ def _sicht_schreiben(
 
 
 def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
-    # -- Kapitalmaßnahmen (AP-03vk): aus den Flex-Rohzeilen ableiten und in
+    # -- Kapitalmaßnahmen (AP-03vz): aus den Flex-Rohzeilen ableiten und in
     #    corporate_actions ergänzen, bevor gerechnet wird. Ergänzt nur, was
     #    fehlt (Regel 4); bestand_berechnen() und damit die Durchsicht der
     #    Rollkandidaten lesen dieselbe Tabelle und bleiben lesend.

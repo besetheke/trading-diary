@@ -558,7 +558,7 @@ legs = Table(
     # Kostenangabe liefert (OF-23): kein stiller Nullwert, sondern markiert —
     # eine Nullbasis erzeugte beim Verkauf einen Scheingewinn in voller Höhe.
     Column("basis_ungeklaert", Boolean, nullable=False, server_default="0"),
-    # AP-03vk2: Faktor der Kapitalmaßnahmen an Eröffnungs- und Schließungsausführung
+    # AP-03vz2: Faktor der Kapitalmaßnahmen an Eröffnungs- und Schließungsausführung
     # (neue ÷ alte Menge); 1 ohne Maßnahme. Die EUR-Analytik rechnet mit
     # Preis ÷ Faktor, weil ``menge`` in neuen Stücken steht, die Ausführung
     # noch in alten.
