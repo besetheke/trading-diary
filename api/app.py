@@ -51,6 +51,7 @@ from sqlalchemy.engine import Connection
 
 from analytics.cashflows import cashflow_bericht
 from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht
+from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
 from journal.db import create_db_engine
@@ -374,6 +375,27 @@ class UeberleitungAbdeckungAntwort(BaseModel):
     mit_ib_wert: int
 
 
+# AP-08u2: die Journal-Spalte neben IB und die Zerlegung des Unterschieds.
+class UeberleitungSpalteAntwort(BaseModel):
+    einzahlungen: str
+    realisiert: str
+    unrealisiert: str
+    sonstige_buchungen: str
+    rest: str
+
+
+class UeberleitungAbgleichAntwort(BaseModel):
+    praemien_im_einstand: str
+    waehrungsmethode: str
+    zeitpunkt_offene_strukturen: str
+    # Beitrag zum Unterschied mit Vorzeichen (= −Zeitpunkt): die Teile summieren sich.
+    zeitpunkt_beitrag: str
+    nicht_zugeordnet: str
+    anzahl_legs_offene_strukturen: int
+    zeilen_gleich: int
+    zeilen_abweichend: int
+
+
 class UeberleitungAntwort(BaseModel):
     stichtag: date | None
     bestand_stichtag: date | None
@@ -384,6 +406,10 @@ class UeberleitungAntwort(BaseModel):
     journal: UeberleitungJournalAntwort | None
     abdeckung: UeberleitungAbdeckungAntwort
     anzahl_kurs_fehlt: int
+    journal_spalte: UeberleitungSpalteAntwort | None = None
+    # Journal minus IB je Zeile (die Anzeige rechnet nichts, Vertrag 8).
+    unterschied_spalte: UeberleitungSpalteAntwort | None = None
+    abgleich_realisiert: UeberleitungAbgleichAntwort | None = None
 
 
 # AP-06f: Kosten & Erträge (analytics.cashflows), in EUR.
@@ -1131,6 +1157,20 @@ def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungA
     gewinn = letzter.gewinn
     rest = gewinn - (realisiert + unrealisiert + sonstige)
     journal = kapital.ergebnis_im_zeitraum
+    # AP-08u2: Journal-Spalte und Zerlegung (analytics.ib_abgleich). Das
+    # unrealisierte Ergebnis des Journals ist IBs Wert, bewertet gegen den
+    # Journal-Einstand: Die Prämien, die IB im Einstand gehaltener Positionen
+    # führt, stehen im Journal schon im realisierten Ergebnis.
+    abgleich = ib_abgleich_bericht(db_pfad)
+    j_unrealisiert = unrealisiert - abgleich.praemien_im_einstand_heute
+    j_rest = letzter.gesamt - (
+        letzter.einzahlungen_kumuliert + journal + j_unrealisiert + sonstige
+    )
+    nicht_zugeordnet = (journal - realisiert) - (
+        abgleich.praemien_im_einstand
+        + abgleich.waehrungsmethode
+        - abgleich.zeitpunkt_offene_strukturen
+    )
     return UeberleitungAntwort(
         stichtag=letzter.datum,
         bestand_stichtag=depot.stichtag,
@@ -1149,6 +1189,30 @@ def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungA
         ),
         abdeckung=abdeckung,
         anzahl_kurs_fehlt=kurs_fehlt,
+        journal_spalte=UeberleitungSpalteAntwort(
+            einzahlungen=_als_text(letzter.einzahlungen_kumuliert),
+            realisiert=_als_text(journal),
+            unrealisiert=_als_text(j_unrealisiert),
+            sonstige_buchungen=_als_text(sonstige),
+            rest=_als_text(j_rest),
+        ),
+        unterschied_spalte=UeberleitungSpalteAntwort(
+            einzahlungen=_als_text(Decimal("0.00")),
+            realisiert=_als_text(journal - realisiert),
+            unrealisiert=_als_text(j_unrealisiert - unrealisiert),
+            sonstige_buchungen=_als_text(Decimal("0.00")),
+            rest=_als_text(j_rest - rest),
+        ),
+        abgleich_realisiert=UeberleitungAbgleichAntwort(
+            praemien_im_einstand=_als_text(abgleich.praemien_im_einstand),
+            waehrungsmethode=_als_text(abgleich.waehrungsmethode),
+            zeitpunkt_offene_strukturen=_als_text(abgleich.zeitpunkt_offene_strukturen),
+            zeitpunkt_beitrag=_als_text(-abgleich.zeitpunkt_offene_strukturen),
+            nicht_zugeordnet=_als_text(nicht_zugeordnet),
+            anzahl_legs_offene_strukturen=abgleich.anzahl_legs_offene_strukturen,
+            zeilen_gleich=abgleich.zeilen_gleich,
+            zeilen_abweichend=abgleich.zeilen_abweichend,
+        ),
     )
 
 

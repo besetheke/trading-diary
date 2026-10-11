@@ -655,6 +655,27 @@ export interface Ueberleitung {
   journal: { realisiert: string; differenz_realisiert: string } | null
   abdeckung: { ausfuehrungen: number; mit_ib_wert: number }
   anzahl_kurs_fehlt: number
+  // AP-08u2: Journal neben IB, Unterschied je Zeile, Zerlegung des Unterschieds.
+  journal_spalte: UeberleitungSpalte | null
+  unterschied_spalte: UeberleitungSpalte | null
+  abgleich_realisiert: {
+    praemien_im_einstand: string
+    waehrungsmethode: string
+    zeitpunkt_offene_strukturen: string
+    zeitpunkt_beitrag: string
+    nicht_zugeordnet: string
+    anzahl_legs_offene_strukturen: number
+    zeilen_gleich: number
+    zeilen_abweichend: number
+  } | null
+}
+
+export interface UeberleitungSpalte {
+  einzahlungen: string
+  realisiert: string
+  unrealisiert: string
+  sonstige_buchungen: string
+  rest: string
 }
 
 export function holeUeberleitung(): Promise<Ueberleitung> {

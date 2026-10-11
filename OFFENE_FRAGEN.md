@@ -3279,3 +3279,9 @@ Unterschied des Journals (+10.530,64 € auf Equity-Basis, +14.992 € auf Basis
 geschlossener Legs). Abgleichswerkzeuge dürfen nicht mehr auf `roh_json` bauen.
 Der Rest der Überleitung (−5.692,73 €: Währung, Abgrenzungen) ist ein Saldo, den
 IB nicht einzeln ausweist.
+
+**Nachtrag 11.10.2026 (AP-08u2), Stand der Klärung:** Unterschied realisiert
+Journal − IB 10.530,64 € = Prämien im Einstand gehaltener Aktien 30.163,48 +
+Währungsmethode −14.745,89 + Zeitpunkt (16 Legs in offenen Strukturen)
+−4.461,65 + **nicht zugeordnet −425,30 €**. 15.584 schließende Ausführungen
+stimmen mit IB genau. Offen ist nur noch der Rest von −425 €.

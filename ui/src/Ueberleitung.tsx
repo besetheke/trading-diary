@@ -1,14 +1,49 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fehlerText, holeUeberleitung } from './api'
-import type { Ueberleitung as UeberleitungDaten } from './api'
+import type { Ueberleitung as UeberleitungDaten, UeberleitungSpalte } from './api'
 import Betrag from './Betrag'
 import { datumDe } from './format'
 
-// AP-08u: Vom Ergebnis zum Kontostand. IBs Gewinn (Kontowert minus
-// Einzahlungen) in seine Bestandteile zerlegt, daneben das realisierte Ergebnis
-// des Journals. Alles Werte der API (GET /ueberleitung), nichts im Browser
-// gerechnet (Vertrag 8); jede Zeile nennt ihre Quelle.
+// AP-08u/AP-08u2: Vom Ergebnis zum Kontostand — Journal (selbst gerechnet) und
+// IB (Bericht) nebeneinander, beide Spalten ergeben denselben Kontowert; darunter
+// die Zerlegung des Unterschieds im realisierten Ergebnis. Alles Werte der API
+// (GET /ueberleitung), nichts im Browser gerechnet (Vertrag 8).
+
+type Feld = keyof UeberleitungSpalte
+
+const ZEILEN: { feld: Feld; titel: string; journal: string; ib: string }[] = [
+  {
+    feld: 'einzahlungen',
+    titel: 'Einzahlungen (kumuliert)',
+    journal: 'Aus IBs Cash-Buchungen',
+    ib: 'Gleiche Quelle',
+  },
+  {
+    feld: 'realisiert',
+    titel: '+ Realisiertes Ergebnis',
+    journal: 'Equity: geschlossene Strukturen und lose Aktiengeschäfte',
+    ib: 'Σ fifoPnlRealized je Ausführung, netto nach Kommission',
+  },
+  {
+    feld: 'unrealisiert',
+    titel: '+ Unrealisiertes Ergebnis',
+    journal: 'IBs letzter Kurs gegen den Journal-Einstand',
+    ib: 'IBs Wert je offener Position',
+  },
+  {
+    feld: 'sonstige_buchungen',
+    titel: '+ Sonstige Buchungen',
+    journal: 'Dividenden, Zinsen, Gebühren, Quellensteuer',
+    ib: 'Gleiche Quelle',
+  },
+  {
+    feld: 'rest',
+    titel: '+ Rest',
+    journal: 'Saldo zum Kontowert — enthält Währungsmethode und Zeitpunkt (siehe unten)',
+    ib: 'Saldo: Währung, Abgrenzungen',
+  },
+]
 
 export default function Ueberleitung(): JSX.Element | null {
   const [daten, setzeDaten] = useState<UeberleitungDaten | null>(null)
@@ -37,117 +72,145 @@ export default function Ueberleitung(): JSX.Element | null {
     )
   }
   if (daten === null) return <p className="laedt">Lade Überleitung …</p>
-  if (daten.stichtag === null || daten.ib === null || daten.journal === null) return null
+  if (
+    daten.stichtag === null ||
+    daten.ib === null ||
+    daten.journal === null ||
+    daten.journal_spalte === null ||
+    daten.unterschied_spalte === null ||
+    daten.abgleich_realisiert === null
+  ) {
+    return null
+  }
 
-  const { ib, journal } = daten
+  const ib: UeberleitungSpalte = { ...daten.ib, einzahlungen: daten.einzahlungen ?? '0' }
+  const journal = daten.journal_spalte
+  const unterschied = daten.unterschied_spalte
+  const a = daten.abgleich_realisiert
   const luecke = daten.abdeckung.ausfuehrungen - daten.abdeckung.mit_ib_wert
 
   return (
     <section className="ueberleitung">
       <h3>Vom Ergebnis zum Kontostand</h3>
       <p className="sicht">
-        Stand {datumDe(daten.stichtag)}, gesamte Historie, EUR. Jede Zeile ist ein Wert aus IBs
-        Bericht; „Rest“ ist, was IB nicht einzeln ausweist.
+        Stand {datumDe(daten.stichtag)}, gesamte Historie, EUR. Links die Rechnung des Journals,
+        rechts IBs Bericht — beide Spalten ergeben denselben Kontowert.
       </p>
       <table className="ueberleitung">
         <thead>
           <tr>
             <th>Posten</th>
-            <th className="zahl">Betrag</th>
-            <th>Was es ist</th>
+            <th className="zahl">Journal (berechnet)</th>
+            <th className="zahl">IB (Bericht)</th>
+            <th className="zahl">Unterschied</th>
+            <th>Quelle</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td>Einzahlungen (kumuliert)</td>
-            <td className="zahl">
-              <Betrag wert={daten.einzahlungen} />
-            </td>
-            <td>Eingezahltes Geld abzüglich Auszahlungen</td>
-          </tr>
-          <tr>
-            <td>+ Realisiertes Ergebnis laut IB</td>
-            <td className="zahl">
-              <Betrag wert={ib.realisiert} />
-            </td>
-            <td>Abgeschlossene Geschäfte, netto nach Kommission</td>
-          </tr>
-          <tr>
-            <td>+ Unrealisiertes Ergebnis</td>
-            <td className="zahl">
-              <Betrag wert={ib.unrealisiert} />
-            </td>
-            <td>
-              Offene Positionen zum letzten Kurs, <Link to="/bestand">siehe Depot</Link>
-              {daten.bestand_stichtag ? ` (Stand ${datumDe(daten.bestand_stichtag)})` : ''}
-            </td>
-          </tr>
-          <tr>
-            <td>+ Sonstige Buchungen</td>
-            <td className="zahl">
-              <Betrag wert={ib.sonstige_buchungen} />
-            </td>
-            <td>Dividenden, Zinsen, Gebühren, Quellensteuer</td>
-          </tr>
-          <tr>
-            <td>+ Währung und Abgrenzungen (Rest)</td>
-            <td className="zahl">
-              <Betrag wert={ib.rest} />
-            </td>
-            <td>
-              Differenz zum Kontowert: Umrechnung von Fremdwährungs-Cash, aufgelaufene Zinsen und
-              Dividenden, alles, was IB nicht einzeln ausweist
-            </td>
-          </tr>
+          {ZEILEN.map((z) => (
+            <tr key={z.feld}>
+              <td>{z.titel}</td>
+              <td className="zahl">
+                <Betrag wert={journal[z.feld]} />
+              </td>
+              <td className="zahl">
+                <Betrag wert={ib[z.feld]} />
+              </td>
+              <td className="zahl">
+                <Betrag wert={unterschied[z.feld]} />
+              </td>
+              <td>
+                Journal: {z.journal}. IB: {z.ib}.
+                {z.feld === 'unrealisiert' ? (
+                  <>
+                    {' '}
+                    <Link to="/bestand">Depot</Link>
+                  </>
+                ) : null}
+              </td>
+            </tr>
+          ))}
           <tr className="summe">
             <td>= Kontowert laut IB</td>
             <td className="zahl">
               <Betrag wert={daten.kontowert} />
             </td>
+            <td className="zahl">
+              <Betrag wert={daten.kontowert} />
+            </td>
+            <td className="zahl">—</td>
             <td>
-              Davon Gewinn laut IB: <Betrag wert={daten.gewinn_ib} />
+              Gewinn laut IB: <Betrag wert={daten.gewinn_ib} />
             </td>
           </tr>
         </tbody>
       </table>
 
-      <h4>Das realisierte Ergebnis im Journal</h4>
+      <h4>Warum das realisierte Ergebnis abweicht</h4>
+      <p className="sicht">
+        Verglichen wird jede schließende Ausführung: {a.zeilen_gleich.toLocaleString('de-DE')}{' '}
+        stimmen mit IB genau überein, {a.zeilen_abweichend.toLocaleString('de-DE')} weichen ab —
+        fast alle im Zusammenhang mit Zuteilung oder Ausübung.
+      </p>
       <table className="ueberleitung">
         <tbody>
           <tr>
-            <td>Realisiert laut Journal (Equity)</td>
+            <td>Prämien im Einstand gehaltener Aktien</td>
             <td className="zahl">
-              <Betrag wert={journal.realisiert} />
+              <Betrag wert={a.praemien_im_einstand} />
+            </td>
+            <td>
+              Das Journal zählt die Prämie einer Zuteilung sofort als Ertrag; IB schlägt sie auf
+              den Aktieneinstand und weist sie erst beim Verkauf aus. Bei noch gehaltenen Aktien
+              steht sie bei IB im unrealisierten Ergebnis (Kurs der Eröffnung).
             </td>
           </tr>
           <tr>
-            <td>Realisiert laut IB</td>
+            <td>Währungsmethode</td>
             <td className="zahl">
-              <Betrag wert={ib.realisiert} />
+              <Betrag wert={a.waehrungsmethode} />
+            </td>
+            <td>
+              Das Journal rechnet jede Seite zum Kurs ihres Tages (wie für die Steuer), IB das
+              Ergebnis in Positionswährung zum Kurs der Schließung.
             </td>
           </tr>
-          <tr className="summe">
-            <td>Unterschied (Journal minus IB)</td>
+          <tr>
+            <td>Zeitpunkt</td>
             <td className="zahl">
-              <Betrag wert={journal.differenz_realisiert} />
+              <Betrag wert={a.zeitpunkt_beitrag} />
             </td>
+            <td>
+              {a.anzahl_legs_offene_strukturen} geschlossene Legs in noch offenen Strukturen: Das
+              Journal zählt sie erst, wenn die ganze Struktur geschlossen ist; IB je Ausführung.
+            </td>
+          </tr>
+          <tr>
+            <td>Nicht zugeordnet</td>
+            <td className="zahl">
+              <Betrag wert={a.nicht_zugeordnet} />
+            </td>
+            <td>Was nach den drei belegten Ursachen bleibt — ausgewiesen, nicht verteilt.</td>
+          </tr>
+          <tr className="summe">
+            <td>= Unterschied realisiert (Journal − IB)</td>
+            <td className="zahl">
+              <Betrag wert={daten.journal.differenz_realisiert} />
+            </td>
+            <td />
           </tr>
         </tbody>
       </table>
-      <p className="sicht fussnote">
-        Der Unterschied ist <strong>überwiegend Methode</strong>: Das Journal zählt die Prämie einer
-        Zuteilung sofort als Ertrag der Option; IB schlägt sie auf den Einstand der Aktie und
-        weist sie erst beim Verkauf der Aktie aus (bei noch gehaltenen Aktien steht sie im
-        unrealisierten Ergebnis). Dazu rechnet IB das Ergebnis zum Kurs des Schließungstags, das
-        Journal jede Seite zum Kurs ihrer Ausführung. Ein Rest ist noch nicht im Einzelnen
-        belegt (OF-78).
-        {luecke > 0
-          ? ` Achtung: IBs realisierter Wert liegt nur für ${daten.abdeckung.mit_ib_wert} von ${daten.abdeckung.ausfuehrungen} Ausführungen vor.`
-          : ''}
-        {daten.anzahl_kurs_fehlt > 0
-          ? ` ${daten.anzahl_kurs_fehlt} Zeile(n) ohne Umrechnungskurs sind nicht enthalten.`
-          : ''}
-      </p>
+      {luecke > 0 || daten.anzahl_kurs_fehlt > 0 ? (
+        <p className="sicht fussnote">
+          {luecke > 0
+            ? `IBs realisierter Wert liegt nur für ${daten.abdeckung.mit_ib_wert} von ${daten.abdeckung.ausfuehrungen} Ausführungen vor. `
+            : ''}
+          {daten.anzahl_kurs_fehlt > 0
+            ? `${daten.anzahl_kurs_fehlt} Zeile(n) ohne Umrechnungskurs sind nicht enthalten.`
+            : ''}
+        </p>
+      ) : null}
     </section>
   )
 }
