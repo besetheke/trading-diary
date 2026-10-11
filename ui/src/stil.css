@@ -879,6 +879,17 @@ ul.diagramm-legende {
   stroke-dasharray: 6 4;
 }
 
+/* AP-07fv: Endpunkt mit Unrealisiertem, beschriftet. */
+.diagramm .endpunkt circle {
+  fill: var(--akzent);
+}
+
+.diagramm .endpunkt text {
+  font-size: 12px;
+  fill: var(--akzent);
+  font-weight: 600;
+}
+
 .diagramm-legende .probe.duenn.gestrichelt {
   border-top: 2px dashed var(--akzent);
 }

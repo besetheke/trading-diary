@@ -120,7 +120,16 @@ export default function ZweiLinien({
   const zeilen = gewaehlt
     ? [datumDe(gewaehlt.punkt.x), geldDe(gewaehlt.punkt.y)]
     : []
-  if (gewaehlt && untenPunkt) zeilen.push(geldDe(untenPunkt.y))
+  // AP-07fv: Gestrichelt ist ein Ausblick (Endpunkt = mit Unrealisiertem) —
+  // im Zeiger nur am letzten Tag, dann mit seinem Endwert und benannt.
+  const endeUnten = gestrichelt && unten && unten.length > 0 ? unten[unten.length - 1] : null
+  if (gestrichelt) {
+    if (gewaehlt && endeUnten && gewaehlt.i === oben.length - 1) {
+      zeilen.push(`mit Unrealisiertem ${geldDe(endeUnten.y)}`)
+    }
+  } else if (gewaehlt && untenPunkt) {
+    zeilen.push(geldDe(untenPunkt.y))
+  }
 
   return (
     <figure className="diagramm">
@@ -155,6 +164,22 @@ export default function ZweiLinien({
             d={geruest.pfadUnten}
           /> : null}
         <path className="kurve" d={geruest.pfadOben} />
+        {endeUnten ? (
+          <g className="endpunkt">
+            <circle
+              cx={geruest.px(isoMs(endeUnten.x))}
+              cy={geruest.py(Number(endeUnten.y))}
+              r={4}
+            />
+            <text
+              x={geruest.px(isoMs(endeUnten.x)) - 8}
+              y={geruest.py(Number(endeUnten.y)) + 4}
+              textAnchor="end"
+            >
+              {geldDe(endeUnten.y)}
+            </text>
+          </g>
+        ) : null}
         {gewaehlt ? (
           <g>
             <line
