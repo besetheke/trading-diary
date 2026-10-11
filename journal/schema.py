@@ -714,7 +714,10 @@ chain_links = Table(
     # AP-04sw: Pflichtfeld wie an den anderen drei abgeleiteten Tabellen.
     Column("sicht", Text, nullable=False, server_default="konto"),
     CheckConstraint(
-        "verknuepfungstyp IN ('open', 'roll', 'close', 'adjust')",
+        # AP-04z: Zuteilung und Covered Call gehören zur Kette, sind aber
+        # kein Roll.
+        "verknuepfungstyp IN ('open', 'roll', 'close', 'adjust', 'zuteilung', "
+        "'covered_call')",
         name="ck_chain_links_verknuepfungstyp",
     ),
     CheckConstraint(

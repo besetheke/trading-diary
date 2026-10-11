@@ -61,6 +61,7 @@ import pathlib
 import sys
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Connection
@@ -314,8 +315,12 @@ def offene_rollkandidaten(
 
 def _struktur_schluessel(struktur: Struktur) -> str:
     """Naturschlüssel einer Struktur (Vertrag 7): die ``open_exec_id`` ihrer
-    Legs, aufsteigend sortiert, mit ``|`` verbunden."""
-    return "|".join(sorted(schluessel.open_exec_id for schluessel in struktur.leg_schluessel))
+    Legs, aufsteigend sortiert, mit ``|`` verbunden. AP-04z: Teilverkäufe einer
+    Zuteilung tragen dieselbe Eröffnung — ihr Schluss steht dann mit ``>``
+    dahinter (``schluessel_zusatz``)."""
+    basis = "|".join(sorted(schluessel.open_exec_id for schluessel in struktur.leg_schluessel))
+    zusatz = getattr(struktur, "schluessel_zusatz", None)
+    return f"{basis}>{zusatz}" if zusatz else basis
 
 
 def _kette_schluessel(kette: Kette) -> str:
@@ -615,7 +620,12 @@ def _sicht_schreiben(
                     sicht=sicht,
                 )
             )
-            eintraege.append([_struktur_schluessel(glied.structure), glied.erkennung])
+            # AP-04z: Der Verknüpfungstyp reist mit — Zuteilung und Covered
+            # Call bleiben es auch, wenn ein Override die Kette neu ordnet.
+            eintraege.append(
+                [_struktur_schluessel(glied.structure), glied.erkennung,
+                 glied.verknuepfungstyp]
+            )
         glieder_je_kette[schluessel] = eintraege
 
     return _SichtErgebnis(
@@ -985,13 +995,21 @@ def _overrides_anwenden(
             continue
 
         eintraege.sort(key=lambda eintrag: struktur_je_schluessel[eintrag[0]].eroeffnet_am)
-        for position, (struktur_schluessel, erkennung) in enumerate(eintraege, start=1):
+        anzahl_rolls = 0
+        for position, eintrag in enumerate(eintraege, start=1):
+            struktur_schluessel, erkennung = eintrag[0], eintrag[1]
+            bisher = eintrag[2] if len(eintrag) > 2 else None
+            if bisher in ("zuteilung", "covered_call"):
+                typ = bisher
+            else:
+                typ = "open" if position == 1 else "roll"
+            anzahl_rolls += typ == "roll"
             verbindung.execute(
                 insert(chain_links).values(
                     chain_id=chain_id,
                     structure_id=struktur_id_je_schluessel[struktur_schluessel],
                     sequenz=position,
-                    verknuepfungstyp="open" if position == 1 else "roll",
+                    verknuepfungstyp=typ,
                     erkennung=erkennung,
                     sicht=sicht,
                 )
@@ -1002,13 +1020,17 @@ def _overrides_anwenden(
         # nachgebaut), ausgewertet über das letzte Glied.
         betroffene = [struktur_je_schluessel[eintrag[0]] for eintrag in eintraege]
         geschlossen = all(s.status == "geschlossen" for s in betroffene)
-        letzte = betroffene[-1]
+        # AP-04z: wie in engine.chains — die späteste Schließung beendet die Kette.
+        letzte = max(
+            enumerate(betroffene),
+            key=lambda e: (e[1].geschlossen_am or datetime.max, e[0]),
+        )[1]
         verbindung.execute(
             update(chains)
             .where(chains.c.chain_id == chain_id)
             .values(
                 eroeffnet_am=min(s.eroeffnet_am for s in betroffene),
-                anzahl_rolls=len(betroffene) - 1,
+                anzahl_rolls=anzahl_rolls,
                 beendet_am=letzte.geschlossen_am if geschlossen else None,
                 endzustand=(
                     ENDZUSTAND_JE_EREIGNIS.get(letzte.schluss_ereignistyp, "Geschlossen")
@@ -1040,33 +1062,17 @@ def _assignment_links_neu_schreiben(
     verbindung.execute(
         delete(assignment_links).where(assignment_links.c.erkennung != "manuell")
     )
-    paare: set[tuple[str, str]] = set()
-    for kette in ketten_ergebnis.chains:
-        glieder = list(kette.glieder)
-        for position, glied in enumerate(glieder):
-            fortsetzung = glied.structure
-            if fortsetzung.methode != "zuteilung":
-                continue
-            option = next(
-                (
-                    glieder[stelle].structure
-                    for stelle in range(position - 1, -1, -1)
-                    if glieder[stelle].structure.schluss_ereignistyp == "assignment"
-                ),
-                None,
-            )
-            if option is None:
-                raise ValueError(
-                    f"Zuteilungsstruktur {_struktur_schluessel(fortsetzung)}: keine per "
-                    "Zuteilung geschlossene Optionsstruktur in derselben Kette — "
-                    "kein assignment_links-Paar ableitbar"
-                )
-            for leg in option.leg_schluessel:
-                schliessung = exec_je_id.get(leg.close_exec_id or "")
-                if schliessung is None or schliessung["ereignistyp"] != "assignment":
-                    continue
-                for fortschreibung in fortsetzung.leg_schluessel:
-                    paare.add((leg.close_exec_id, fortschreibung.open_exec_id))
+    # AP-04z: Die Paare liefert die Kettenbildung selbst (Zuteilung am Leg,
+    # Zuordnung über Zeit, Basiswert und Strike). Manuelle Paare bleiben.
+    manuell = {
+        (z[0], z[1])
+        for z in verbindung.execute(
+            select(assignment_links.c.option_exec_id, assignment_links.c.stock_exec_id)
+        )
+    }
+    paare: set[tuple[str, str]] = {
+        paar for paar in ketten_ergebnis.zuteilungs_paare if paar not in manuell
+    }
 
     # AP-04pk: `assignment_links` ist eine Menge von Paaren, keine Liste.
     # Schließt **eine** Zuteilungsausführung mehrere Legs derselben Struktur,

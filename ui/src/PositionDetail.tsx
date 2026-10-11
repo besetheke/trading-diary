@@ -13,6 +13,9 @@ const VERKNUEPFUNGEN: Record<string, string> = {
   roll: 'Roll',
   close: 'Schluss',
   adjust: 'Anpassung',
+  // AP-04z: zugeteilte Aktie und Covered Call gehören zur Position (OF-81).
+  zuteilung: 'Zuteilung (Aktie)',
+  covered_call: 'Covered Call',
 }
 
 const ERKENNUNGEN: Record<string, string> = {

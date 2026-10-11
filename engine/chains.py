@@ -48,6 +48,18 @@ Zuteilung eröffnetes Aktienbein auf demselben Underlying (aus
 Aktienposition fort — als eigene, synthetisch gebildete Structure (Methode
 ``zuteilung``), bis diese ihrerseits schließt.
 
+**2a′, AP-04z (OF-81, Nutzer 11.10.2026).** Der Übergang hängt am **Leg**,
+nicht an der Struktur: Schließt irgendein Options-Leg per Zuteilung oder
+Ausübung, setzt sich seine Kette in allen Legs der dabei gelieferten Aktie fort
+(Teilverkäufe, FIFO-Lots — je Leg eine Struktur), auch wenn die übrige
+Struktur anders schließt. Zuordnung über Zeitpunkt und Basiswert, bei mehreren
+Kandidaten Preis = Strike. **Wheel:** Ein Short Call auf denselben Basiswert,
+eröffnet während die zugeteilten Aktien gehalten werden, gehört zur Kette
+(``covered_call``, Erkennung ``heuristik``), solange Kontrakte × Multiplikator
+die gehaltenen, noch nicht gedeckten Stücke nicht übersteigen. Zuteilung und
+Covered Call zählen nicht als Roll; die Kette endet mit der spätesten
+Schließung.
+
 **3, Futures — kein Zeitfenster.** Nur Schritt 1 (derselbe ``exec_batch``)
 verkettet Futures automatisch. Eine Front-Monat-Schließung und eine
 Back-Monat-Eröffnung am selben Handelstag **ohne** gemeinsamen ``exec_batch``
@@ -104,7 +116,9 @@ class ChainGlied:
 
     structure: Structure
     sequenz: int
-    verknuepfungstyp: str  # open / roll (close/adjust: noch nicht vergeben)
+    # open / roll / zuteilung / covered_call (AP-04z); close/adjust: noch
+    # nicht vergeben
+    verknuepfungstyp: str
     erkennung: str  # auto / heuristik / manuell (CLAUDE.md Regel 7)
 
 
@@ -146,6 +160,9 @@ class KettenErgebnis:
     # Nicht persistiert: bei jedem Lauf neu berechnet (Plan §6, Block B,
     # Regel 2). Entschieden wird über `chain_overrides`, nicht hier.
     kandidaten: tuple[Rollkandidat, ...] = ()
+    # AP-04z: (schließende Options-Ausführung, liefernde Aktien-Ausführung) je
+    # Zuteilungsübergang — Quelle für ``assignment_links``.
+    zuteilungs_paare: tuple[tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +175,7 @@ def _zuteilungs_structure(
     leg: Mapping,
     executions: Mapping[str, Mapping],
     instrument: Mapping,
+    schluessel_zusatz: str | None = None,
 ) -> Structure:
     """Bildet eine synthetische Ein-Bein-Structure für ein per Zuteilung
     eröffnetes Aktienbein — dieselbe Schluss-Logik wie ``bilde_structures()``,
@@ -191,7 +209,11 @@ def _zuteilungs_structure(
         oa_trade=None,
         oeffnungs_exec_batch=None,
         schluss_exec_batch=schluss_exec_batch,
+        schluessel_zusatz=schluessel_zusatz,
     )
+
+
+ZUTEILUNGS_EREIGNISSE = ("assignment", "exercise")
 
 
 def _zuteilungs_fortsetzungen(
@@ -199,45 +221,86 @@ def _zuteilungs_fortsetzungen(
     legs_je_schluessel: Mapping[LegSchluessel, Mapping],
     executions: Mapping[str, Mapping],
     instruments: Mapping[int, Mapping],
-) -> dict[int, Structure]:
-    """Liefert je Index einer zuteilungsschließenden Structure in
-    ``struktur_ergebnis.structures`` die Fortsetzungs-Structure, falls eine
-    per Zuteilung eröffnete Aktienzeile zum selben Zeitpunkt und Underlying
-    unter ``nicht_strukturiert`` gefunden wird."""
-    zuteilungs_kandidaten: list[tuple[NichtStrukturiert, Mapping, Mapping]] = []
+) -> tuple[dict[int, list[Structure]], list[tuple[str, str]]]:
+    """AP-04z: je Index einer Structure, von der mindestens ein Leg per
+    Zuteilung/Ausübung schließt, die Fortsetzungs-Structures (eine je Leg der
+    gelieferten Aktie) und die Paare (Options-, Aktien-Ausführung)."""
+    # Gelieferte Ausführungen: je eröffnender Ausführung alle Legs.
+    lieferung_legs: dict[str, list[tuple[NichtStrukturiert, Mapping, Mapping]]] = {}
     for ns in struktur_ergebnis.nicht_strukturiert:
-        if "assignment" not in ns.grund:
-            continue
         leg = legs_je_schluessel.get(ns.leg_schluessel)
         if leg is None:
             continue
         oeffnung = executions.get(leg["open_exec_id"])
-        if oeffnung is None or oeffnung["ereignistyp"] != "assignment":
+        if oeffnung is None or oeffnung["ereignistyp"] not in ZUTEILUNGS_EREIGNISSE:
             continue
         instrument = instruments.get(leg["conid"])
         if instrument is None:
             continue
-        zuteilungs_kandidaten.append((ns, leg, instrument))
+        lieferung_legs.setdefault(leg["open_exec_id"], []).append((ns, leg, instrument))
 
-    fortsetzung_je_index: dict[int, Structure] = {}
-    verbraucht: set[LegSchluessel] = set()
+    def basis(instrument: Mapping) -> str | None:
+        return instrument.get("underlying") or instrument.get("symbol")
+
+    # Options-Schließungen per Zuteilung/Ausübung, deterministisch geordnet.
+    schliessungen: list[tuple[datetime, str, int, Mapping]] = []
     for index, structure in enumerate(struktur_ergebnis.structures):
-        if structure.schluss_ereignistyp != "assignment":
-            continue
-        for ns, leg, instrument in zuteilungs_kandidaten:
-            if ns.leg_schluessel in verbraucht:
+        for schluessel in structure.leg_schluessel:
+            schliessung = executions.get(schluessel.close_exec_id or "")
+            if schliessung is None or schliessung["ereignistyp"] not in ZUTEILUNGS_EREIGNISSE:
                 continue
-            oeffnung = executions[leg["open_exec_id"]]
-            passendes_underlying = (
-                instrument.get("underlying") or instrument.get("symbol")
-            ) == structure.underlying
-            if passendes_underlying and oeffnung["handelszeit"] == structure.geschlossen_am:
-                fortsetzung_je_index[index] = _zuteilungs_structure(
-                    ns, leg, executions, instrument
-                )
-                verbraucht.add(ns.leg_schluessel)
-                break
-    return fortsetzung_je_index
+            leg = legs_je_schluessel.get(schluessel)
+            instrument = instruments.get(leg["conid"]) if leg is not None else None
+            if instrument is None:
+                continue
+            schliessungen.append(
+                (schliessung["handelszeit"], schliessung["exec_id"], index, instrument)
+            )
+    schliessungen.sort(key=lambda s: (s[0], s[1]))
+
+    fortsetzung_je_index: dict[int, list[Structure]] = {}
+    paare: list[tuple[str, str]] = []
+    verbraucht: set[str] = set()
+    zugeordnet: dict[str, str] = {}  # Options-Ausführung → Aktien-Ausführung
+    for zeit, options_exec_id, index, options_instrument in schliessungen:
+        if options_exec_id in zugeordnet:
+            # Eine Ausführung schließt mehrere Legs: dieselbe Lieferung.
+            continue
+        kandidaten = []
+        for aktien_exec_id, eintraege in lieferung_legs.items():
+            if aktien_exec_id in verbraucht:
+                continue
+            aktie = executions[aktien_exec_id]
+            if aktie["handelszeit"] != zeit:
+                continue
+            if basis(eintraege[0][2]) != struktur_ergebnis.structures[index].underlying:
+                continue
+            kandidaten.append(aktien_exec_id)
+        if not kandidaten:
+            continue
+        strike = options_instrument.get("strike")
+        passend = [
+            k for k in kandidaten
+            if strike is not None and executions[k].get("preis") == strike
+        ]
+        gewaehlt = sorted(passend or kandidaten)[0]
+        verbraucht.add(gewaehlt)
+        zugeordnet[options_exec_id] = gewaehlt
+        paare.append((options_exec_id, gewaehlt))
+        teile = lieferung_legs[gewaehlt]
+        for ns, leg, instrument in sorted(
+            teile,
+            key=lambda e: (e[1].get("close_exec_id") or "~", e[1]["open_exec_id"]),
+        ):
+            # Mehrere Legs derselben Lieferung (Teilverkäufe): der Schluss
+            # unterscheidet sie im Naturschlüssel, der offene Rest heißt „offen".
+            zusatz = (leg.get("close_exec_id") or "offen") if len(teile) > 1 else None
+            fortsetzung_je_index.setdefault(index, []).append(
+                _zuteilungs_structure(ns, leg, executions, instrument, zusatz)
+            )
+    # Weitere Options-Ausführungen derselben Lieferung (gleiche Zeit, gleicher
+    # Strike, schon zugeordnet über eine andere Ausführung) bilden ihr Paar mit.
+    return fortsetzung_je_index, paare
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +448,7 @@ def bilde_chains(
     }
 
     structures = list(struktur_ergebnis.structures)
-    zuteilungs_fortsetzung = _zuteilungs_fortsetzungen(
+    zuteilungs_fortsetzung, zuteilungs_paare = _zuteilungs_fortsetzungen(
         struktur_ergebnis, legs_je_schluessel, executions_je_id, instruments
     )
     roll_fortsetzung = _rolls_verketten(structures)
@@ -427,7 +490,8 @@ def bilde_chains(
             index_zu_sequenz[i] = von_seq
         sequenzen[nach_seq] = []
 
-    chains: list[Chain] = []
+    # Glieder je Kette: (Structure, Verknüpfungstyp, Erkennung).
+    entwuerfe: list[list[tuple[Structure, str, str]]] = []
     for sequenz_indizes in sequenzen:
         if not sequenz_indizes:
             continue
@@ -435,37 +499,49 @@ def bilde_chains(
             set(sequenz_indizes), key=lambda i: structures[i].eroeffnet_am
         )
         glied_paare = [
-            (structures[i], erkennung_je_index.get(i, "auto")) for i in sequenz_indizes
+            (structures[i], "open" if pos == 0 else "roll",
+             erkennung_je_index.get(i, "auto"))
+            for pos, i in enumerate(sequenz_indizes)
         ]
-
-        # Zuteilungsübergang: hängt die synthetische Fortsetzung an, sofern
-        # eine gefunden wurde — auch mitten in einer OA-Kette möglich. Die
+        # Zuteilungsübergang (AP-04z): alle Legs der gelieferten Aktie; die
         # Zuteilung ist eine Brokertatsache, kein Schluss: ``auto``.
         for i in sequenz_indizes:
-            if i in zuteilungs_fortsetzung:
-                glied_paare.append((zuteilungs_fortsetzung[i], "auto"))
-        alle_structures = [s for s, _ in glied_paare]
+            for fortsetzung in zuteilungs_fortsetzung.get(i, ()):
+                glied_paare.append((fortsetzung, "zuteilung", "auto"))
+        entwuerfe.append(glied_paare)
 
+    entwuerfe = _covered_calls_anhaengen(
+        entwuerfe, legs_je_schluessel, executions_je_id, instruments
+    )
+
+    chains: list[Chain] = []
+    for glied_paare in entwuerfe:
+        alle_structures = [s for s, _typ, _erk in glied_paare]
         glieder = tuple(
             ChainGlied(
                 structure=s,
                 sequenz=pos + 1,
-                verknuepfungstyp="open" if pos == 0 else "roll",
+                verknuepfungstyp=typ,
                 erkennung=erkennung,
             )
-            for pos, (s, erkennung) in enumerate(glied_paare)
+            for pos, (s, typ, erkennung) in enumerate(glied_paare)
         )
 
-        letzte_structure = alle_structures[-1]
         eroeffnet_am = min(s.eroeffnet_am for s in alle_structures)
         vollstaendig_geschlossen = all(s.status == "geschlossen" for s in alle_structures)
+        # AP-04z: Die Kette endet mit der spätesten Schließung (bei Gleichstand
+        # gilt die spätere Stelle in der Kette).
+        letzte_structure = max(
+            enumerate(alle_structures),
+            key=lambda e: (e[1].geschlossen_am or datetime.max, e[0]),
+        )[1]
         beendet_am = letzte_structure.geschlossen_am if vollstaendig_geschlossen else None
         endzustand = (
             ENDZUSTAND_JE_EREIGNIS.get(letzte_structure.schluss_ereignistyp, "Geschlossen")
             if vollstaendig_geschlossen
             else "Offen"
         )
-        anzahl_rolls = len(alle_structures) - 1
+        anzahl_rolls = sum(1 for g in glieder if g.verknuepfungstyp == "roll")
 
         asset_classes = {s.asset_class for s in alle_structures}
         asset_class = (
@@ -504,8 +580,93 @@ def bilde_chains(
 
     chains.sort(key=lambda c: (c.eroeffnet_am, c.underlying))
     return KettenErgebnis(
-        chains=tuple(chains), kandidaten=rollkandidaten(structures)
+        chains=tuple(chains),
+        kandidaten=rollkandidaten(structures),
+        zuteilungs_paare=tuple(sorted(set(zuteilungs_paare))),
     )
+
+
+def _covered_calls_anhaengen(
+    entwuerfe: list[list[tuple[Structure, str, str]]],
+    legs_je_schluessel: Mapping[LegSchluessel, Mapping],
+    executions: Mapping[str, Mapping],
+    instruments: Mapping[int, Mapping],
+) -> list[list[tuple[Structure, str, str]]]:
+    """AP-04z, Wheel: Ketten aus reinen Short Calls auf einen Basiswert, deren
+    erste Struktur eröffnet wird, während eine andere Kette zugeteilte Aktien
+    dieses Basiswerts hält (lang, noch nicht durch andere Covered Calls
+    gedeckt), werden an diese Kette angehängt — Erkennung ``heuristik``
+    (Regel 7). Reihenfolge: Calls nach Eröffnung, Aktienketten nach dem
+    Beginn ihres Bestands (älteste zuerst)."""
+
+    def ist_short_call_kette(entwurf) -> bool:
+        for s, _typ, _erk in entwurf:
+            if s.asset_class not in OPTIONS_ANLAGEKLASSEN or s.rechte != frozenset({"C"}):
+                return False
+            for schluessel in s.leg_schluessel:
+                if executions[schluessel.open_exec_id]["side"] != "SELL":
+                    return False
+        return True
+
+    def stuecke(struktur: Structure) -> Decimal:
+        summe = Decimal(0)
+        for schluessel in struktur.leg_schluessel:
+            leg = legs_je_schluessel[schluessel]
+            mult = instruments.get(leg["conid"], {}).get("multiplikator") or Decimal(1)
+            summe += abs(leg["menge"]) * mult
+        return summe
+
+    def aktie_lang(struktur: Structure) -> bool:
+        schluessel = struktur.leg_schluessel[0]
+        return executions[schluessel.open_exec_id]["side"] == "BUY"
+
+    def gehalten(entwurf, zeit: datetime) -> Decimal:
+        bestand = Decimal(0)
+        for s, typ, _erk in entwurf:
+            if typ != "zuteilung" or not aktie_lang(s):
+                continue
+            if s.eroeffnet_am <= zeit and (s.geschlossen_am is None or s.geschlossen_am > zeit):
+                bestand += stuecke(s)
+        return bestand
+
+    def gedeckt(entwurf, zeit: datetime) -> Decimal:
+        summe = Decimal(0)
+        for s, typ, _erk in entwurf:
+            if typ != "covered_call":
+                continue
+            if s.eroeffnet_am <= zeit and (s.geschlossen_am is None or s.geschlossen_am > zeit):
+                summe += stuecke(s)
+        return summe
+
+    aktien_ketten = [
+        e for e in entwuerfe if any(typ == "zuteilung" for _s, typ, _erk in e)
+    ]
+    if not aktien_ketten:
+        return entwuerfe
+    aktien_ketten.sort(
+        key=lambda e: min(s.eroeffnet_am for s, typ, _ in e if typ == "zuteilung")
+    )
+    call_ketten = sorted(
+        (e for e in entwuerfe if e not in aktien_ketten and ist_short_call_kette(e)),
+        key=lambda e: e[0][0].eroeffnet_am,
+    )
+    angehaengt: list[int] = []
+    for call in call_ketten:
+        erste = call[0][0]
+        for ziel in aktien_ketten:
+            basis = next(s.underlying for s, typ, _ in ziel if typ == "zuteilung")
+            if basis != erste.underlying:
+                continue
+            frei = gehalten(ziel, erste.eroeffnet_am) - gedeckt(ziel, erste.eroeffnet_am)
+            if stuecke(erste) > frei:
+                continue
+            for pos, (s, typ, erk) in enumerate(call):
+                ziel.append(
+                    (s, "covered_call", "heuristik") if pos == 0 else (s, typ, erk)
+                )
+            angehaengt.append(id(call))
+            break
+    return [e for e in entwuerfe if id(e) not in angehaengt]
 
 
 def _seite_bestimmen(structures: list[Structure]) -> str | None:

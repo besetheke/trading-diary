@@ -124,6 +124,10 @@ class Structure:
     # exec_batch-Werte trägt (keine gemeinsame Roll-Order).
     oeffnungs_exec_batch: str | None = None
     schluss_exec_batch: str | None = None
+    # AP-04z: Unterscheidet Zuteilungs-Structures derselben Lieferung (je
+    # Teilverkauf eine) im Naturschlüssel — sonst trügen sie dieselbe
+    # open_exec_id. Nur dort gesetzt; sonst ``None`` (Schlüssel unverändert).
+    schluessel_zusatz: str | None = None
 
 
 @dataclass(frozen=True)

@@ -3361,3 +3361,9 @@ Offen (fachlich, nicht raten — Regel 10):
 
 Vorschlag: eigenes Paket (starkes Modell) mit Abnahmebasis aus 5213 und zwei
 Wheel-Fällen; bis dahin zeigt die Positionsliste die Prämie allein.
+
+**OF-81 entschieden und umgesetzt (11.10.2026, AP-04z):** Nutzer: 1 ja, 2 ja, 3 ja.
+Zuteilungen hängen am Leg, alle Lots der Lieferung gehören zur Kette, Wheels
+(Covered Calls, Erkennung `heuristik`) sind eine Position. Trade 5213 jetzt
+−56,47 USD. Offen bleiben 21 Aktien-Legs aus Zuteilung ohne Options-Ausführung
+zur selben Zeit (Daten 2022/23, Optionsseite fehlt) — lose, weiter im Ergebnis.
