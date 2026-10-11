@@ -415,6 +415,28 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-08ue: Startseite — alle Beträge als Text aus GET /uebersicht.
+export interface Uebersicht {
+  heute: string
+  kontowert_stand: string | null
+  kontowert_eur: string | null
+  realisiert_woche_eur: string
+  realisiert_monat_eur: string
+  realisiert_jahr_eur: string
+  bestand_stand: string | null
+  unrealisiert_eur: string | null
+  offene_positionen: number
+  verfaelle: { verfall: string; basiswert: string; anzahl: number }[]
+}
+
+// Das Datum „heute" setzt der Browser (lokale Zeit), damit Woche und Monat
+// zur Uhr des Nutzers passen.
+export function holeUebersicht(): Promise<Uebersicht> {
+  const jetzt = new Date()
+  const heute = `${jetzt.getFullYear()}-${String(jetzt.getMonth() + 1).padStart(2, '0')}-${String(jetzt.getDate()).padStart(2, '0')}`
+  return hole(`/uebersicht?heute=${heute}`) as Promise<Uebersicht>
+}
+
 // AP-08r: Durchsicht der Rollkandidaten. Geld als Text (Vertrag 8).
 export interface Rollkandidat {
   rang: number

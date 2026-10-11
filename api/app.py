@@ -363,6 +363,27 @@ class AuswertungAntwort(BaseModel):
     netto_je_waehrung: list[WaehrungsbetragAntwort] = []
 
 
+# AP-08ue: Startseite „Übersicht" — Zahlen aus bestehenden Quellen (NAV,
+# Equity, Bestand laut IB), nichts neu berechnet; Geld als Text.
+class VerfallAntwort(BaseModel):
+    verfall: date
+    basiswert: str
+    anzahl: int
+
+
+class UebersichtAntwort(BaseModel):
+    heute: date
+    kontowert_stand: date | None
+    kontowert_eur: str | None
+    realisiert_woche_eur: str
+    realisiert_monat_eur: str
+    realisiert_jahr_eur: str
+    bestand_stand: date | None
+    unrealisiert_eur: str | None
+    offene_positionen: int
+    verfaelle: list[VerfallAntwort]
+
+
 # AP-08r: Durchsicht der Rollkandidaten (Lesen: offene Kandidaten je
 # schließender Position; Schreiben: ein Urteil nach chain_overrides).
 class RollkandidatAntwort(BaseModel):
@@ -2266,6 +2287,52 @@ def erzeuge_app(
                 seiten=werte(ketten_spalte(chains.c.seite)),
                 endzustaende=werte(ketten_spalte(chains.c.endzustand)),
             )
+
+    @applikation.get("/uebersicht", response_model=UebersichtAntwort)
+    def uebersicht(heute: date | None = None) -> UebersichtAntwort:
+        """Startseite (AP-08ue): Kontowert laut IB (letzter NAV-Tag bis
+        ``heute``), realisiert netto in EUR für die laufende ISO-Woche, den
+        Monat und das Jahr bis ``heute`` (Equity, Tag der Schließung), Bestand
+        laut IB mit Unrealisiertem und die nächsten Verfälle offener Optionen
+        (ab ``heute``, je Tag und Basiswert, höchstens zehn). ``heute`` fehlt →
+        das Datum des Servers."""
+        if heute is None:
+            heute = date.today()
+        jahresbeginn = date(heute.year, 1, 1)
+        wochenbeginn = heute - timedelta(days=heute.weekday())
+        monatsbeginn = heute.replace(day=1)
+        bericht = equity_bericht(db_pfad, von=jahresbeginn, bis=heute)
+        jahr = woche = monat = Decimal("0")
+        for tag in bericht.tage:
+            jahr += tag.netto_eur
+            if tag.datum >= monatsbeginn:
+                monat += tag.netto_eur
+            if tag.datum >= wochenbeginn:
+                woche += tag.netto_eur
+        nav = nav_bericht(db_pfad, bis=heute)
+        letzter = nav.tage[-1] if nav.tage else None
+        with engine.connect() as verbindung:
+            bestand = _depot_aufbauen(verbindung)
+        je_verfall: dict[tuple[date, str], int] = {}
+        for position in bestand.positionen:
+            if position.verfall is not None and position.verfall >= heute:
+                schluessel = (position.verfall, position.basiswert)
+                je_verfall[schluessel] = je_verfall.get(schluessel, 0) + 1
+        return UebersichtAntwort(
+            heute=heute,
+            kontowert_stand=letzter.datum if letzter else None,
+            kontowert_eur=_als_text(letzter.gesamt) if letzter else None,
+            realisiert_woche_eur=_als_text(woche),
+            realisiert_monat_eur=_als_text(monat),
+            realisiert_jahr_eur=_als_text(jahr),
+            bestand_stand=bestand.stichtag,
+            unrealisiert_eur=bestand.summen.unrealisiert_eur if bestand.stichtag else None,
+            offene_positionen=len(bestand.positionen),
+            verfaelle=[
+                VerfallAntwort(verfall=v, basiswert=b, anzahl=n)
+                for (v, b), n in sorted(je_verfall.items())[:10]
+            ],
+        )
 
     @applikation.get("/depot", response_model=DepotAntwort)
     def depot() -> DepotAntwort:

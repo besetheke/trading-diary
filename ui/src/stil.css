@@ -1084,3 +1084,47 @@ rect.balken-offen {
   font-size: 0.8rem;
   margin-bottom: 0.2rem;
 }
+
+/* AP-08ue: Startseite. */
+.uebersicht .kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.uebersicht .kachel {
+  background: #fff;
+  border: 1px solid var(--rand);
+  padding: 0.8rem 1rem;
+}
+
+.uebersicht .kachel h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--grau);
+  font-weight: 600;
+}
+
+.uebersicht .gross {
+  font-size: 1.6rem;
+  margin: 0.2rem 0;
+}
+
+.uebersicht dl.zeilen {
+  margin: 0;
+}
+
+.uebersicht dl.zeilen div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.15rem 0;
+}
+
+.uebersicht table.verfaelle {
+  max-width: 28rem;
+}
+
+.uebersicht ul.aufgaben li {
+  margin-bottom: 0.4rem;
+}

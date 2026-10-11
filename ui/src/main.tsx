@@ -12,6 +12,7 @@ import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
 import Rollkandidaten from './Rollkandidaten'
 import Tag from './Tag'
+import Uebersicht from './Uebersicht'
 import './stil.css'
 
 // AP-08j: „Heute" zeigt das Datum der lokalen Zeit des Browsers — kein
@@ -42,6 +43,7 @@ function Kopf(): JSX.Element {
         Alle Geldbeträge in Kontosicht. Der genaue Wert steht jeweils im Tooltip.
       </p>
       <nav className="hauptnav">
+        <Link to="/start">Übersicht</Link>
         <Link to={`/dashboard${mit}`}>Dashboard</Link>
         <Link to={`/bestand${mit}`}>Depot</Link>
         <Link to={`/${mit}`}>Positionen</Link>
@@ -75,6 +77,8 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
         <main>
           <Routes>
             <Route path="/" element={<Positionen />} />
+            {/* AP-08ue: Startseite; /uebersicht ist der API-Endpunkt. */}
+            <Route path="/start" element={<Uebersicht />} />
             {/* AP-06e: eigene Adresse, kollidiert mit keinem API-Pfad
                 (anders als /kalender, /kampagnen — /equity bleibt API). */}
             <Route path="/dashboard" element={<Dashboard />} />

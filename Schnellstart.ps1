@@ -30,7 +30,7 @@ function Test-ServerLaeuft {
 }
 
 if (Test-ServerLaeuft) {
-    Start-Process "http://127.0.0.1:8000/"
+    Start-Process "http://127.0.0.1:8000/start"
     return
 }
 
@@ -71,4 +71,4 @@ if (-not $bereit) {
     return
 }
 
-Start-Process "http://127.0.0.1:8000/"
+Start-Process "http://127.0.0.1:8000/start"
