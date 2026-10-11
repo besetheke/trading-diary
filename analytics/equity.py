@@ -150,6 +150,16 @@ class EquityErgebnis:
     netto_je_waehrung: tuple[tuple[str, Decimal], ...] = ()
 
 
+def im_filter(wert, filt: str | frozenset[str] | None) -> bool:
+    """AP-07fm: ``None`` filtert nicht; ein Wert verlangt Gleichheit, eine
+    Menge Zugehörigkeit."""
+    if filt is None:
+        return True
+    if isinstance(filt, str):
+        return wert == filt
+    return wert in filt
+
+
 @dataclass(frozen=True)
 class LoseLegFilter:
     """AP-07f: die Filterwerte, die ein loses Leg selbst kennt.
@@ -161,9 +171,10 @@ class LoseLegFilter:
     mit ``lose_legs=False``. Je ``None`` heißt nicht gefiltert.
     """
 
-    basiswert: str | None = None
-    anlageklasse: str | None = None
-    waehrung: str | None = None
+    # AP-07fm: ein Wert oder eine Menge (Mehrfachauswahl, ODER).
+    basiswert: str | frozenset[str] | None = None
+    anlageklasse: str | frozenset[str] | None = None
+    waehrung: str | frozenset[str] | None = None
     geschlossen_ab: date | None = None
     geschlossen_bis: date | None = None
     eroeffnet_ab: date | None = None
@@ -266,13 +277,13 @@ def equity_auswertung(
             basis = None
             if instrument is not None:
                 basis = instrument["underlying"] or instrument["symbol"]
-            if basis != filt.basiswert:
+            if not im_filter(basis, filt.basiswert):
                 return False
         if filt.anlageklasse is not None:
             klasse = None if instrument is None else instrument["asset_class"]
-            if klasse != filt.anlageklasse:
+            if not im_filter(klasse, filt.anlageklasse):
                 return False
-        if filt.waehrung is not None and schliessend["waehrung"] != filt.waehrung:
+        if not im_filter(schliessend["waehrung"], filt.waehrung):
             return False
         schliessungstag = schliessend["handelszeit"].date()
         if filt.geschlossen_ab is not None and schliessungstag < filt.geschlossen_ab:

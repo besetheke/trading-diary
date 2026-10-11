@@ -168,12 +168,43 @@ const FILTER_PARAMETER: [keyof Entwurf, string][] = [
   ['maxRolls', 'max_rolls'],
 ]
 
+// AP-07fm: Diese Filter erlauben mehrere Werte. Im Entwurf stehen sie als
+// ein Text mit Trennzeichen (Basiswert: frei mit Komma getippt), in der
+// Adresse und an der API als wiederholter Parameter.
+const MEHRFACH: (keyof Entwurf)[] = [
+  'basiswert',
+  'anlageklasse',
+  'waehrung',
+  'strategie',
+  'seite',
+  'endzustand',
+]
+const TRENNER = '\u001f'
+
+function werteListe(wert: string): string[] {
+  return wert
+    .split(/[,\u001f]/)
+    .map((eins) => eins.trim())
+    .filter((eins) => eins !== '')
+}
+
 function entwurfAusAdresse(suche: URLSearchParams): Entwurf {
   const entwurf = { ...LEERER_ENTWURF }
   for (const [schluessel, parameter] of FILTER_PARAMETER) {
-    entwurf[schluessel] = suche.get(parameter) ?? ''
+    if (MEHRFACH.includes(schluessel)) {
+      entwurf[schluessel] = suche
+        .getAll(parameter)
+        .join(schluessel === 'basiswert' ? ', ' : TRENNER)
+    } else {
+      entwurf[schluessel] = suche.get(parameter) ?? ''
+    }
   }
   return entwurf
+}
+
+function mehrfachOderUndefined(wert: string): string[] | undefined {
+  const werte = werteListe(wert)
+  return werte.length > 0 ? werte : undefined
 }
 
 function rollsOderUndefined(wert: string): number | undefined {
@@ -183,12 +214,12 @@ function rollsOderUndefined(wert: string): number | undefined {
 
 function filterAusEntwurf(entwurf: Entwurf): KettenFilter {
   return {
-    basiswert: entwurf.basiswert.trim() || undefined,
-    anlageklasse: entwurf.anlageklasse || undefined,
-    waehrung: entwurf.waehrung || undefined,
-    strategie: entwurf.strategie || undefined,
-    seite: entwurf.seite || undefined,
-    endzustand: entwurf.endzustand || undefined,
+    basiswert: mehrfachOderUndefined(entwurf.basiswert),
+    anlageklasse: mehrfachOderUndefined(entwurf.anlageklasse),
+    waehrung: mehrfachOderUndefined(entwurf.waehrung),
+    strategie: mehrfachOderUndefined(entwurf.strategie),
+    seite: mehrfachOderUndefined(entwurf.seite),
+    endzustand: mehrfachOderUndefined(entwurf.endzustand),
     eroeffnet_ab: entwurf.eroeffnetAb || undefined,
     eroeffnet_bis: entwurf.eroeffnetBis || undefined,
     geschlossen_ab: entwurf.geschlossenAb || undefined,
@@ -297,6 +328,8 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
 // Ein Auswahlfeld mit „alle". Fehlt die Liste (kein Wert im Bestand oder die API
 // antwortet nicht), bleibt das Feld sichtbar, nur ohne Optionen. Ein in der
 // Adresse stehender Wert, der nicht in der Liste ist, bleibt wählbar.
+// AP-07fm: Mehrfachauswahl — eine aufklappbare Liste mit Häkchen. Ohne
+// Häkchen gilt „alle“.
 function Auswahl({
   titel,
   wert,
@@ -308,19 +341,44 @@ function Auswahl({
   optionen: string[]
   aendere: (wert: string) => void
 }): JSX.Element {
-  const alle = wert !== '' && !optionen.includes(wert) ? [...optionen, wert] : optionen
+  const gewaehlt = werteListe(wert)
+  const alle = [...optionen, ...gewaehlt.filter((eins) => !optionen.includes(eins))]
+  function umschalten(eins: string): void {
+    const naechste = gewaehlt.includes(eins)
+      ? gewaehlt.filter((x) => x !== eins)
+      : [...gewaehlt, eins]
+    aendere(naechste.join(TRENNER))
+  }
+  const anzeige =
+    gewaehlt.length === 0
+      ? 'alle'
+      : gewaehlt.length <= 2
+        ? gewaehlt.join(', ')
+        : `${gewaehlt.length} gewählt`
   return (
-    <label>
-      {titel}
-      <select value={wert} onChange={(e) => aendere(e.target.value)}>
-        <option value="">alle</option>
-        {alle.map((eine) => (
-          <option key={eine} value={eine}>
-            {eine}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="mehrfach">
+      <span className="titel">{titel}</span>
+      <details>
+        <summary title={gewaehlt.join(', ') || 'alle'}>{anzeige}</summary>
+        <div className="mehrfach-liste">
+          {gewaehlt.length > 0 ? (
+            <button type="button" className="leeren" onClick={() => aendere('')}>
+              alle (Auswahl leeren)
+            </button>
+          ) : null}
+          {alle.map((eins) => (
+            <label key={eins}>
+              <input
+                type="checkbox"
+                checked={gewaehlt.includes(eins)}
+                onChange={() => umschalten(eins)}
+              />
+              {eins}
+            </label>
+          ))}
+        </div>
+      </details>
+    </div>
   )
 }
 
@@ -454,7 +512,9 @@ export default function Positionen(): JSX.Element {
     const naechste = new URLSearchParams()
     for (const [schluessel, parameter] of FILTER_PARAMETER) {
       const wert = entwurf[schluessel].trim()
-      if (schluessel === 'minRolls' || schluessel === 'maxRolls') {
+      if (MEHRFACH.includes(schluessel)) {
+        for (const eins of werteListe(wert)) naechste.append(parameter, eins)
+      } else if (schluessel === 'minRolls' || schluessel === 'maxRolls') {
         const zahl = rollsOderUndefined(wert)
         if (zahl !== undefined) naechste.set(parameter, String(zahl))
       } else if (wert) {
@@ -551,7 +611,7 @@ export default function Positionen(): JSX.Element {
             list="filter-basiswerte"
             value={entwurf.basiswert}
             onChange={(e) => setzeEntwurf({ ...entwurf, basiswert: e.target.value })}
-            placeholder="z. B. DAX"
+            placeholder="z. B. DAX, ESTX50"
           />
           <datalist id="filter-basiswerte">
             {(werte?.basiswerte ?? []).map((wert) => (

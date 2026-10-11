@@ -50,7 +50,7 @@ from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, or_, s
 from sqlalchemy.engine import Connection
 
 from analytics.cashflows import cashflow_bericht
-from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht
+from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht, im_filter
 from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
@@ -87,6 +87,26 @@ SICHT = "konto"
 # aktuelle Seite wäre irreführend. Die ``Literal``-Typen tragen die Aufzählung
 # ins OpenAPI-Schema und lehnen alles andere mit 422 ab (Regel „nichts
 # zurechtbiegen"); Groß-/Kleinschreibung bleibt bedeutungstragend.
+# AP-07fm: Filter mit Mehrfachauswahl (`?basiswert=A&basiswert=B`) — innerhalb
+# eines Filters ODER, zwischen Filtern UND; leere Werte zählen nicht.
+Mehrfach = Annotated[list[str] | None, Query()]
+
+
+def _werte(liste: list[str] | None) -> tuple[str, ...] | None:
+    """Nicht-leere Werte einer Mehrfachauswahl; ohne Wert ``None``."""
+    if not liste:
+        return None
+    werte = tuple(w for w in liste if w)
+    return werte or None
+
+
+def _gleich(spalte, wert: "str | tuple[str, ...]") -> ColumnElement[bool]:
+    """Ein Wert: Gleichheit wie bisher; mehrere: IN."""
+    if isinstance(wert, str):
+        return spalte == wert
+    return spalte == wert[0] if len(wert) == 1 else spalte.in_(wert)
+
+
 Sortierspalte = Literal[
     "eroeffnet_am",
     "beendet_am",
@@ -1136,18 +1156,18 @@ def _datumspaar_pruefen(
 
 def _ketten_bedingungen(
     *,
-    basiswert: str | None = None,
-    anlageklasse: str | None = None,
-    seite: str | None = None,
-    endzustand: str | None = None,
+    basiswert: "str | tuple[str, ...] | None" = None,
+    anlageklasse: "str | tuple[str, ...] | None" = None,
+    seite: "str | tuple[str, ...] | None" = None,
+    endzustand: "str | tuple[str, ...] | None" = None,
     min_rolls: int | None = None,
     max_rolls: int | None = None,
     eroeffnet_ab: date | None = None,
     eroeffnet_bis: date | None = None,
     geschlossen_ab: date | None = None,
     geschlossen_bis: date | None = None,
-    waehrung: str | None = None,
-    strategie: str | None = None,
+    waehrung: "str | tuple[str, ...] | None" = None,
+    strategie: "str | tuple[str, ...] | None" = None,
     von: date | None = None,
     bis: date | None = None,
 ) -> list[ColumnElement[bool]]:
@@ -1169,13 +1189,13 @@ def _ketten_bedingungen(
     """
     bedingungen: list[ColumnElement[bool]] = [chains.c.sicht == SICHT]
     if basiswert:
-        bedingungen.append(chains.c.underlying == basiswert)
+        bedingungen.append(_gleich(chains.c.underlying, basiswert))
     if anlageklasse:
-        bedingungen.append(chains.c.asset_class == anlageklasse)
+        bedingungen.append(_gleich(chains.c.asset_class, anlageklasse))
     if seite:
-        bedingungen.append(chains.c.seite == seite)
+        bedingungen.append(_gleich(chains.c.seite, seite))
     if endzustand:
-        bedingungen.append(chains.c.endzustand == endzustand)
+        bedingungen.append(_gleich(chains.c.endzustand, endzustand))
     if min_rolls is not None:
         bedingungen.append(chains.c.anzahl_rolls >= min_rolls)
     if max_rolls is not None:
@@ -1196,11 +1216,11 @@ def _ketten_bedingungen(
                 chain_links.c.sicht == SICHT,
                 chain_links.c.chain_id == chains.c.chain_id,
                 structures.c.structure_id == chain_links.c.structure_id,
-                structures.c.waehrung == waehrung,
+                _gleich(structures.c.waehrung, waehrung),
             )
         )
     if strategie:
-        bedingungen.append(chains.c.oa_strategie == strategie)
+        bedingungen.append(_gleich(chains.c.oa_strategie, strategie))
     if von is not None:
         bedingungen.append(
             or_(
@@ -1409,12 +1429,9 @@ def _offene_legs_der_auswahl(
             if lose_legs.geschlossen_ab is not None or lose_legs.geschlossen_bis is not None:
                 continue
             i = instrumente.get(leg["conid"], {})
-            if lose_legs.basiswert is not None and (
-                i.get("underlying") or i.get("symbol")
-            ) != lose_legs.basiswert:
+            if not im_filter(i.get("underlying") or i.get("symbol"), lose_legs.basiswert):
                 continue
-            klasse = i.get("asset_class")
-            if lose_legs.anlageklasse is not None and klasse != lose_legs.anlageklasse:
+            if not im_filter(i.get("asset_class"), lose_legs.anlageklasse):
                 continue
             if (
                 lose_legs.waehrung is not None
@@ -1426,7 +1443,7 @@ def _offene_legs_der_auswahl(
                         executions.c.exec_id == leg["open_exec_id"]
                     )
                 ).first()
-                if lose_legs.waehrung is not None and a[0] != lose_legs.waehrung:
+                if not im_filter(a[0], lose_legs.waehrung):
                     continue
                 tag = a[1].date()
                 if lose_legs.eroeffnet_ab is not None and tag < lose_legs.eroeffnet_ab:
@@ -1636,10 +1653,10 @@ def erzeuge_app(
 
     @applikation.get("/ketten", response_model=KettenListeAntwort)
     def ketten(
-        basiswert: str | None = None,
-        anlageklasse: str | None = None,
-        seite: str | None = None,
-        endzustand: str | None = None,
+        basiswert: Mehrfach = None,
+        anlageklasse: Mehrfach = None,
+        seite: Mehrfach = None,
+        endzustand: Mehrfach = None,
         min_rolls: Annotated[int | None, Query(ge=0)] = None,
         max_rolls: Annotated[int | None, Query(ge=0)] = None,
         eroeffnet_ab: date | None = None,
@@ -1649,8 +1666,8 @@ def erzeuge_app(
         # und Tagesgrenzen stehen bei ``_ketten_bedingungen``.
         geschlossen_ab: date | None = None,
         geschlossen_bis: date | None = None,
-        waehrung: str | None = None,
-        strategie: str | None = None,
+        waehrung: Mehrfach = None,
+        strategie: Mehrfach = None,
         von: date | None = None,
         bis: date | None = None,
         sortierung: Sortierspalte = "eroeffnet_am",
@@ -1667,6 +1684,10 @@ def erzeuge_app(
         # bleiben ohne solche Prüfung (Auftrag: unangetastet).
         _datumspaar_pruefen(
             geschlossen_ab, geschlossen_bis, "geschlossen_ab", "geschlossen_bis"
+        )
+        basiswert, anlageklasse, seite, endzustand, waehrung, strategie = (
+            _werte(basiswert), _werte(anlageklasse), _werte(seite),
+            _werte(endzustand), _werte(waehrung), _werte(strategie),
         )
         _datumspaar_pruefen(von, bis, "von", "bis")
         bedingungen = _ketten_bedingungen(
@@ -2317,18 +2338,18 @@ def erzeuge_app(
 
     @applikation.get("/auswertung", response_model=AuswertungAntwort)
     def auswertung(
-        basiswert: str | None = None,
-        anlageklasse: str | None = None,
-        seite: str | None = None,
-        endzustand: str | None = None,
+        basiswert: Mehrfach = None,
+        anlageklasse: Mehrfach = None,
+        seite: Mehrfach = None,
+        endzustand: Mehrfach = None,
         min_rolls: Annotated[int | None, Query(ge=0)] = None,
         max_rolls: Annotated[int | None, Query(ge=0)] = None,
         eroeffnet_ab: date | None = None,
         eroeffnet_bis: date | None = None,
         geschlossen_ab: date | None = None,
         geschlossen_bis: date | None = None,
-        waehrung: str | None = None,
-        strategie: str | None = None,
+        waehrung: Mehrfach = None,
+        strategie: Mehrfach = None,
         von: date | None = None,
         bis: date | None = None,
     ) -> AuswertungAntwort:
@@ -2349,6 +2370,10 @@ def erzeuge_app(
         """
         _datumspaar_pruefen(
             geschlossen_ab, geschlossen_bis, "geschlossen_ab", "geschlossen_bis"
+        )
+        basiswert, anlageklasse, seite, endzustand, waehrung, strategie = (
+            _werte(basiswert), _werte(anlageklasse), _werte(seite),
+            _werte(endzustand), _werte(waehrung), _werte(strategie),
         )
         _datumspaar_pruefen(von, bis, "von", "bis")
         bedingungen = _ketten_bedingungen(
@@ -2393,9 +2418,9 @@ def erzeuge_app(
             lose_legs = False
         elif hat_kettenfilter:
             lose_legs = LoseLegFilter(
-                basiswert=basiswert or None,
-                anlageklasse=anlageklasse or None,
-                waehrung=waehrung or None,
+                basiswert=frozenset(basiswert) if basiswert else None,
+                anlageklasse=frozenset(anlageklasse) if anlageklasse else None,
+                waehrung=frozenset(waehrung) if waehrung else None,
                 geschlossen_ab=geschlossen_ab,
                 geschlossen_bis=geschlossen_bis,
                 eroeffnet_ab=eroeffnet_ab,

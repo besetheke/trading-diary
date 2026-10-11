@@ -183,13 +183,14 @@ export type Richtung = 'asc' | 'desc'
 
 // AP-07f/AP-08g2b: die Kettenfilter, die /ketten und /auswertung gemeinsam
 // kennen. Datumswerte ISO (JJJJ-MM-TT), beide Enden einschließlich.
+// AP-07fm: Die sechs Auswahlfilter dürfen mehrere Werte tragen (ODER).
 export interface KettenFilter {
-  basiswert?: string
-  anlageklasse?: string
-  waehrung?: string
-  strategie?: string
-  seite?: string
-  endzustand?: string
+  basiswert?: string[]
+  anlageklasse?: string[]
+  waehrung?: string[]
+  strategie?: string[]
+  seite?: string[]
+  endzustand?: string[]
   min_rolls?: number
   max_rolls?: number
   eroeffnet_ab?: string
@@ -213,7 +214,12 @@ function filterZusaetze(filter: KettenFilter, zusaetze: URLSearchParams): void {
   ]
   for (const schluessel of texte) {
     const wert = filter[schluessel]
-    if (wert) zusaetze.set(schluessel, String(wert))
+    if (Array.isArray(wert)) {
+      // AP-07fm: je Wert ein Parameter (`?basiswert=A&basiswert=B`).
+      for (const eins of wert) if (eins) zusaetze.append(schluessel, eins)
+    } else if (wert) {
+      zusaetze.set(schluessel, String(wert))
+    }
   }
   if (filter.min_rolls !== undefined) zusaetze.set('min_rolls', String(filter.min_rolls))
   if (filter.max_rolls !== undefined) zusaetze.set('max_rolls', String(filter.max_rolls))
