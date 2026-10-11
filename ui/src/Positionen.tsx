@@ -17,7 +17,9 @@ import Betrag from './Betrag'
 import FilterAuswertung from './FilterAuswertung'
 import { useZeitraum } from './zeitraum'
 
-const LIMITS = [10, 25, 50, 100]
+// Wunsch des Nutzers (11.10.2026): Vorgabe 200 Zeilen, Auswahl 50 bis 500.
+const LIMITS = [50, 100, 200, 500]
+const VORGABE_LIMIT = 200
 
 // Rückfallwerte, falls GET /filterwerte (AP-07fw) nicht antwortet: Werte aus dem
 // Datenbankschema (CHECK instruments.asset_class) und aus dem Wiederhersteller
@@ -46,6 +48,7 @@ type SpaltenId =
   | 'eroeffnungspreis'
   | 'schlusspreis'
   | 'struktur_summe_netto'
+  | 'unrealisiert_eur'
   | 'waehrung'
 
 interface Spalte {
@@ -80,6 +83,8 @@ const SPALTEN: Record<SpaltenId, Spalte> = {
   eroeffnungspreis: { titel: 'Preis auf', sortierbar: false },
   schlusspreis: { titel: 'Preis zu', sortierbar: false },
   struktur_summe_netto: { titel: 'Ergebnis netto¹', sortierbar: false },
+  // AP-07ku: offene Legs zu IBs letztem Marktwert gegen den Einstand, EUR.
+  unrealisiert_eur: { titel: 'Unrealisiert²', sortierbar: false },
   waehrung: { titel: 'Währung', sortierbar: false },
 }
 
@@ -91,6 +96,7 @@ const ZAHL_SPALTEN: SpaltenId[] = [
   'eroeffnungspreis',
   'schlusspreis',
   'struktur_summe_netto',
+  'unrealisiert_eur',
 ]
 const NICHT_SORTIERBAR_TITEL =
   'Nicht sortierbar — der Wert gilt nur für die angezeigte Seite'
@@ -104,10 +110,23 @@ function istSortierbareSpalte(wert: string | null): wert is Sortierspalte {
 // AP-08s, Punkt 3: Auswahl und Reihenfolge der Spalten stehen im Browser.
 // Fehlt der Speicher oder ist der Inhalt unlesbar oder ungültig, gilt die
 // Vorgabe — vollständig oder gar nicht, nichts wird still repariert.
+// AP-07ku: v3 kennt die Spalte „Unrealisiert“. Eine unter v2 gespeicherte Wahl
+// wird übernommen und um die neue Spalte ergänzt (nach „Ergebnis netto“).
+const SPALTEN_SCHLUESSEL = 'positionen.spalten.v3'
+
 function leseSpalten(): SpaltenId[] | null {
   try {
-    const roh = window.localStorage.getItem('positionen.spalten.v2')
-    if (roh === null) return null
+    let roh = window.localStorage.getItem(SPALTEN_SCHLUESSEL)
+    if (roh === null) {
+      const alt = window.localStorage.getItem('positionen.spalten.v2')
+      if (alt === null) return null
+      const liste = JSON.parse(alt) as string[]
+      if (Array.isArray(liste) && !liste.includes('unrealisiert_eur')) {
+        const nach = liste.indexOf('struktur_summe_netto')
+        liste.splice(nach >= 0 ? nach + 1 : liste.length, 0, 'unrealisiert_eur')
+      }
+      roh = JSON.stringify(liste)
+    }
     const geparst: unknown = JSON.parse(roh)
     if (!Array.isArray(geparst) || geparst.length === 0) return null
     if (!geparst.every((eintrag) => ALLE_SPALTEN.includes(eintrag as SpaltenId))) {
@@ -312,6 +331,23 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
           <Betrag wert={kette.struktur_summe_netto} waehrung={kette.waehrung ?? undefined} />
         </td>
       )
+    case 'unrealisiert_eur':
+      return (
+        <td
+          className="zahl"
+          title={
+            kette.offene_legs_ohne_kurs > 0
+              ? `${kette.offene_legs_ohne_kurs} offene(s) Leg(s) ohne Bestand laut IB — nicht bewertet`
+              : undefined
+          }
+        >
+          {kette.unrealisiert_eur === null ? (
+            kette.offene_legs_ohne_kurs > 0 ? '?' : '—'
+          ) : (
+            <Betrag wert={kette.unrealisiert_eur} />
+          )}
+        </td>
+      )
     case 'waehrung':
       return (
         <td>
@@ -391,7 +427,7 @@ export default function Positionen(): JSX.Element {
   // Die Filter der Adresse; als Text, damit Effekte nur bei echter Änderung
   // neu laden.
   const filterText = JSON.stringify(entwurfAusAdresse(suche))
-  const limit = Math.min(Math.max(zahlOderVorgabe(suche.get('limit'), 100), 1), 500)
+  const limit = Math.min(Math.max(zahlOderVorgabe(suche.get('limit'), VORGABE_LIMIT), 1), 500)
   const offset = Math.max(zahlOderVorgabe(suche.get('offset'), 0), 0)
 
   // AP-08s: Die Sortierung steht in der Adresse — Neuladen und Lesezeichen
@@ -434,7 +470,7 @@ export default function Positionen(): JSX.Element {
   // still nur für diese Sitzung — die Ansicht bricht darüber nicht.
   useEffect(() => {
     try {
-      window.localStorage.setItem('positionen.spalten.v2', JSON.stringify(sichtbare))
+      window.localStorage.setItem(SPALTEN_SCHLUESSEL, JSON.stringify(sichtbare))
     } catch {
       /* Speicher fehlt oder ist voll — nichts weiter zu tun. */
     }
@@ -649,6 +685,7 @@ export default function Positionen(): JSX.Element {
           optionen={werte?.endzustaende ?? ENDZUSTAENDE}
           aendere={(wert) => setzeEntwurf({ ...entwurf, endzustand: wert })}
         />
+        <div className="zeilenumbruch" aria-hidden="true" />
         <label>
           Eröffnet von
           <input
@@ -681,7 +718,7 @@ export default function Positionen(): JSX.Element {
             onChange={(e) => setzeEntwurf({ ...entwurf, geschlossenBis: e.target.value })}
           />
         </label>
-        <label>
+        <label className="schmal">
           Rolls von
           <input
             type="number"
@@ -690,7 +727,7 @@ export default function Positionen(): JSX.Element {
             onChange={(e) => setzeEntwurf({ ...entwurf, minRolls: e.target.value })}
           />
         </label>
-        <label>
+        <label className="schmal">
           bis
           <input
             type="number"
@@ -866,6 +903,8 @@ export default function Positionen(): JSX.Element {
             Kontrakte bzw. Stück der Eröffnung. „Preis zu“: bei Verfall und Zuteilung
             steht der Weg statt 0,00. „Rolls (belegt)“ zählt nur Rolls, die eine
             gemeinsame Order belegt; Rolls in getrennten Orders sind Vorschläge.
+            <br />² Nur offene Positionen: IBs letzter Marktwert gegen den Einstand des
+            Journals, in EUR (Stand des letzten Berichts). „?“: offene Legs ohne Bestand laut IB.
           </p>
         </>
       )}

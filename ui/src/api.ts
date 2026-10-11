@@ -30,6 +30,9 @@ export interface Kette {
   oa_strategie: string | null
   oa_status: string | null
   oa_erkennung: string | null
+  // AP-07ku: unrealisiert (EUR) der offenen Legs; null bei geschlossenen.
+  unrealisiert_eur: string | null
+  offene_legs_ohne_kurs: number
 }
 
 export interface Struktur {

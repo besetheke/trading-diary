@@ -1128,3 +1128,19 @@ rect.balken-offen {
 .uebersicht ul.aufgaben li {
   margin-bottom: 0.4rem;
 }
+
+/* Filterleiste: erzwungener Zeilenumbruch und schmale Zahlenfelder. */
+.filter .zeilenumbruch {
+  flex-basis: 100%;
+  height: 0;
+}
+
+.filter label.schmal input {
+  min-width: 0;
+  width: 4.5rem;
+}
+
+/* Legende unter dem Diagramm. */
+.diagramm svg + .diagramm-legende {
+  margin-top: 0.4rem;
+}

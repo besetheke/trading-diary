@@ -153,6 +153,11 @@ class KetteAntwort(BaseModel):
     oa_strategie: str | None
     oa_status: str | None
     oa_erkennung: str | None
+    # AP-07ku: unrealisiertes Ergebnis der offenen Legs (IBs letzter Marktwert
+    # gegen den Einstand des Journals, wie AP-07fu), EUR; geschlossene Ketten
+    # und offene ohne Bestand laut IB: kein Wert. Nur in der Liste gefüllt.
+    unrealisiert_eur: str | None = None
+    offene_legs_ohne_kurs: int = 0
 
 
 class StrukturAntwort(BaseModel):
@@ -1480,6 +1485,17 @@ def _unrealisiert_der_auswahl(
 ) -> AuswertungUnrealisiertAntwort:
     """AP-07fu: bewertet die offenen Legs mit dem jüngsten Bestand laut IB. Liegt
     ``bis`` vor dem Stichtag, gibt es keinen passenden Bestand — dann nichts."""
+    stichtag, bestand, exec_je_id, mult = _bewertungsgrundlage(verbindung, offene, bis)
+    e = unrealisiert_auswertung(offene, exec_je_id, mult, bestand, stichtag)
+    return AuswertungUnrealisiertAntwort(
+        stichtag=e.stichtag, eur=_als_text(e.eur), anzahl_legs=e.anzahl_legs,
+        ohne_kurs=e.ohne_kurs,
+    )
+
+
+def _bewertungsgrundlage(verbindung: Connection, offene: list[dict], bis: date | None):
+    """Bestand laut IB (jüngster Stichtag, nicht nach ``bis``), Eröffnungen und
+    Multiplikatoren für ``unrealisiert_auswertung`` (AP-07fu, AP-07ku)."""
     stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
     if stichtag is not None and bis is not None and bis < stichtag:
         stichtag = None
@@ -1510,11 +1526,41 @@ def _unrealisiert_der_auswahl(
         c: m
         for c, m in verbindung.execute(select(instruments.c.conid, instruments.c.multiplikator))
     }
-    e = unrealisiert_auswertung(offene, exec_je_id, mult, bestand, stichtag)
-    return AuswertungUnrealisiertAntwort(
-        stichtag=e.stichtag, eur=_als_text(e.eur), anzahl_legs=e.anzahl_legs,
-        ohne_kurs=e.ohne_kurs,
-    )
+    return stichtag, bestand, exec_je_id, mult
+
+
+def _unrealisiert_je_kette(
+    verbindung: Connection, chain_ids: list[int]
+) -> dict[int, tuple[str | None, int]]:
+    """AP-07ku: je Kette (unrealisiert EUR als Text oder None, offene Legs ohne
+    Kurs). Kein Wert, solange kein offenes Leg bewertet ist."""
+    if not chain_ids:
+        return {}
+    zeilen = verbindung.execute(
+        select(
+            chain_links.c.chain_id, legs.c.conid, legs.c.open_exec_id, legs.c.menge,
+            legs.c.kommission_gesamt, legs.c.open_faktor,
+        )
+        .join(legs, (legs.c.structure_id == chain_links.c.structure_id)
+              & (legs.c.sicht == chain_links.c.sicht))
+        .where(
+            chain_links.c.sicht == SICHT,
+            chain_links.c.chain_id.in_(chain_ids),
+            legs.c.close_exec_id.is_(None),
+        )
+    ).mappings().all()
+    if not zeilen:
+        return {}
+    offene = [dict(z) for z in zeilen]
+    stichtag, bestand, exec_je_id, mult = _bewertungsgrundlage(verbindung, offene, None)
+    je_kette: dict[int, list[dict]] = {}
+    for leg in offene:
+        je_kette.setdefault(leg["chain_id"], []).append(leg)
+    ergebnis = {}
+    for chain_id, kette_legs in je_kette.items():
+        e = unrealisiert_auswertung(kette_legs, exec_je_id, mult, bestand, stichtag)
+        ergebnis[chain_id] = (_als_text(e.eur) if e.anzahl_legs else None, e.ohne_kurs)
+    return ergebnis
 
 
 _SEITE_JE_RIGHT = {"C": "Call", "P": "Put"}
@@ -1753,11 +1799,16 @@ def erzeuge_app(
                 .offset(offset)
             ).mappings().all()
             zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
+            unrealisiert = _unrealisiert_je_kette(verbindung, [z["chain_id"] for z in zeilen])
         leer = (0, [], None, None, None, None)
         return KettenListeAntwort(
             gesamt=gesamt,
             treffer=[
-                KetteAntwort(**_kette_als_dict(z, *zuschuesse.get(z["chain_id"], leer)))
+                KetteAntwort(
+                    **_kette_als_dict(z, *zuschuesse.get(z["chain_id"], leer)),
+                    unrealisiert_eur=unrealisiert.get(z["chain_id"], (None, 0))[0],
+                    offene_legs_ohne_kurs=unrealisiert.get(z["chain_id"], (None, 0))[1],
+                )
                 for z in zeilen
             ],
         )

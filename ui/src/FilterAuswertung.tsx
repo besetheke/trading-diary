@@ -72,7 +72,9 @@ export default function FilterAuswertung({
           <dd>{ergebnis.anzahl_strukturen}</dd>
         </div>
         <div>
-          <dt>Realisiert netto</dt>
+          <dt title="Geschlossene Strukturen der Auswahl. Bei offenen Positionen sind das die schon geschlossenen Teile — vor allem frühere Roll-Schritte; die laufende Position steht im Unrealisierten.">
+            Realisiert netto
+          </dt>
           <dd>
             <Betrag wert={ergebnis.summe_netto_eur} />
             {auswertung.netto_je_waehrung.some((z) => z.waehrung !== 'EUR') ? (
@@ -101,6 +103,16 @@ export default function FilterAuswertung({
             )}
           </dd>
         </div>
+        {unrealisiert !== null && unrealisiert.stichtag !== null ? (
+          <div>
+            <dt title="Realisiert netto plus Unrealisiertes der offenen Positionen — für offene Positionen die aussagekräftige Zahl">
+              Realisiert + unrealisiert
+            </dt>
+            <dd>
+              <Betrag wert={unrealisiert.mit_realisiert_eur} />
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>
             Maximaler Drawdown

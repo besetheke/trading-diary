@@ -134,22 +134,6 @@ export default function ZweiLinien({
   return (
     <figure className="diagramm">
       {titel ? <figcaption>{titel}</figcaption> : null}
-      {legendeOben || legendeUnten ? (
-        <ul className="diagramm-legende">
-          {legendeOben ? (
-            <li>
-              <span className="probe kraeftig" />
-              {legendeOben}
-            </li>
-          ) : null}
-          {legendeUnten ? (
-            <li>
-              <span className={gestrichelt ? 'probe duenn gestrichelt' : 'probe duenn'} />
-              {legendeUnten}
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
       <svg
         viewBox={`0 0 ${KURVE_BREITE} ${KURVE_HOEHE}`}
         role="img"
@@ -200,6 +184,22 @@ export default function ZweiLinien({
           </g>
         ) : null}
       </svg>
+      {legendeOben || legendeUnten ? (
+        <ul className="diagramm-legende">
+          {legendeOben ? (
+            <li>
+              <span className="probe kraeftig" />
+              {legendeOben}
+            </li>
+          ) : null}
+          {legendeUnten ? (
+            <li>
+              <span className={gestrichelt ? 'probe duenn gestrichelt' : 'probe duenn'} />
+              {legendeUnten}
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
     </figure>
   )
 }
