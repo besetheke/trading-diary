@@ -899,6 +899,12 @@ ul.diagramm-legende {
   display: block;
   font-size: 0.85em;
   color: var(--grau);
+  text-align: right;
+}
+
+/* Je Währung eine Zeile — bei vielen Währungen bricht nichts aus dem Raster. */
+.kopf .je-waehrung > span {
+  display: block;
 }
 
 /* Bestandteile des Kontowerts — eine kleine Tabelle ohne Rahmentheater. */
@@ -976,4 +982,26 @@ rect.balken-offen {
   fill-opacity: 0.35;
   stroke: currentColor;
   stroke-dasharray: 3 2;
+}
+
+/* AP-08r: Durchsicht der Rollkandidaten. */
+.rollgruppe {
+  border: 1px solid var(--linie, #ddd);
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.8rem;
+  background: var(--flaeche, #fff);
+}
+
+.rollgruppe .legs {
+  font-size: 0.85em;
+  color: var(--grau);
+}
+
+.rollgruppe .aktionen {
+  white-space: nowrap;
+}
+
+.rollgruppe .aktionen button + button {
+  margin-left: 0.4rem;
 }

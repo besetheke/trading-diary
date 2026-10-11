@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { fehlerText, holeAuswertung, holeFilterwerte, holeKetten } from './api'
+import { fehlerText, holeAuswertung, holeFilterwerte, holeKetten, holeOaStand } from './api'
 import type {
   Auswertung,
   Filterwerte,
   Kette,
   KettenFilter,
   KettenListe,
+  OaStand,
   Richtung,
   Sortierspalte,
 } from './api'
@@ -351,6 +352,7 @@ export default function Positionen(): JSX.Element {
   const [fehler, setzeFehler] = useState<string | null>(null)
   // AP-08g2b: wählbare Werte (AP-07fw) und Auswertung der Auswahl (AP-07f).
   const [werte, setzeWerte] = useState<Filterwerte | null>(null)
+  const [oaStand, setzeOaStand] = useState<OaStand | null>(null)
   const [auswertung, setzeAuswertung] = useState<Auswertung | null>(null)
   const [auswertungFehler, setzeAuswertungFehler] = useState<string | null>(null)
 
@@ -359,6 +361,10 @@ export default function Positionen(): JSX.Element {
     holeFilterwerte()
       .then(setzeWerte)
       .catch(() => setzeWerte(null))
+    // AP-13r2: Hinweis zur Strategie — nur Information, ohne Antwort kein Hinweis.
+    holeOaStand()
+      .then(setzeOaStand)
+      .catch(() => setzeOaStand(null))
   }, [])
 
   // AP-08s, Punkt 3: Auswahl und Reihenfolge der sichtbaren Spalten.
@@ -638,6 +644,14 @@ export default function Positionen(): JSX.Element {
           Zurücksetzen
         </button>
       </form>
+      {oaStand !== null && oaStand.ohne_export > 0 ? (
+        <p className="sicht">
+          Strategien stammen aus dem OptionApp-Export
+          {oaStand.export_bis ? ` (Stand ${datumDe(oaStand.export_bis)})` : ''}:{' '}
+          {oaStand.ohne_export} OA-Trade(s) seit {datumDe(oaStand.ohne_export_ab)} sind noch
+          ohne Strategie. Neuen Export in den OA-Ordner legen — der nächste Abruf liest ihn ein.
+        </p>
+      ) : null}
 
       {/* AP-08g2b: Verlauf und Ergebnis der Auswahl (GET /auswertung). */}
       <FilterAuswertung

@@ -77,10 +77,9 @@ export default function FilterAuswertung({
             <Betrag wert={ergebnis.summe_netto_eur} />
             {auswertung.netto_je_waehrung.some((z) => z.waehrung !== 'EUR') ? (
               <span className="je-waehrung">
-                in Positionswährung:{' '}
-                {auswertung.netto_je_waehrung.map((z, i) => (
+                in Positionswährung:
+                {auswertung.netto_je_waehrung.map((z) => (
                   <span key={z.waehrung}>
-                    {i > 0 ? ' · ' : ''}
                     <Betrag wert={z.summe} waehrung={z.waehrung} />
                   </span>
                 ))}

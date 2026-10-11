@@ -409,6 +409,49 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-08r: Durchsicht der Rollkandidaten. Geld als Text (Vertrag 8).
+export interface Rollkandidat {
+  rang: number
+  neu_legs: string
+  neu_eroeffnet: string
+  neu_preis_auf: string | null
+  abstand_minuten: number
+  mengenverhaeltnis: string
+  schluessel_struktur: string
+}
+
+export interface Rollgruppe {
+  basiswert: string
+  seite: string
+  alt_legs: string
+  alt_geschlossen: string
+  alt_preis_zu: string | null
+  schluessel_kette: string
+  kandidaten: Rollkandidat[]
+}
+
+export interface Rollkandidaten {
+  anzahl_gruppen: number
+  anzahl_kandidaten: number
+  gruppen: Rollgruppe[]
+}
+
+export function holeRollkandidaten(): Promise<Rollkandidaten> {
+  return hole('/rollkandidaten') as Promise<Rollkandidaten>
+}
+
+export function sendeRollurteil(
+  schluesselKette: string,
+  schluesselStruktur: string,
+  urteil: 'bestaetigt' | 'abgelehnt',
+): Promise<{ neu: boolean }> {
+  return schicke('POST', '/journal/rollkandidaten/urteil', {
+    schluessel_kette: schluesselKette,
+    schluessel_struktur: schluesselStruktur,
+    urteil,
+  }) as Promise<{ neu: boolean }>
+}
+
 export function ersetzeTags(
   scopeTyp: string,
   scopeId: string,
@@ -482,6 +525,17 @@ export interface Filterwerte {
 
 export function holeFilterwerte(): Promise<Filterwerte> {
   return hole('/filterwerte') as Promise<Filterwerte>
+}
+
+// AP-13r2: Wie aktuell der OptionApp-Export ist.
+export interface OaStand {
+  export_bis: string | null
+  ohne_export: number
+  ohne_export_ab: string | null
+}
+
+export function holeOaStand(): Promise<OaStand> {
+  return hole('/oa-stand') as Promise<OaStand>
 }
 
 // AP-07f: Verlauf und Ergebnis der gefilterten Ketten. von/bis gelten hier am

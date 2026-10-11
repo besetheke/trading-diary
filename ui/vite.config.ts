@@ -38,6 +38,8 @@ export default defineConfig({
       // AP-07f/AP-07fw: Positionsfilter.
       '/auswertung': 'http://localhost:8000',
       '/filterwerte': 'http://localhost:8000',
+      '/oa-stand': 'http://localhost:8000',
+      '/rollkandidaten': 'http://localhost:8000',
     },
   },
 })

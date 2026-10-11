@@ -126,10 +126,13 @@ class ImportErgebnis:
 
     zeilen_gesamt: int
     zeilen_neu: int
+    # AP-13r2: laufende Trades (RUNNING), die auf ihren späteren Stand gebracht
+    # wurden — weder neu noch übersprungen.
+    zeilen_fortgeschrieben: int = 0
 
     @property
     def zeilen_uebersprungen(self) -> int:
-        return self.zeilen_gesamt - self.zeilen_neu
+        return self.zeilen_gesamt - self.zeilen_neu - self.zeilen_fortgeschrieben
 
 
 @dataclass
@@ -533,6 +536,56 @@ def _trade_schreiben(verbindung, trade: _TradeInhalt, lauf_id: int) -> int:
     return trade_id
 
 
+# AP-13r2: Ein gespeicherter Trade in diesem Status ist ein Zwischenstand; ein
+# späterer Export darf ihn fortschreiben. Jeder andere Status ist endgültig.
+LAUFEND = "RUNNING"
+# Was bei einer Fortschreibung gleich bleiben muss — sonst ist es nicht
+# derselbe Trade, und es gilt Vertrag 10 (Abbruch).
+_IDENTITAET = ("entry_zeit", "strategie")
+
+
+def _fortschreiben(
+    verbindung, gespeichert: _TradeInhalt, trade: _TradeInhalt, lauf_id: int
+) -> None:
+    """Ersetzt einen laufenden Trade durch seinen späteren Stand (AP-13r2).
+    Der vorige Rohstand bleibt erhalten: ``roh_json`` wird dann zum Objekt
+    ``{"zeile": <neues Zeilenbild>, "_vorher": <voriger Rohstand>}``."""
+    trade_id = gespeichert.felder["id"]
+    roh = {
+        "zeile": json.loads(trade.felder["roh_json"]),
+        "_vorher": json.loads(gespeichert.felder["roh_json"]),
+    }
+    felder = {**trade.felder, "roh_json": json.dumps(roh, ensure_ascii=False)}
+    verbindung.execute(
+        update(optionapp_trades)
+        .where(optionapp_trades.c.id == trade_id)
+        .values(**felder, import_run_id=lauf_id)
+    )
+    verbindung.execute(
+        optionapp_legs.delete().where(optionapp_legs.c.optionapp_trade_id == trade_id)
+    )
+    if trade.legs:
+        verbindung.execute(
+            insert(optionapp_legs),
+            [{**leg, "optionapp_trade_id": trade_id} for leg in trade.legs],
+        )
+
+
+def import_optionapp_ordner(
+    db_pfad: str | pathlib.Path, ordner: str | pathlib.Path
+) -> list[tuple[str, ImportErgebnis]]:
+    """Importiert alle XLSX-Exporte eines Ordners (AP-13r2), nach Name sortiert.
+    Bekannte Dateien ändern nichts; jede Datei ist ein eigener Lauf."""
+    pfad = pathlib.Path(ordner)
+    if not pfad.is_dir():
+        raise FileNotFoundError(f"OA-Ordner nicht gefunden: {pfad}")
+    return [
+        (datei.name, import_optionapp_file(db_pfad, datei))
+        for datei in sorted(pfad.glob("*.xlsx"), key=lambda d: d.name)
+        if not datei.name.startswith("~$")  # Sperrdatei eines geöffneten Excel
+    ]
+
+
 def import_optionapp_file(
     db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
 ) -> ImportErgebnis:
@@ -579,12 +632,24 @@ def import_optionapp_file(
         lauf_id = lauf.inserted_primary_key[0]
 
         zeilen_neu = 0
+        fortgeschrieben = 0
         for trade in inhalt.trades:
             oa_trade = trade.felder["oa_trade"]
             vorhanden = _vorhandener_trade(verbindung, oa_trade)
             if vorhanden is not None:
                 if vorhanden.ist_gleich(trade):
                     continue  # Bereits gebucht, identischer Inhalt
+                derselbe = all(
+                    vorhanden.felder[f] == trade.felder[f] for f in _IDENTITAET
+                )
+                if derselbe and vorhanden.felder["status"] == LAUFEND:
+                    # AP-13r2, Vertrag 1: Zwischenstand → späterer Stand.
+                    _fortschreiben(verbindung, vorhanden, trade, lauf_id)
+                    fortgeschrieben += 1
+                    continue
+                if derselbe and trade.felder["status"] == LAUFEND:
+                    # Vertrag 2: älterer Export nach dem endgültigen Stand.
+                    continue
                 raise ValueError(
                     f"Nummer {oa_trade} bereits mit abweichendem Inhalt gebucht — "
                     "keine stille Entscheidung, kein Überschreiben (Vertrag 10)."
@@ -596,4 +661,8 @@ def import_optionapp_file(
             update(import_runs).where(import_runs.c.id == lauf_id).values(zeilen_neu=zeilen_neu)
         )
 
-    return ImportErgebnis(zeilen_gesamt=len(inhalt.trades), zeilen_neu=zeilen_neu)
+    return ImportErgebnis(
+        zeilen_gesamt=len(inhalt.trades),
+        zeilen_neu=zeilen_neu,
+        zeilen_fortgeschrieben=fortgeschrieben,
+    )

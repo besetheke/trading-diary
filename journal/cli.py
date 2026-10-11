@@ -25,11 +25,24 @@ from analytics.kommission import kommissions_bericht
 from analytics.steuer import als_csv as steuer_als_csv
 from ingest import flex_abruf
 from ingest.flex import import_flex_file, nachtragen_realisiert
-from ingest.optionapp import import_optionapp_file
+from ingest.optionapp import import_optionapp_file, import_optionapp_ordner
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.kampagnen_durchsicht import kampagnen_ausschreiben, kampagnen_urteile_einlesen
 from journal.rebuild import rebuild
 from journal.steuer import steuer_bericht
+
+
+def _oa_bericht(name: str, ergebnis) -> None:
+    # Format aus AP-13y; „fortgeschrieben" (AP-13r2) nur, wenn es vorkam.
+    zusatz = (
+        f", {ergebnis.zeilen_fortgeschrieben} fortgeschrieben"
+        if ergebnis.zeilen_fortgeschrieben
+        else ""
+    )
+    print(
+        f"OptionApp-Import {name}: {ergebnis.zeilen_gesamt} Trades gelesen, "
+        f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen{zusatz}"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,7 +75,11 @@ def main(argv: list[str] | None = None) -> int:
         "import-optionapp",
         help="OptionApp-Trade-Export idempotent in die Datenbank importieren (AP-13)",
     )
-    oa_importer.add_argument("datei", type=pathlib.Path, help="Pfad zur XLSX-Exportdatei")
+    oa_importer.add_argument(
+        "datei",
+        type=pathlib.Path,
+        help="Pfad zur XLSX-Exportdatei oder zu einem Ordner mit Exporten (AP-13r2)",
+    )
     oa_importer.add_argument(
         "--db",
         default=None,
@@ -246,17 +263,19 @@ def main(argv: list[str] | None = None) -> int:
     elif argumente.befehl == "import-optionapp":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         try:
-            ergebnis = import_optionapp_file(db_pfad, argumente.datei)
+            if argumente.datei.is_dir():
+                ergebnisse = import_optionapp_ordner(db_pfad, argumente.datei)
+            else:
+                ergebnisse = [
+                    (argumente.datei.name, import_optionapp_file(db_pfad, argumente.datei))
+                ]
         except (FileNotFoundError, ValueError) as fehler:
             # Defekt der Quelle: benannt abbrechen, kein Traceback — die
             # Transaktion hat nichts geschrieben (AP-02, AP-13).
             print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
             return 1
-        print(
-            f"OptionApp-Import {argumente.datei.name}: {ergebnis.zeilen_gesamt} "
-            f"Trades gelesen, {ergebnis.zeilen_neu} neu, "
-            f"{ergebnis.zeilen_uebersprungen} übersprungen"
-        )
+        for name, ergebnis in ergebnisse:
+            _oa_bericht(name, ergebnis)
     elif argumente.befehl == "abrufen":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         # Zugangsdaten → Ziel → Abruf → Speichern → Import → Rebuild: in
@@ -305,6 +324,18 @@ def main(argv: list[str] | None = None) -> int:
             f"Import {pfad.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
             f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
         )
+        # AP-13r2: neue OA-Exporte vor dem Rebuild einlesen, damit neue Trades
+        # ihre Strategie bekommen. Ordner aus OA_ORDNER, sonst „oa" neben dem
+        # Flex-Zielordner; fehlt er, geschieht nichts.
+        oa_ordner = pathlib.Path(os.environ.get("OA_ORDNER") or ziel_pfad.parent / "oa")
+        if oa_ordner.is_dir():
+            try:
+                for name, oa_ergebnis in import_optionapp_ordner(db_pfad, oa_ordner):
+                    _oa_bericht(name, oa_ergebnis)
+            except (FileNotFoundError, ValueError) as fehler:
+                # Ein defekter OA-Export hält den Flex-Abruf nicht auf; er
+                # wird benannt und bleibt zur Prüfung liegen.
+                print(f"OptionApp-Import fehlgeschlagen: {fehler}", file=sys.stderr)
         if argumente.rebuild:
             try:
                 lauf = rebuild(db_pfad)

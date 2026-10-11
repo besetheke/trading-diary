@@ -57,6 +57,7 @@ from analytics.nav import nav_bericht
 from analytics.performance import performance_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
+from journal.durchsicht import _gruppen_bilden, _urteile_schreiben
 from journal.preise import praemie_als_text
 from journal.schema import (
     campaign_links,
@@ -67,9 +68,11 @@ from journal.schema import (
     executions,
     flex_ib_realized,
     flex_open_positions,
+    import_runs,
     instruments,
     journal_entries,
     legs,
+    optionapp_trades,
     structures,
     tags,
 )
@@ -338,6 +341,52 @@ class AuswertungAntwort(BaseModel):
     verlauf: list[VerlaufPunktAntwort] = []
     # AP-07fv: realisiert netto je Positionswährung (nativ), nach Währung sortiert.
     netto_je_waehrung: list[WaehrungsbetragAntwort] = []
+
+
+# AP-08r: Durchsicht der Rollkandidaten (Lesen: offene Kandidaten je
+# schließender Position; Schreiben: ein Urteil nach chain_overrides).
+class RollkandidatAntwort(BaseModel):
+    rang: int
+    neu_legs: str
+    neu_eroeffnet: datetime
+    neu_preis_auf: str | None
+    abstand_minuten: int
+    mengenverhaeltnis: str
+    schluessel_struktur: str
+
+
+class RollgruppeAntwort(BaseModel):
+    basiswert: str
+    seite: str
+    alt_legs: str
+    alt_geschlossen: datetime
+    alt_preis_zu: str | None
+    schluessel_kette: str
+    kandidaten: list[RollkandidatAntwort]
+
+
+class RollkandidatenAntwort(BaseModel):
+    anzahl_gruppen: int
+    anzahl_kandidaten: int
+    gruppen: list[RollgruppeAntwort]
+
+
+class RollurteilEingabe(BaseModel):
+    schluessel_kette: str
+    schluessel_struktur: str
+    urteil: Literal["bestaetigt", "abgelehnt"]
+    notiz: str | None = None
+
+
+class RollurteilAntwort(BaseModel):
+    neu: bool
+
+
+# AP-13r2: Stand des OptionApp-Exports gegen die IB-Daten.
+class OaStandAntwort(BaseModel):
+    export_bis: date | None
+    ohne_export: int
+    ohne_export_ab: date | None
 
 
 # AP-07fw: wählbare Werte der Positionsfilter — nur Listen, keine Zählwerte.
@@ -2056,6 +2105,80 @@ def erzeuge_app(
     # Parameter: die ganze Historie, wie journal kennzahlen --equity.
     # -----------------------------------------------------------------------
 
+    @applikation.get("/rollkandidaten", response_model=RollkandidatenAntwort)
+    def rollkandidaten() -> RollkandidatenAntwort:
+        """Offene Rollkandidaten (AP-08r) — dieselben Gruppen wie die
+        Datei-Rundreise (``journal kandidaten-ausschreiben``, AP-04d): je
+        schließender Position die möglichen Fortsetzungen nach Rang. Bereits
+        entschiedene Paare fehlen."""
+        with engine.connect() as verbindung:
+            try:
+                gruppen = _gruppen_bilden(verbindung)
+            except ValueError as fehler:
+                # Vertrag 9 (AP-04dv): ohne Rebuild keine Schlüssel.
+                raise HTTPException(status_code=409, detail=str(fehler)) from fehler
+        antwort = []
+        for zeilen in gruppen.values():
+            erste = zeilen[0]
+            antwort.append(
+                RollgruppeAntwort(
+                    basiswert=erste["Basiswert"],
+                    seite=erste["Seite"],
+                    alt_legs=erste["Alt: Legs"],
+                    alt_geschlossen=erste["Alt: geschlossen"],
+                    alt_preis_zu=_als_text(erste["Alt: Preis zu"]),
+                    schluessel_kette=erste["Schlüssel Kette"],
+                    kandidaten=[
+                        RollkandidatAntwort(
+                            rang=z["Rang"],
+                            neu_legs=z["Neu: Legs"],
+                            neu_eroeffnet=z["Neu: eröffnet"],
+                            neu_preis_auf=_als_text(z["Neu: Preis auf"]),
+                            abstand_minuten=z["Abstand Minuten"],
+                            mengenverhaeltnis=str(z["Mengenverhältnis"]),
+                            schluessel_struktur=z["Schlüssel Struktur"],
+                        )
+                        for z in zeilen
+                    ],
+                )
+            )
+        return RollkandidatenAntwort(
+            anzahl_gruppen=len(antwort),
+            anzahl_kandidaten=sum(len(g.kandidaten) for g in antwort),
+            gruppen=antwort,
+        )
+
+    @applikation.get("/oa-stand", response_model=OaStandAntwort)
+    def oa_stand() -> OaStandAntwort:
+        """Wie aktuell der OA-Export ist (AP-13r2): letzter Exporttag und die
+        OA-Trades, die IB kennt (Orderreferenz), für die aber kein Export
+        vorliegt — sie tragen bis zum nächsten Export keine Strategie."""
+        with engine.connect() as verbindung:
+            export_bis = verbindung.execute(
+                select(func.max(import_runs.c.zeitraum_bis)).where(
+                    import_runs.c.quelle == "optionapp"
+                )
+            ).scalar()
+            bekannt = select(optionapp_trades.c.oa_trade)
+            anzahl, ab = verbindung.execute(
+                select(
+                    func.count(func.distinct(executions.c.oa_trade)),
+                    func.min(executions.c.handelszeit),
+                ).where(
+                    executions.c.oa_trade.is_not(None),
+                    executions.c.oa_trade.not_in(bekannt),
+                )
+            ).one()
+        if isinstance(export_bis, str):
+            export_bis = date.fromisoformat(export_bis[:10])
+        if isinstance(ab, str):
+            ab = datetime.fromisoformat(ab)
+        return OaStandAntwort(
+            export_bis=export_bis,
+            ohne_export=anzahl,
+            ohne_export_ab=ab.date() if ab is not None else None,
+        )
+
     @applikation.get("/filterwerte", response_model=FilterwerteAntwort)
     def filterwerte() -> FilterwerteAntwort:
         """Die wählbaren Werte der Positionsfilter (AP-07fw), Kontosicht.
@@ -2449,6 +2572,47 @@ def erzeuge_app(
     # -----------------------------------------------------------------------
 
     if mit_journal:
+
+        @applikation.post("/journal/rollkandidaten/urteil", response_model=RollurteilAntwort)
+        def rollurteil(eingabe: RollurteilEingabe) -> RollurteilAntwort:
+            """Ein Urteil über einen Rollkandidaten (AP-08r) — dieselben Regeln
+            wie beim Einlesen der Datei (AP-04d): keine stille Änderung einer
+            getroffenen Entscheidung, keine Struktur in zwei Ketten. Wirksam
+            beim nächsten Rebuild. Kurze Transaktion (Regel 9)."""
+            with engine.begin() as verbindung:
+                kette = verbindung.execute(
+                    select(chains.c.chain_id).where(
+                        chains.c.sicht == SICHT,
+                        chains.c.natur_schluessel == eingabe.schluessel_kette,
+                    )
+                ).scalar()
+                struktur = verbindung.execute(
+                    select(structures.c.structure_id).where(
+                        structures.c.sicht == SICHT,
+                        structures.c.natur_schluessel == eingabe.schluessel_struktur,
+                    )
+                ).scalar()
+                if kette is None or struktur is None:
+                    raise HTTPException(
+                        status_code=404, detail="Kette oder Struktur nicht gefunden"
+                    )
+                zeile = {
+                    "Gruppe": "Oberfläche",
+                    "Rang": "-",
+                    "Schlüssel Kette": eingabe.schluessel_kette,
+                    "Schlüssel Struktur": eingabe.schluessel_struktur,
+                    "Entscheidung": "ja" if eingabe.urteil == "bestaetigt" else "nein",
+                    "Bemerkung": eingabe.notiz,
+                }
+                try:
+                    ergebnis = _urteile_schreiben(
+                        verbindung, [zeile], ueberschreiben=False, jetzt=datetime.now()
+                    )
+                except ValueError as fehler:
+                    raise HTTPException(status_code=409, detail=str(fehler)) from fehler
+            return RollurteilAntwort(
+                neu=(ergebnis.neu_bestaetigt + ergebnis.neu_abgelehnt) > 0
+            )
 
         @applikation.get("/journal/{scope_typ}/{scope_id}", response_model=JournalAntwort)
         def journal_lesen(scope_typ: str, scope_id: str) -> JournalAntwort:

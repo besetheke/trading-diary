@@ -10,6 +10,7 @@ import Kampagnen from './Kampagnen'
 import KostenErtraege from './KostenErtraege'
 import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
+import Rollkandidaten from './Rollkandidaten'
 import Tag from './Tag'
 import './stil.css'
 
@@ -47,6 +48,7 @@ function Kopf(): JSX.Element {
         <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
         <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
         <Link to={`/monat${mit}`}>Kalender</Link>
+        <Link to="/rolls">Rolls prüfen</Link>
         <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
       </nav>
       <Zeitraumwahl wirkt={ZEITRAUM_SEITEN.includes(ort.pathname)} />
@@ -91,6 +93,8 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             <Route path="/kosten" element={<KostenErtraege />} />
             <Route path="/positionen/:chainId" element={<PositionDetail />} />
             <Route path="/tag/:datum" element={<Tag />} />
+            {/* AP-08r: /rollkandidaten ist der API-Endpunkt, die Seite /rolls. */}
+            <Route path="/rolls" element={<Rollkandidaten />} />
             <Route path="*" element={<Unbekannt />} />
           </Routes>
         </main>
