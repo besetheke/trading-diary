@@ -3190,3 +3190,56 @@ und sind überholt:**
 zu hoch. Teil 1 der Korrektur: AP-06i (lose Legs ins Geld; Abnahmebasis
 liegt, Umsetzung Cline). Danach Echtabgleich je Jahr durch das starke
 Modell.
+
+## OF-79 · Datenqualität: Prüfbericht 11.10.2026 (Nutzerwunsch vor weiteren Ergänzungen)
+
+Lesende Prüfung von `journal.db` (Stand Import 2026-10-09; nur Zählwerte und
+Summen, Einzelfälle anonym). Ergebnis in drei Teilen.
+
+**Sauber (geprüft, ohne Befund):**
+- Ausführungen: 34.510, alle Stufe A; keine ohne Buchungskurs, Kommission oder
+  Menge; keine negativen Preise, keine Zukunftsdaten; keine echten Doppelungen
+  (831 Gruppen „gleiche Zeit/Menge/Preis" sind Teilausführungen derselben Order,
+  eigene `transaction_id`).
+- Optionen vollständig (Verfall, Strike, Seite); Legs: keine Schließung vor
+  Eröffnung; Strukturen: keine ohne Ergebnis, keine mit Ende vor Beginn; Ketten:
+  Endzustand und Ende konsistent, keine gemischten Währungen.
+- **Offener Bestand gegen IB (Stichtag 2026-10-09): alle 138 Instrumente bei IB
+  stimmen in der Menge exakt mit den offenen Legs des Journals überein.**
+- **Schlusspreis („Preis zu"):** bei allen 3.684 geprüften Einzeloptionen gleich
+  dem Betrag der schließenden Ausführung; 0 steht nur bei Verfall/Zuteilung
+  (Verfall 2.659 von 3.865 Ketten, Zuteilung 696 von 1.018), bei normalem
+  Rückkauf nie (3 von 2.458). Die 0 ist richtig, aber bei Verfall/Zuteilung
+  wenig aussagekräftig → Darstellung (AP-08).
+
+**Befunde:**
+1. **Kapitalmaßnahmen fehlen (echter Fehler, 10 Aktienwerte).** Ticker-Wechsel
+   und Zusammenlegungen (`SMCI`/`SMCI.OLD`, `VERU`/`.OLD`, `UNG`/`.OLD`,
+   `CHPT`/`.OLD`, `PARA`→`PSKY`) stehen nicht in den Handelsdaten. Die alten
+   Aktien bleiben als offene Lots auf der alten conid (Käufe: 100, 600, 1.000,
+   1.700, 100 Stück), die späteren Verkäufe unter dem neuen Namen als
+   offene Leerverkäufe (250, 1.000, 85, 60, 39,07 Stück). Folgen: 37 offene
+   Aktien-Legs ohne Gegenstück bei IB, Ergebnisse dieser Werte unvollständig,
+   falsche Stückzahlen. Behebung: Flex-Abschnitt „Corporate Actions" in die
+   Query (Portal, Nutzer), Import, Zuordnung alt→neu in der Engine
+   (starkes Modell, eigenes Paket).
+2. **„Rolls 0":** 6.270 von 7.482 Ketten haben 0 Rolls. Gezählt werden nur Rolls
+   mit belegender Order (2.113 Glieder, alle `auto`); 719 Kandidaten
+   (Roll in getrennten Orders, `heuristik`) sind Vorschläge und zählen nicht
+   (Regel 7). Die Spalte zeigt also „belegte Rolls", nicht „Rolls". → Beschriftung
+   und Ausweis der Kandidaten; Durchsicht der Kandidaten ist ein eigenes Paket.
+3. **Strategie nur bei 18 %:** 1.381 von 7.482 Ketten tragen eine OA-Strategie
+   (3.977 ohne eindeutige Kette). Der Strategiefilter und die Strategieauswertung
+   betreffen daher nur diese. 1.496 Strukturen (15,6 %) sind Typ `Custom`.
+4. **4 offene Options-Legs mit Verfall vor dem Stichtag** (Verfall 2024-10-04
+   und 2025-08-15): Ausführung des Verfalls fehlt; klein.
+5. **53 Aktien-Instrumente ohne `underlying`**; `fifoPnlRealized` bei 11.949
+   Zeilen nicht gespeichert (siehe OF-78). Der Bestand der 7 CASH-Instrumente
+   (Währungsumtausch) erscheint als offene Legs — kein Fehler, aber keine
+   Positionen.
+6. 189 Legs ohne Struktur (165 geschlossen, 24 offen; AP-06i weist ihr Ergebnis
+   aus).
+
+**Reihenfolge der Behebung (Vorschlag):** (a) Kapitalmaßnahmen, (b) Darstellung
+Preis zu / belegte Rolls, (c) Durchsicht der Rollkandidaten, (d) Import:
+`fifoPnlRealized` ergänzen, Aktien-`underlying`, fehlender Verfall.
