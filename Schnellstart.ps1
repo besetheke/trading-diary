@@ -16,9 +16,13 @@ New-Item -ItemType Directory -Force -Path $logOrdner | Out-Null
 $serverLogOut = Join-Path $logOrdner "server.log"
 $serverLogErr = Join-Path $logOrdner "server-fehler.log"
 
+# Die Wurzel statt openapi.json: Das Schema wird erst beim ersten Aufruf
+# erzeugt und braucht auf einem kalten Rechner laenger als eine Sekunde. Das
+# Zeitlimit ist grosszuegig, damit ein langsamer Start nicht als "nicht
+# gestartet" gilt (11.10.2026: Fehlalarm bei laufendem Server).
 function Test-ServerLaeuft {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/openapi.json" -UseBasicParsing -TimeoutSec 1
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 5
         return $r.StatusCode -eq 200
     } catch {
         return $false
@@ -51,9 +55,15 @@ Start-Process -FilePath ".venv\Scripts\pythonw.exe" `
     -WorkingDirectory $projekt -WindowStyle Hidden `
     -RedirectStandardOutput $serverLogOut -RedirectStandardError $serverLogErr
 
-Start-Sleep -Seconds 2
+# Bis zu 30 Sekunden warten (alle halbe Sekunde pruefen). Ein Fehler zeigt sich
+# nur, wenn der Server wirklich nicht antwortet.
+$bereit = $false
+for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Milliseconds 500
+    if (Test-ServerLaeuft) { $bereit = $true; break }
+}
 
-if (-not (Test-ServerLaeuft)) {
+if (-not $bereit) {
     [System.Windows.Forms.MessageBox]::Show(
         "Trading-Journal ist nicht gestartet. Log: $serverLogErr", "Trading-Journal",
         [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error
