@@ -3318,3 +3318,19 @@ Prüfung CAR (Nutzer, Vergleich mit dem bisherigen Tool 6.470,50): Journal
 - OF-79 Befund 3 (Strategie nur bei 18 %): Ursache ist vor allem der fehlende
   OA-Export für 685 OA-Trades (meist 2025). Neuer Export nach `C:\Trading\oa`
   (AP-13r2); die Positionsliste zeigt, wie viele noch fehlen.
+
+## Zurückgestellt vom Nutzer (11.10.2026) — später daran erinnern
+
+Wörtlich: „Schiebe das zuerst zurück und erinnere mich daran, sobald ich etwas
+mehr Erfahrung / Vertrauen habe." Betrifft die eigenen Schritte des Nutzers:
+
+1. OptionApp-Export (ab 08/2025 bis heute) nach `C:\Trading\oa\` legen — 685
+   OA-Trades ohne Strategie (AP-13r2).
+2. Rollkandidaten unter „Rolls prüfen" (`/rolls`) entscheiden — 719 Vorschläge
+   (AP-08r).
+3. Alten Projektordner auf G: löschen, sobald das zugehörige VS-Code-Fenster
+   geschlossen ist (der Backup-Ordner `G:\Meine Ablage\#Code#\trading-journal-backups`
+   bleibt).
+
+Erinnern, sobald die Zahlen stabil wirken oder der Nutzer Vertrauen äußert —
+nicht drängen.
