@@ -1144,3 +1144,32 @@ rect.balken-offen {
 .diagramm svg + .diagramm-legende {
   margin-top: 0.4rem;
 }
+
+/* AP-06sc: Strategie-Scorecard. */
+.strategie-tabelle th {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.strategie-tabelle td:first-child {
+  white-space: nowrap;
+}
+
+.strategie-tabelle .nebenbei {
+  color: var(--grau);
+  font-size: 0.85em;
+}
+
+.tabelle-rahmen {
+  overflow-x: auto;
+}
+
+.strategien .umschalter {
+  display: inline-block;
+  margin-bottom: 0.6rem;
+}
+
+table.bestandteile tr.summe td {
+  font-weight: 600;
+  border-top: 1px solid var(--rand);
+}

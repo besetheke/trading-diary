@@ -418,6 +418,45 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-06sc: Strategie-Scorecard — Beträge und Quoten als Text.
+export interface StrategieZeile {
+  strategie: string | null
+  anzahl: number
+  offen: number
+  gewinner: number
+  verlierer: number
+  kurs_fehlt: number
+  trefferquote: string | null
+  summe_eur: string
+  durchschnitt_eur: string | null
+  durchschnitt_gewinn_eur: string | null
+  durchschnitt_verlust_eur: string | null
+  profit_faktor: string | null
+  groesster_gewinn_eur: string | null
+  groesster_verlust_eur: string | null
+  max_drawdown_eur: string
+  zuteilungsquote: string | null
+  haltedauer_tage: string | null
+  erste_schliessung: string | null
+  letzte_schliessung: string | null
+}
+
+export interface Strategien {
+  zeilen: StrategieZeile[]
+  summe_strategien_eur: string
+  realisiert_gesamt_eur: string
+  ohne_position_eur: string
+  abgrenzung_eur: string
+}
+
+export function holeStrategien(von?: string | null, bis?: string | null): Promise<Strategien> {
+  const suche = new URLSearchParams()
+  if (von) suche.set('von', von)
+  if (bis) suche.set('bis', bis)
+  const text = suche.toString()
+  return hole(`/strategien${text ? `?${text}` : ''}`) as Promise<Strategien>
+}
+
 // AP-08ue: Startseite — alle Beträge als Text aus GET /uebersicht.
 export interface Uebersicht {
   heute: string

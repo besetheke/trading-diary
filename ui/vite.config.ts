@@ -40,6 +40,7 @@ export default defineConfig({
       '/filterwerte': 'http://localhost:8000',
       '/oa-stand': 'http://localhost:8000',
       '/uebersicht': 'http://localhost:8000',
+      '/strategien': 'http://localhost:8000',
       '/rollkandidaten': 'http://localhost:8000',
     },
   },

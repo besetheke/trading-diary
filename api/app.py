@@ -55,6 +55,7 @@ from analytics.ib_abgleich import ib_abgleich_bericht
 from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
 from analytics.performance import performance_bericht
+from analytics.strategien import strategie_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
 from journal.durchsicht import _gruppen_bilden, _urteile_schreiben
@@ -366,6 +367,38 @@ class AuswertungAntwort(BaseModel):
     verlauf: list[VerlaufPunktAntwort] = []
     # AP-07fv: realisiert netto je Positionswährung (nativ), nach Währung sortiert.
     netto_je_waehrung: list[WaehrungsbetragAntwort] = []
+
+
+# AP-06sc: Strategie-Scorecard — Geld und Quoten als Text (Vertrag 8).
+class StrategieZeileAntwort(BaseModel):
+    strategie: str | None
+    anzahl: int
+    offen: int
+    gewinner: int
+    verlierer: int
+    kurs_fehlt: int
+    trefferquote: str | None
+    summe_eur: str
+    durchschnitt_eur: str | None
+    durchschnitt_gewinn_eur: str | None
+    durchschnitt_verlust_eur: str | None
+    profit_faktor: str | None
+    groesster_gewinn_eur: str | None
+    groesster_verlust_eur: str | None
+    max_drawdown_eur: str
+    zuteilungsquote: str | None
+    haltedauer_tage: str | None
+    erste_schliessung: datetime | None
+    letzte_schliessung: datetime | None
+
+
+class StrategienAntwort(BaseModel):
+    zeilen: list[StrategieZeileAntwort]
+    # Überleitung zum realisierten Gesamtergebnis (Equity).
+    summe_strategien_eur: str
+    realisiert_gesamt_eur: str
+    ohne_position_eur: str
+    abgrenzung_eur: str
 
 
 # AP-08ue: Startseite „Übersicht" — Zahlen aus bestehenden Quellen (NAV,
@@ -2338,6 +2371,29 @@ def erzeuge_app(
                 seiten=werte(ketten_spalte(chains.c.seite)),
                 endzustaende=werte(ketten_spalte(chains.c.endzustand)),
             )
+
+    @applikation.get("/strategien", response_model=StrategienAntwort)
+    def strategien(von: date | None = None, bis: date | None = None) -> StrategienAntwort:
+        """Strategie-Scorecard (AP-06sc): je OA-Strategie die geschlossenen
+        Positionen der Kontosicht — ``von``/``bis`` am Tag der Schließung."""
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        bericht = strategie_bericht(db_pfad, von=von, bis=bis)
+        felder_geld = (
+            "summe_eur", "durchschnitt_eur", "durchschnitt_gewinn_eur",
+            "durchschnitt_verlust_eur", "groesster_gewinn_eur", "groesster_verlust_eur",
+            "max_drawdown_eur", "trefferquote", "profit_faktor", "zuteilungsquote",
+            "haltedauer_tage",
+        )
+        return StrategienAntwort(zeilen=[
+            StrategieZeileAntwort(**{
+                **z.__dict__,
+                **{f: _als_text(getattr(z, f)) for f in felder_geld},
+            })
+            for z in bericht.zeilen
+        ], summe_strategien_eur=_als_text(bericht.summe_strategien_eur),
+           realisiert_gesamt_eur=_als_text(bericht.realisiert_gesamt_eur),
+           ohne_position_eur=_als_text(bericht.ohne_position_eur),
+           abgrenzung_eur=_als_text(bericht.abgrenzung_eur))
 
     @applikation.get("/uebersicht", response_model=UebersichtAntwort)
     def uebersicht(heute: date | None = None) -> UebersichtAntwort:
