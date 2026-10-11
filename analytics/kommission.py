@@ -122,7 +122,7 @@ def _eur_teile(
     for seite in seiten:
         brutto += (
             seite.vorzeichen
-            * seite.ausfuehrung["preis"]
+            * seite.stueckpreis
             * seite.menge
             * seite.multiplikator
             * seite.buchungskurs
@@ -355,6 +355,8 @@ def kommissions_bericht(
                     legs.c.open_exec_id,
                     legs.c.close_exec_id,
                     legs.c.menge,
+                    legs.c.open_faktor,
+                    legs.c.close_faktor,
                 ).where(legs.c.sicht == sicht)
             ).mappings()
         ]

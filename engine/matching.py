@@ -100,6 +100,14 @@ class Leg:
     # Synthetisches Zugangslot einer Kapitalmaßnahme ohne Kostenangabe
     # (OF-23): keine stille Nullbasis, siehe Vertrag Regel 6.
     basis_ungeklaert: bool = False
+    # AP-03vk2: Faktor der Kapitalmaßnahmen (neue ÷ alte Menge, mehrere
+    # multiplizieren sich), den die Eröffnungs- bzw. Schließungsausführung
+    # durchlaufen hat; 1 ohne Maßnahme. ``menge`` steht in neuen Stücken, die
+    # Ausführung noch in alten: Wer Preis × ``menge`` aus der Ausführung neu
+    # rechnet, braucht Preis ÷ Faktor und Ausführungsmenge × Faktor. Nicht Teil
+    # der Gleichheit — der Vergleich zweier Läufe ändert sich nicht.
+    open_faktor: Decimal = field(default=Decimal("1"), compare=False)
+    close_faktor: Decimal = field(default=Decimal("1"), compare=False)
 
 
 @dataclass(frozen=True)
@@ -144,6 +152,9 @@ class _Buchung:
     # None bei gewöhnlichen Ausführungen und bei Lieferung.
     schlusskurs: Decimal | None
     teilmengen: list[Decimal] = field(default_factory=list)
+    # AP-03vk2: Produkt der Faktoren aller Kapitalmaßnahmen, die diese
+    # Ausführung auf eine neue conid verschoben haben.
+    faktor: Decimal = Decimal("1")
 
 
 @dataclass
@@ -443,6 +454,7 @@ def _kapitalmassnahmen_anwenden(
                     buchung.conid = neuer_conid
                     buchung.menge *= faktor
                     buchung.preis /= faktor
+                    buchung.faktor *= faktor
                     _instrument_pruefen(buchung, instruments)
         else:
             kosten_neu = satz.get("kosten_neu")
@@ -554,6 +566,8 @@ def _fifo(
             ),
             offen_ja_nein=False,
             basis_ungeklaert=schluss.offen.exec_id in synthetische_zugaenge,
+            open_faktor=schluss.offen.faktor,
+            close_faktor=schluss.schluss.faktor,
         )
         for schluss in schluesse
     ]
@@ -570,6 +584,7 @@ def _fifo(
                 kommission_gesamt=anteile[buchung.exec_id][-1],
                 offen_ja_nein=True,
                 basis_ungeklaert=buchung.exec_id in synthetische_zugaenge,
+                open_faktor=buchung.faktor,
             )
         )
     return legs

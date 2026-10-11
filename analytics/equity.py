@@ -557,6 +557,8 @@ def equity_bericht(
                     legs.c.open_exec_id,
                     legs.c.close_exec_id,
                     legs.c.menge,
+                    legs.c.open_faktor,
+                    legs.c.close_faktor,
                 ).where(legs.c.sicht == "konto")
             ).mappings()
         ]

@@ -44,7 +44,11 @@ def nettopraemie(struktur, *, schliessung: bool, bestand, leg_je_schluessel) -> 
             )
         ausfuehrung = bestand.exec_je_id[exec_id]
         vorzeichen = 1 if ausfuehrung["side"] == "SELL" else -1
-        summe += vorzeichen * leg.menge * ausfuehrung["preis"]
+        # AP-03vk2: ``leg.menge`` steht nach einer Kapitalmaßnahme in neuen
+        # Stücken, der Ausführungspreis noch in alten — Preis ÷ Faktor.
+        faktor = leg.close_faktor if schliessung else leg.open_faktor
+        preis = ausfuehrung["preis"] if faktor == 1 else ausfuehrung["preis"] / faktor
+        summe += vorzeichen * leg.menge * preis
     if not struktur.menge:
         raise ValueError(
             f"Struktur {_schluessel(struktur)} hat Menge 0 — die "

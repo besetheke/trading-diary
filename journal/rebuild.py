@@ -74,6 +74,7 @@ from engine.structures import Structure as Struktur
 from engine.structures import StrukturErgebnis, bilde_structures
 from journal.campaigns_sicht import offene_kandidaten_zaehlen
 from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
+from journal.kapitalmassnahmen import kapitalmassnahmen_befuellen
 from journal.oa_persistenz import oa_werte_schreiben
 from journal.preise import nettopraemie
 from journal.schema import (
@@ -565,6 +566,8 @@ def _sicht_schreiben(
                 kommission_gesamt=leg.kommission_gesamt,
                 offen_ja_nein=leg.offen_ja_nein,
                 basis_ungeklaert=leg.basis_ungeklaert,
+                open_faktor=leg.open_faktor,
+                close_faktor=leg.close_faktor,
                 structure_id=struktur_id_je_leg.get((leg.open_exec_id, leg.close_exec_id)),
                 sicht=sicht,
             )
@@ -626,6 +629,12 @@ def _sicht_schreiben(
 
 
 def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
+    # -- Kapitalmaßnahmen (AP-03vk): aus den Flex-Rohzeilen ableiten und in
+    #    corporate_actions ergänzen, bevor gerechnet wird. Ergänzt nur, was
+    #    fehlt (Regel 4); bestand_berechnen() und damit die Durchsicht der
+    #    Rollkandidaten lesen dieselbe Tabelle und bleiben lesend.
+    kapitalmassnahmen_befuellen(verbindung)
+
     # -- Lesen und Rechnen über die gemeinsame Funktion (AP-04d, Vertrag 10):
     #    kein zweiter Lesepfad neben der Durchsicht der Rollkandidaten.
     bestand = bestand_berechnen(verbindung)

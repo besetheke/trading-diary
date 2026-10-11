@@ -157,6 +157,15 @@ class LegSeite:
     multiplikator: Decimal
     kommissionsanteil: Decimal  # Kommission × menge / Gesamtmenge der Ausführung
     buchungskurs: Decimal
+    # AP-03vk2: Faktor der Kapitalmaßnahmen an dieser Ausführung (1 ohne).
+    # ``menge`` ist in neuen Stücken, ``ausfuehrung['preis']`` in alten: der
+    # Stückpreis in neuen Stücken ist ``preis / faktor`` (``stueckpreis``).
+    faktor: Decimal = Decimal("1")
+
+    @property
+    def stueckpreis(self) -> Decimal:
+        preis = self.ausfuehrung["preis"]
+        return preis if self.faktor == 1 else preis / self.faktor
 
 
 def leg_seiten(
@@ -221,7 +230,10 @@ def leg_seiten(
                     f"Ausführung {exec_id}: kein Instrument zu conid {a['conid']} "
                     f"— kein Multiplikator ableitbar ({vertrag}, Regel 3)"
                 ) from None
-            gesamtmenge = abs(a["menge"])
+            faktor = leg.get("open_faktor" if schluessel == "open_exec_id" else "close_faktor")
+            faktor = Decimal(1) if faktor is None else Decimal(str(faktor))
+            # Die Ausführung steht in alten Stücken, ``anteil`` in neuen.
+            gesamtmenge = abs(a["menge"]) * faktor
             if gesamtmenge == _NULL:
                 raise ValueError(
                     f"Ausführung {exec_id}: menge 0 — kein Kommissionsanteil "
@@ -241,6 +253,7 @@ def leg_seiten(
                     multiplikator=multiplikator,
                     kommissionsanteil=kommissionsanteil,
                     buchungskurs=a["buchungskurs"],
+                    faktor=faktor,
                 )
             )
     return seiten
@@ -285,7 +298,7 @@ def _wirtschaftlich(
     for seite in seiten:
         kommission = seite.kommissionsanteil * seite.menge_vorzeichen
         summe += (
-            seite.vorzeichen * seite.ausfuehrung["preis"] * seite.menge * seite.multiplikator
+            seite.vorzeichen * seite.stueckpreis * seite.menge * seite.multiplikator
             + kommission
         ) * seite.buchungskurs
     return summe
@@ -782,6 +795,8 @@ def kennzahlen_bericht(
                         legs.c.open_exec_id,
                         legs.c.close_exec_id,
                         legs.c.menge,
+                    legs.c.open_faktor,
+                    legs.c.close_faktor,
                     ).where(legs.c.sicht == laufende_sicht)
                 ).mappings()
             ]

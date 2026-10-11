@@ -3243,3 +3243,31 @@ Summen, Einzelfälle anonym). Ergebnis in drei Teilen.
 **Reihenfolge der Behebung (Vorschlag):** (a) Kapitalmaßnahmen, (b) Darstellung
 Preis zu / belegte Rolls, (c) Durchsicht der Rollkandidaten, (d) Import:
 `fifoPnlRealized` ergänzen, Aktien-`underlying`, fehlender Verfall.
+
+## OF-80 · Kapitalmaßnahmen: was AP-03vk noch nicht abbildet (11.10.2026)
+
+Stand nach AP-03vk/AP-03vk2: 6 von 11 Aktionen sind als Transfer angewendet
+(Aktien: UNG, SMCI, CHPT, VERU, PARA → PARA.CSH → PSKY). Nicht abgebildet
+(Regel 10 — nicht geraten, in `journal.kapitalmassnahmen` als „übersprungen"
+gemeldet):
+
+1. **Barteil einer Fusion** (`TC`, PARA.CSH → PSKY: `proceeds` 913,89 USD): Die
+   Lots wandern auf PSKY (100 → 39,0741 Stück) mit unveränderten Kosten; der
+   erhaltene Barbetrag wird nicht als realisiert gebucht. Fachlich ist offen, wie
+   viel der Anschaffungskosten auf den Barteil entfällt (IB bucht fifoPnl 0 an
+   dieser Zeile). Wirkung: Ergebnis dieses Werts im Journal gegen IB um die Differenz
+   Bar − Kostenanteil verschoben (einstellig tausend €).
+2. **Ausbuchung verfallener Rechte** (`ED`, WKL.DRRTS/WKL.RTS) und
+   **Rechteausgabe** (`DI`) ohne Kostenangabe: Ein Zugang ohne Kosten würde ein
+   Lot eröffnen, das nie ausgebucht wird. Nicht abgeleitet; die Rechte erscheinen
+   nirgends im Journal.
+3. **Optionsanpassungen** (SMCI 9 Kontrakte, FAST 2): Paarung aus den Zeilen allein
+   nicht eindeutig (Call −9 neben Put +9 unter einer Aktion); das Kennzeichen
+   `instruments.angepasst` ist noch nicht gesetzt (OF-23, Punkt 2).
+4. **Vier Optionen mit Verfall vor dem Stichtag stehen noch offen** (Verfall
+   2024-10-04 und 2025-08-15): die Verfallszeile fehlt in den Daten.
+5. **Die Kette überlebt den Übergang** (OF-23, Punkt 1) gilt weiter für die
+   Struktur-/Kettenerkennung: alte und neue `conid` erscheinen in der
+   Detailansicht noch nicht als ein Ereignis im Zeitstrahl.
+
+OF-79, Befund 1 (Kapitalmaßnahmen fehlen): **behoben** durch AP-03vk/AP-03vk2.
