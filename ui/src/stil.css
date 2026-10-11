@@ -355,9 +355,11 @@ p.sicht {
   margin: 0.2rem 0 0;
 }
 
-/* AP-08f2: Zeitraum-Wähler im Kopf — eine Zeile, Auswahl plus optional
-   freier Zeitraum, dahinter der gewählte Zeitraum in Worten. */
+/* AP-08f2 (überarbeitet): Zeitraum-Wähler im Kopf — eine Schaltfläche mit dem
+   gewählten Zeitraum; sie öffnet ein Fenster mit den Vorgaben links und einem
+   Kalender rechts (Start-/Endklick). */
 .zeitraumwahl {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -369,34 +371,159 @@ p.sicht {
   font-size: 0.9rem;
 }
 
-.zeitraumwahl label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.zeitraumwahl .bezeichnung {
   color: var(--grau);
 }
 
-.zeitraumwahl select,
-.zeitraumwahl input {
+.zeitraumwahl button.auswahl {
   font: inherit;
-  padding: 0.2rem 0.4rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--rand);
+  background: #fff;
+  color: var(--tinte);
+  cursor: pointer;
+}
+
+.zeitraumwahl button.auswahl:hover,
+.zeitraumwahl button.auswahl[aria-expanded='true'] {
+  border-color: var(--akzent);
+}
+
+.zeitraumwahl .fenster {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-top: 0.25rem;
+  padding: 0.9rem 1rem;
+  background: #fff;
+  border: 1px solid var(--rand);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  max-width: calc(100vw - 2rem);
+}
+
+.zeitraumwahl .vorgaben {
+  display: flex;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.zeitraumwahl .vorgaben h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--grau);
+}
+
+.zeitraumwahl .vorgaben ul {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+}
+
+.zeitraumwahl .vorgaben button {
+  display: block;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 0.15rem 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--tinte);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.zeitraumwahl .vorgaben button:hover {
+  background: #eef3f1;
+}
+
+.zeitraumwahl .vorgaben button.gewaehlt {
+  background: var(--akzent);
+  color: #fff;
+}
+
+.zeitraumwahl .kalenderwahl {
+  width: 17.5rem;
+}
+
+.zeitraumwahl .kalenderwahl .kopfzeile {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.zeitraumwahl .kalenderwahl .kopfzeile select {
+  flex: 1;
+  font: inherit;
+  padding: 0.15rem 0.3rem;
   border: 1px solid var(--rand);
   background: #fff;
   color: var(--tinte);
 }
 
-.zeitraumwahl form.eigen {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.zeitraumwahl .kalenderwahl .kopfzeile button {
+  font: inherit;
+  width: 1.9rem;
+  border: 1px solid var(--rand);
+  background: #fff;
+  color: var(--tinte);
+  cursor: pointer;
 }
 
-.zeitraumwahl form.eigen button {
-  padding: 0.2rem 0.7rem;
+.zeitraumwahl .kalenderwahl .raster {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px 0;
 }
 
-.zeitraumwahl .beschreibung {
-  font-weight: 600;
+.zeitraumwahl .kalenderwahl .wochentag {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--grau);
+  padding-bottom: 0.15rem;
+}
+
+.zeitraumwahl .kalenderwahl button.tag {
+  font: inherit;
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--tinte);
+  cursor: pointer;
+  text-align: center;
+}
+
+.zeitraumwahl .kalenderwahl button.tag:hover {
+  background: #eef3f1;
+}
+
+.zeitraumwahl .kalenderwahl button.tag.heute {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.zeitraumwahl .kalenderwahl button.tag.im-bereich {
+  background: #d7e8e3;
+}
+
+.zeitraumwahl .kalenderwahl button.tag.start,
+.zeitraumwahl .kalenderwahl button.tag.ende {
+  background: var(--akzent);
+  color: #fff;
+}
+
+.zeitraumwahl .kalenderwahl .hinweis-klick {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: var(--grau);
 }
 
 nav.tageswahl,

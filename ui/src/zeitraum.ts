@@ -14,9 +14,12 @@ export interface Vorgabe {
   schluessel: string
   titel: string
   zeitraum: Zeitraum
+  // Überschrift der Gruppe in der Liste neben dem Kalender; ohne Angabe steht
+  // die Vorgabe allein (z. B. „Alles").
+  gruppe?: 'Rückblick' | 'Kalender' | 'Jahre'
 }
 
-function iso(d: Date): string {
+export function iso(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const t = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${t}`
@@ -36,25 +39,60 @@ export function vorgaben(heute: Date = new Date()): Vorgabe[] {
   const montag = new Date(j, m, heute.getDate() - wochentag)
   const sonntag = new Date(j, m, heute.getDate() - wochentag + 6)
   const q = Math.floor(m / 3)
+  const bis = iso(heute)
+  // Rückblick: die letzten n Tage einschließlich heute (7 Tage = heute und die
+  // sechs davor), beide Enden einschließlich wie überall (Z1).
+  const rueckblick = (n: number): Zeitraum => ({
+    von: iso(new Date(j, m, heute.getDate() - (n - 1))),
+    bis,
+  })
   const liste: Vorgabe[] = [
     { schluessel: 'alles', titel: 'Alles', zeitraum: { von: null, bis: null } },
-    { schluessel: 'woche', titel: 'Diese Woche', zeitraum: { von: iso(montag), bis: iso(sonntag) } },
-    { schluessel: 'monat', titel: 'Dieser Monat', zeitraum: { von: tag(j, m, 1), bis: tag(j, m + 1, 0) } },
+    { schluessel: 'r7', titel: 'Letzte 7 Tage', zeitraum: rueckblick(7), gruppe: 'Rückblick' },
+    { schluessel: 'r30', titel: 'Letzte 30 Tage', zeitraum: rueckblick(30), gruppe: 'Rückblick' },
+    { schluessel: 'r90', titel: 'Letzte 90 Tage', zeitraum: rueckblick(90), gruppe: 'Rückblick' },
+    { schluessel: 'r365', titel: 'Letzte 365 Tage', zeitraum: rueckblick(365), gruppe: 'Rückblick' },
+    {
+      schluessel: 'ytd',
+      titel: 'Seit Jahresbeginn',
+      zeitraum: { von: `${j}-01-01`, bis },
+      gruppe: 'Rückblick',
+    },
+    {
+      schluessel: 'woche',
+      titel: 'Diese Woche',
+      zeitraum: { von: iso(montag), bis: iso(sonntag) },
+      gruppe: 'Kalender',
+    },
+    {
+      schluessel: 'monat',
+      titel: 'Dieser Monat',
+      zeitraum: { von: tag(j, m, 1), bis: tag(j, m + 1, 0) },
+      gruppe: 'Kalender',
+    },
     {
       schluessel: 'vormonat',
       titel: 'Letzter Monat',
       zeitraum: { von: tag(j, m - 1, 1), bis: tag(j, m, 0) },
+      gruppe: 'Kalender',
     },
     {
       schluessel: 'quartal',
       titel: 'Dieses Quartal',
       zeitraum: { von: tag(j, q * 3, 1), bis: tag(j, q * 3 + 3, 0) },
+      gruppe: 'Kalender',
     },
-    { schluessel: 'jahr', titel: 'Dieses Jahr', zeitraum: { von: `${j}-01-01`, bis: `${j}-12-31` } },
+    {
+      schluessel: 'jahr',
+      titel: 'Dieses Jahr',
+      zeitraum: { von: `${j}-01-01`, bis: `${j}-12-31` },
+      gruppe: 'Kalender',
+    },
     {
       schluessel: 'vorjahr',
       titel: 'Letztes Jahr',
       zeitraum: { von: `${j - 1}-01-01`, bis: `${j - 1}-12-31` },
+      gruppe: 'Kalender',
     },
   ]
   for (let jahr = j - 2; jahr >= ERSTES_JAHR; jahr--) {
@@ -62,6 +100,7 @@ export function vorgaben(heute: Date = new Date()): Vorgabe[] {
       schluessel: `j${jahr}`,
       titel: String(jahr),
       zeitraum: { von: `${jahr}-01-01`, bis: `${jahr}-12-31` },
+      gruppe: 'Jahre',
     })
   }
   return liste

@@ -112,6 +112,9 @@ class KetteAntwort(BaseModel):
     # AP-07pv, P8: Prämie des ersten bzw. letzten Glieds, Durchreichen.
     eroeffnungspreis: str | None
     schlusspreis: str | None
+    # Kontrakte bzw. Stück der Eröffnung: ``menge`` des ersten Glieds,
+    # Durchreichen (Spalte „Anzahl").
+    menge: str | None
     struktur_summe_netto: str | None
     waehrung: str | None
     waehrungen: list[str]
@@ -725,6 +728,7 @@ def _kette_als_dict(
     summe: Decimal | None,
     eroeffnungspreis: Decimal | None,
     schlusspreis: Decimal | None,
+    menge: Decimal | None = None,
 ) -> dict:
     """Spaltenwerte einer Kettenzeile für das Antwortmodell (Vertrag 8)."""
     return dict(
@@ -744,6 +748,7 @@ def _kette_als_dict(
         # Durchreichen, kein Rechnen.
         eroeffnungspreis=praemie_als_text(eroeffnungspreis),
         schlusspreis=praemie_als_text(schlusspreis),
+        menge=_als_text(menge),
         struktur_summe_netto=_als_text(summe),
         waehrung=waehrungen[0] if len(waehrungen) == 1 else None,
         waehrungen=waehrungen,
@@ -777,10 +782,14 @@ def _kampagne_als_dict(zeile, anzahl_ketten: int) -> dict:
 def _ketten_zuschuesse(
     verbindung: Connection, chain_ids: list[int]
 ) -> dict[
-    int, tuple[int, list[str], Decimal | None, Decimal | None, Decimal | None]
+    int,
+    tuple[
+        int, list[str], Decimal | None, Decimal | None, Decimal | None, Decimal | None
+    ],
 ]:
-    """Gliederzahl, Währungen, Struktursumme und die Prämien aus erstem und
-    letztem Glied je Kette (Vertrag 8; AP-07pv, P8).
+    """Gliederzahl, Währungen, Struktursumme, die Prämien aus erstem und
+    letztem Glied und die Menge des ersten Glieds je Kette (Vertrag 8;
+    AP-07pv, P8).
 
     Die Summe bleibt leer, wenn die Kette mehrere Währungen enthält
     (Entscheidung 3) oder eines ihrer Glieder noch kein Ergebnis trägt
@@ -801,6 +810,7 @@ def _ketten_zuschuesse(
                 structures.c.netto_pnl,
                 structures.c.eroeffnungspreis,
                 structures.c.schlusspreis,
+                structures.c.menge,
             )
             .join(structures, structures.c.structure_id == chain_links.c.structure_id)
             .where(chain_links.c.chain_id.in_(chain_ids))
@@ -813,6 +823,7 @@ def _ketten_zuschuesse(
             netto_pnl,
             eroeffnungspreis,
             schlusspreis,
+            menge,
         ) in zeilen:
             eintrag = je_kette.setdefault(
                 chain_id,
@@ -824,6 +835,7 @@ def _ketten_zuschuesse(
                     letzte=None,
                     eroeffnungspreis=None,
                     schlusspreis=None,
+                    menge=None,
                 ),
             )
             eintrag["glieder"] += 1
@@ -835,11 +847,15 @@ def _ketten_zuschuesse(
             if eintrag["erste"] is None or stelle < eintrag["erste"]:
                 eintrag["erste"] = stelle
                 eintrag["eroeffnungspreis"] = eroeffnungspreis
+                eintrag["menge"] = menge
             if eintrag["letzte"] is None or stelle > eintrag["letzte"]:
                 eintrag["letzte"] = stelle
                 eintrag["schlusspreis"] = schlusspreis
     zuschuesse: dict[
-        int, tuple[int, list[str], Decimal | None, Decimal | None, Decimal | None]
+        int,
+        tuple[
+            int, list[str], Decimal | None, Decimal | None, Decimal | None, Decimal | None
+        ],
     ] = {}
     for chain_id, eintrag in je_kette.items():
         waehrungen = sorted(eintrag["waehrungen"])
@@ -855,6 +871,7 @@ def _ketten_zuschuesse(
             summe,
             eintrag["eroeffnungspreis"],
             eintrag["schlusspreis"],
+            eintrag["menge"],
         )
     return zuschuesse
 
@@ -1110,7 +1127,7 @@ def erzeuge_app(
                 .offset(offset)
             ).mappings().all()
             zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
-        leer = (0, [], None, None, None)
+        leer = (0, [], None, None, None, None)
         return KettenListeAntwort(
             gesamt=gesamt,
             treffer=[

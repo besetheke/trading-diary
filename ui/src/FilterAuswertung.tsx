@@ -13,9 +13,13 @@ import Linie from './diagramm/Linie'
 export default function FilterAuswertung({
   auswertung,
   fehler,
+  mitZeitraum,
 }: {
   auswertung: Auswertung | null
   fehler: string | null
+  // Ist ein Zeitraum gewählt? Die Zahl der Positionen gilt dann ohne ihn (die
+  // Summe dagegen nur für dort geschlossene Strukturen).
+  mitZeitraum: boolean
 }): JSX.Element {
   if (fehler) {
     return (
@@ -35,7 +39,15 @@ export default function FilterAuswertung({
       <h3>Ergebnis der gefilterten Positionen</h3>
       <dl className="kopf">
         <div>
-          <dt>Positionen in der Auswahl</dt>
+          <dt
+            title={
+              mitZeitraum
+                ? 'Zahl der Positionen, die die Filter erfüllen — der Zeitraum ist hier nicht angewendet.'
+                : undefined
+            }
+          >
+            Positionen in der Auswahl{mitZeitraum ? ' (ohne Zeitraum)' : ''}
+          </dt>
           <dd>{ergebnis.anzahl_ketten}</dd>
         </div>
         <div>

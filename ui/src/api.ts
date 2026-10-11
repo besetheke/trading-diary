@@ -18,6 +18,9 @@ export interface Kette {
   // liefert — Zeichenkette oder leer; offen heißt ohne Schlusspreis.
   eroeffnungspreis: string | null
   schlusspreis: string | null
+  // Kontrakte bzw. Stück der Eröffnung (menge des ersten Glieds), Text wie die
+  // API ihn liefert.
+  menge: string | null
   struktur_summe_netto: string | null
   waehrung: string | null
   waehrungen: string[]

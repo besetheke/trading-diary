@@ -11,7 +11,7 @@ import type {
   Richtung,
   Sortierspalte,
 } from './api'
-import { betrag, datumDe, zeit, zeitDe } from './format'
+import { betrag, datumDe, mengeDe, zeit, zeitDe } from './format'
 import Betrag from './Betrag'
 import FilterAuswertung from './FilterAuswertung'
 import { useZeitraum } from './zeitraum'
@@ -37,6 +37,7 @@ type SpaltenId =
   | 'underlying'
   | 'asset_class'
   | 'seite'
+  | 'menge'
   | 'beendet_am'
   | 'anzahl_rolls'
   | 'endzustand'
@@ -50,6 +51,8 @@ interface Spalte {
   titel: string
   sortierbar: boolean
   ersteRichtung?: Richtung
+  // Erklärung im Tooltip des Spaltenkopfs (bei sortierbaren Spalten).
+  hinweis?: string
 }
 
 const SPALTEN: Record<SpaltenId, Spalte> = {
@@ -57,8 +60,17 @@ const SPALTEN: Record<SpaltenId, Spalte> = {
   underlying: { titel: 'Basiswert', sortierbar: true, ersteRichtung: 'asc' },
   asset_class: { titel: 'Klasse', sortierbar: true, ersteRichtung: 'asc' },
   seite: { titel: 'Seite', sortierbar: true, ersteRichtung: 'asc' },
+  // Kontrakte bzw. Stück der Eröffnung. Wie die Preise je Seite zusammengestellt,
+  // nicht sortierbar (AP-07s).
+  menge: { titel: 'Anzahl', sortierbar: false },
   beendet_am: { titel: 'Ende', sortierbar: true, ersteRichtung: 'desc' },
-  anzahl_rolls: { titel: 'Rolls', sortierbar: true, ersteRichtung: 'desc' },
+  anzahl_rolls: {
+    titel: 'Rolls (belegt)',
+    sortierbar: true,
+    ersteRichtung: 'desc',
+    hinweis:
+      'Nur Rolls, die eine gemeinsame Order belegt. Ein Roll in getrennten Orders ist ein Vorschlag und zählt nicht.',
+  },
   endzustand: { titel: 'Endzustand', sortierbar: true, ersteRichtung: 'asc' },
   oa_strategie: { titel: 'OA-Strategie', sortierbar: true, ersteRichtung: 'asc' },
   // Preise, Ergebnis und Währung sind je Seite zusammengestellt — nicht
@@ -73,6 +85,7 @@ const SPALTEN: Record<SpaltenId, Spalte> = {
 const ALLE_SPALTEN = Object.keys(SPALTEN) as SpaltenId[]
 const STANDARD_SPALTEN: SpaltenId[] = [...ALLE_SPALTEN]
 const ZAHL_SPALTEN: SpaltenId[] = [
+  'menge',
   'anzahl_rolls',
   'eroeffnungspreis',
   'schlusspreis',
@@ -92,7 +105,7 @@ function istSortierbareSpalte(wert: string | null): wert is Sortierspalte {
 // Vorgabe — vollständig oder gar nicht, nichts wird still repariert.
 function leseSpalten(): SpaltenId[] | null {
   try {
-    const roh = window.localStorage.getItem('positionen.spalten')
+    const roh = window.localStorage.getItem('positionen.spalten.v2')
     if (roh === null) return null
     const geparst: unknown = JSON.parse(roh)
     if (!Array.isArray(geparst) || geparst.length === 0) return null
@@ -217,6 +230,13 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
       return <td>{kette.asset_class}</td>
     case 'seite':
       return <td>{kette.seite ?? '—'}</td>
+    // Kontrakte bzw. Stück der Eröffnung; der Rohwert steht im Tooltip.
+    case 'menge':
+      return (
+        <td className="zahl" title={kette.menge ?? undefined}>
+          {mengeDe(kette.menge)}
+        </td>
+      )
     case 'beendet_am':
       return (
         <td className="zeit" title={kette.beendet_am ? zeit(kette.beendet_am) : undefined}>
@@ -238,9 +258,19 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
     case 'eroeffnungspreis':
     case 'schlusspreis': {
       const voll = id === 'eroeffnungspreis' ? kette.eroeffnungspreis : kette.schlusspreis
+      // Ein Schlusspreis von 0 bei Verfall oder Zuteilung ist richtig, aber ohne
+      // Aussage über den Weg: Verfall (wertlos) oder Zuteilung (Aktie geliefert).
+      // Der Rohwert bleibt im Tooltip; ein 0-Preis aus normalem Handel bleibt 0,00.
+      const nullPreis = id === 'schlusspreis' && voll !== null && /^-?0(\.0+)?$/.test(voll)
+      const marke =
+        nullPreis && kette.endzustand === 'Verfall'
+          ? 'Verfall'
+          : nullPreis && kette.endzustand === 'Assigned'
+            ? 'Zuteilung'
+            : null
       return (
-        <td className="zahl" title={voll ?? undefined}>
-          {voll === null ? '—' : betrag(voll)}
+        <td className="zahl" title={voll === null ? undefined : marke ? `${marke} — Preis ${voll}` : voll}>
+          {voll === null ? '—' : (marke ?? betrag(voll))}
         </td>
       )
     }
@@ -340,7 +370,7 @@ export default function Positionen(): JSX.Element {
   // still nur für diese Sitzung — die Ansicht bricht darüber nicht.
   useEffect(() => {
     try {
-      window.localStorage.setItem('positionen.spalten', JSON.stringify(sichtbare))
+      window.localStorage.setItem('positionen.spalten.v2', JSON.stringify(sichtbare))
     } catch {
       /* Speicher fehlt oder ist voll — nichts weiter zu tun. */
     }
@@ -610,7 +640,11 @@ export default function Positionen(): JSX.Element {
       </form>
 
       {/* AP-08g2b: Verlauf und Ergebnis der Auswahl (GET /auswertung). */}
-      <FilterAuswertung auswertung={auswertung} fehler={auswertungFehler} />
+      <FilterAuswertung
+        auswertung={auswertung}
+        fehler={auswertungFehler}
+        mitZeitraum={zeitraum.von !== null || zeitraum.bis !== null}
+      />
 
       {/* AP-08s: Spaltenauswahl — ein Kästchen je Spalte, Reihenfolge über
           die Pfeile, im Browser gespeichert (mit Rückfall auf die Vorgabe);
@@ -703,7 +737,7 @@ export default function Positionen(): JSX.Element {
                       aria-sort={
                         aktiv ? (richtung === 'asc' ? 'ascending' : 'descending') : undefined
                       }
-                      title={spalte.sortierbar ? undefined : NICHT_SORTIERBAR_TITEL}
+                      title={spalte.sortierbar ? spalte.hinweis : NICHT_SORTIERBAR_TITEL}
                     >
                       {spalte.sortierbar ? (
                         <button type="button" className="sortierer" onClick={() => sortiereNach(id)}>
@@ -754,7 +788,10 @@ export default function Positionen(): JSX.Element {
           </footer>
           <p className="sicht fussnote">
             ¹ Kontosicht, Summe der Strukturergebnisse — der genaue Wert steht
-            im Tooltip der Zelle. Keine Umrechnung, nichts gerechnet.
+            im Tooltip der Zelle. Keine Umrechnung, nichts gerechnet. „Anzahl“:
+            Kontrakte bzw. Stück der Eröffnung. „Preis zu“: bei Verfall und Zuteilung
+            steht der Weg statt 0,00. „Rolls (belegt)“ zählt nur Rolls, die eine
+            gemeinsame Order belegt; Rolls in getrennten Orders sind Vorschläge.
           </p>
         </>
       )}

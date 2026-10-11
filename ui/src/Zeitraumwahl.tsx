@@ -1,37 +1,42 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Kalenderwahl from './Kalenderwahl'
 import { datumDe } from './format'
 import { passendeVorgabe, useZeitraum, vorgaben } from './zeitraum'
+import type { Vorgabe, Zeitraum } from './zeitraum'
 
-// AP-08f2: Zeitraum-Wähler im Kopf. Eine Auswahlliste mit den Vorgaben
-// (Z1) und „Von–bis …" für einen freien Zeitraum; der gewählte Zeitraum
+// AP-08f2, überarbeitet: Zeitraum-Wähler im Kopf. Eine Schaltfläche zeigt den
+// gewählten Zeitraum; sie öffnet ein Fenster mit den Vorgaben (Z1) links und
+// einem Kalender rechts — erster Klick Start, zweiter Klick Ende. Der Zeitraum
 // steht in der Adresse und gilt für jede Ansicht, die Zeit kennt.
-
-const EIGEN = 'eigen'
 
 export default function Zeitraumwahl({ wirkt }: { wirkt: boolean }): JSX.Element {
   const [zeitraum, setzeZeitraum] = useZeitraum()
+  const [offen, setzeOffen] = useState(false)
+  const huelle = useRef<HTMLDivElement>(null)
   const liste = vorgaben()
   const passend = passendeVorgabe(zeitraum)
-  const [eigen, setzeEigen] = useState(passend === null)
-  const [entwurf, setzeEntwurf] = useState({ von: zeitraum.von ?? '', bis: zeitraum.bis ?? '' })
 
-  // Kommt der Zeitraum von außen (Verweis, Zurück-Taste), Entwurf nachziehen.
+  // Außerhalb klicken oder Esc schließt das Fenster.
   useEffect(() => {
-    setzeEntwurf({ von: zeitraum.von ?? '', bis: zeitraum.bis ?? '' })
-    if (passendeVorgabe(zeitraum) === null) setzeEigen(true)
-  }, [zeitraum.von, zeitraum.bis])
-
-  function waehle(schluessel: string): void {
-    if (schluessel === EIGEN) {
-      setzeEigen(true)
-      return
+    if (!offen) return
+    function ausserhalb(e: MouseEvent): void {
+      if (huelle.current && !huelle.current.contains(e.target as Node)) setzeOffen(false)
     }
-    setzeEigen(false)
-    const vorgabe = liste.find((v) => v.schluessel === schluessel)
-    if (vorgabe) setzeZeitraum(vorgabe.zeitraum)
-  }
+    function taste(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setzeOffen(false)
+    }
+    document.addEventListener('mousedown', ausserhalb)
+    document.addEventListener('keydown', taste)
+    return () => {
+      document.removeEventListener('mousedown', ausserhalb)
+      document.removeEventListener('keydown', taste)
+    }
+  }, [offen])
 
-  const ungueltig = entwurf.von !== '' && entwurf.bis !== '' && entwurf.von > entwurf.bis
+  function uebernimm(z: Zeitraum): void {
+    setzeZeitraum(z)
+    setzeOffen(false)
+  }
 
   const beschreibung =
     zeitraum.von === null && zeitraum.bis === null
@@ -40,52 +45,56 @@ export default function Zeitraumwahl({ wirkt }: { wirkt: boolean }): JSX.Element
           zeitraum.bis ? datumDe(zeitraum.bis) : 'heute'
         }`
 
+  const gruppen: { name: string | null; eintraege: Vorgabe[] }[] = []
+  for (const v of liste) {
+    const name = v.gruppe ?? null
+    const letzte = gruppen[gruppen.length - 1]
+    if (letzte && letzte.name === name) letzte.eintraege.push(v)
+    else gruppen.push({ name, eintraege: [v] })
+  }
+
   return (
-    <div className="zeitraumwahl">
-      <label>
-        Zeitraum
-        <select
-          value={eigen ? EIGEN : (passend?.schluessel ?? EIGEN)}
-          onChange={(e) => waehle(e.target.value)}
-        >
-          {liste.map((v) => (
-            <option key={v.schluessel} value={v.schluessel}>
-              {v.titel}
-            </option>
-          ))}
-          <option value={EIGEN}>Von – bis …</option>
-        </select>
-      </label>
-      {eigen && (
-        <form
-          className="eigen"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!ungueltig) setzeZeitraum({ von: entwurf.von || null, bis: entwurf.bis || null })
-          }}
-        >
-          <input
-            type="date"
-            value={entwurf.von}
-            onChange={(e) => setzeEntwurf({ ...entwurf, von: e.target.value })}
-            aria-label="von"
-          />
-          <span>–</span>
-          <input
-            type="date"
-            value={entwurf.bis}
-            onChange={(e) => setzeEntwurf({ ...entwurf, bis: e.target.value })}
-            aria-label="bis"
-          />
-          <button type="submit" disabled={ungueltig}>
-            Übernehmen
-          </button>
-          {ungueltig && <span className="negativ">„von" liegt nach „bis"</span>}
-        </form>
-      )}
-      <span className="beschreibung">{beschreibung}</span>
+    <div className="zeitraumwahl" ref={huelle}>
+      <span className="bezeichnung">Zeitraum</span>
+      <button
+        type="button"
+        className="auswahl"
+        aria-expanded={offen}
+        aria-haspopup="dialog"
+        onClick={() => setzeOffen(!offen)}
+      >
+        {passend ? `${passend.titel} · ` : ''}
+        {beschreibung} <span aria-hidden="true">▾</span>
+      </button>
       {!wirkt && (zeitraum.von || zeitraum.bis) && (
         <span className="fussnote">— wirkt auf dieser Seite noch nicht</span>
+      )}
+
+      {offen && (
+        <div className="fenster" role="dialog" aria-label="Zeitraum wählen">
+          <div className="vorgaben">
+            {gruppen.map((gruppe) => (
+              <div key={gruppe.name ?? 'ohne'} className="gruppe">
+                {gruppe.name && <h4>{gruppe.name}</h4>}
+                <ul>
+                  {gruppe.eintraege.map((v) => (
+                    <li key={v.schluessel}>
+                      <button
+                        type="button"
+                        aria-pressed={passend?.schluessel === v.schluessel}
+                        className={passend?.schluessel === v.schluessel ? 'gewaehlt' : undefined}
+                        onClick={() => uebernimm(v.zeitraum)}
+                      >
+                        {v.titel}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <Kalenderwahl zeitraum={zeitraum} waehle={uebernimm} />
+        </div>
       )}
     </div>
   )

@@ -115,3 +115,14 @@ export function zeitDe(iso: string | null): string {
   return iso.includes('T') ? `${datumDe(iso)} ${iso.slice(11, 16)}` : datumDe(iso)
 }
 
+// Eine Menge (Kontrakte, Stück) in deutscher Schreibweise: Tausenderpunkte,
+// Komma, überflüssige Nullen am Ende fallen weg — gerundet wird nie (0,0741
+// bleibt 0,0741). Was kein Zahlentext ist, bleibt unverändert; leer ist „—".
+export function mengeDe(wert: string | null): string {
+  if (wert === null || wert === '') return '—'
+  const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(wert)
+  if (!m) return wert
+  const ganz = m[2].replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  const rest = m[3] ? m[3].replace(/0+$/, '') : ''
+  return `${m[1]}${ganz}${rest ? ',' + rest : ''}`
+}
