@@ -428,6 +428,23 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-14a: Zustand der Station (Seite „System“).
+export interface Dienst {
+  name: string
+  port: number | null
+  erreichbar: boolean | null
+  hinweis: string | null
+}
+
+export interface System {
+  dienste: Dienst[]
+  importe: { quelle: string; zuletzt: string | null; daten_bis: string | null }[]
+}
+
+export function holeSystem(): Promise<System> {
+  return hole('/system') as Promise<System>
+}
+
 // AP-12a: Option-Omega-Backtests — Beträge als Text, USD je Kontrakt.
 export interface BacktestZuordnung {
   oo_strategie: string

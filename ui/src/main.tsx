@@ -16,6 +16,7 @@ import OaAbgleich from './OaAbgleich'
 import Backtests from './Backtests'
 import Tag from './Tag'
 import Uebersicht from './Uebersicht'
+import { BreakoutSeite, MomentumSeite, RollerSeite, SystemSeite } from './Station'
 import './stil.css'
 
 // AP-08j: „Heute" zeigt das Datum der lokalen Zeit des Browsers — kein
@@ -33,33 +34,69 @@ function heuteDatum(): string {
 // Positionsliste (/) ebenso.
 const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten', '/strategie', '/abgleich', '/backtest']
 
+// AP-14a: Bereiche der Station. Jede Seite gehört zu genau einem Bereich; die
+// erste Zeile wählt den Bereich, die zweite die Seiten darin.
+type Bereich = 'journal' | 'pruefen' | 'roller' | 'momentum' | 'breakout' | 'system'
+
+function bereichVon(pfad: string): Bereich {
+  if (['/abgleich', '/backtest', '/rolls'].includes(pfad)) return 'pruefen'
+  if (pfad === '/roller') return 'roller'
+  if (pfad === '/momentum') return 'momentum'
+  if (pfad === '/breakout') return 'breakout'
+  if (pfad === '/zustand') return 'system'
+  return 'journal'
+}
+
+// Seiten ohne Zeitraum: Der Wähler bleibt dort aus (Momentum Lab, System …).
+const OHNE_ZEITRAUM: Bereich[] = ['roller', 'momentum', 'breakout', 'system']
+
 function Kopf(): JSX.Element {
   const ort = useLocation()
   const [zeitraum] = useZeitraum()
   const mit = zeitraumSuche(zeitraum)
+  const bereich = bereichVon(ort.pathname)
+  const aktiv = (b: Bereich) => (b === bereich ? 'aktiv' : undefined)
   return (
     <header>
       <h1>
-        <Link to={`/${mit}`}>Trading Journal</Link>
+        <Link to="/start">Trading Station</Link>
       </h1>
-      <p className="sicht">
-        Alle Geldbeträge in Kontosicht. Der genaue Wert steht jeweils im Tooltip.
-      </p>
-      <nav className="hauptnav">
-        <Link to="/start">Übersicht</Link>
-        <Link to={`/dashboard${mit}`}>Dashboard</Link>
-        <Link to={`/bestand${mit}`}>Depot</Link>
-        <Link to={`/${mit}`}>Positionen</Link>
-        <Link to={`/strategie${mit}`}>Strategien</Link>
-        <Link to={`/abgleich${mit}`}>Abgleich OA</Link>
-        <Link to="/backtest">Backtests</Link>
-        <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
-        <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
-        <Link to={`/monat${mit}`}>Kalender</Link>
-        <Link to="/rolls">Rolls prüfen</Link>
-        <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
+      <nav className="bereichsnav">
+        <Link className={aktiv('journal')} to="/start">Journal</Link>
+        <Link className={aktiv('pruefen')} to={`/backtest${mit}`}>Abgleich &amp; Tests</Link>
+        <Link className={aktiv('roller')} to="/roller">Roller</Link>
+        <Link className={aktiv('momentum')} to="/momentum">Momentum Lab</Link>
+        <Link className={aktiv('breakout')} to="/breakout">Breakout</Link>
+        <Link className={aktiv('system')} to="/zustand">System</Link>
       </nav>
-      <Zeitraumwahl wirkt={ZEITRAUM_SEITEN.includes(ort.pathname)} />
+      {bereich === 'journal' && (
+        <nav className="hauptnav">
+          <Link to="/start">Übersicht</Link>
+          <Link to={`/dashboard${mit}`}>Dashboard</Link>
+          <Link to={`/bestand${mit}`}>Depot</Link>
+          <Link to={`/${mit}`}>Positionen</Link>
+          <Link to={`/strategie${mit}`}>Strategien</Link>
+          <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
+          <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
+          <Link to={`/monat${mit}`}>Kalender</Link>
+          <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
+        </nav>
+      )}
+      {bereich === 'pruefen' && (
+        <nav className="hauptnav">
+          <Link to={`/backtest${mit}`}>Backtests</Link>
+          <Link to={`/abgleich${mit}`}>Abgleich OA</Link>
+          <Link to="/rolls">Rolls prüfen</Link>
+        </nav>
+      )}
+      {!OHNE_ZEITRAUM.includes(bereich) && (
+        <>
+          <p className="sicht">
+            Alle Geldbeträge in Kontosicht. Der genaue Wert steht jeweils im Tooltip.
+          </p>
+          <Zeitraumwahl wirkt={ZEITRAUM_SEITEN.includes(ort.pathname)} />
+        </>
+      )}
     </header>
   )
 }
@@ -111,6 +148,11 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             <Route path="/abgleich" element={<OaAbgleich />} />
             {/* AP-12a: /backtests ist der API-Endpunkt, die Seite /backtest. */}
             <Route path="/backtest" element={<Backtests />} />
+            {/* AP-14a: Station. /system ist der API-Endpunkt, die Seite /zustand. */}
+            <Route path="/zustand" element={<SystemSeite />} />
+            <Route path="/roller" element={<RollerSeite />} />
+            <Route path="/momentum" element={<MomentumSeite />} />
+            <Route path="/breakout" element={<BreakoutSeite />} />
             <Route path="*" element={<Unbekannt />} />
           </Routes>
         </main>

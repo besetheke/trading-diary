@@ -509,6 +509,49 @@ class RollkandidatenAntwort(BaseModel):
 
 
 # AP-12a: Backtests — Geld als Text (Vertrag 8), USD je Kontrakt.
+# AP-14a: Cockpit, Seite „System“.
+class DienstAntwort(BaseModel):
+    name: str
+    port: int | None
+    # None = (noch) nicht prüfbar, z. B. der Roller vor R2.
+    erreichbar: bool | None
+    hinweis: str | None = None
+
+
+class ImportStandAntwort(BaseModel):
+    quelle: str
+    zuletzt: datetime | None
+    daten_bis: date | None
+
+
+class SystemAntwort(BaseModel):
+    dienste: list[DienstAntwort]
+    importe: list[ImportStandAntwort]
+
+
+# Dienste der Station (AP-14a). Ports auf 127.0.0.1; die Prüfung ist nur ein
+# TCP-Verbindungsversuch — keine API-Sitzung, keine Anmeldung bei IB.
+DIENSTE: list[tuple[str, int | None, str | None]] = [
+    ("TWS live", 7496, None),
+    ("TWS Paper", 7497, None),
+    ("IB Gateway live", 4001, None),
+    ("IB Gateway Paper", 4002, None),
+    ("Momentum Lab", 8501, "Start über das Startmenü „Momentum Lab“"),
+    ("Options Roller", None,
+     "Läuft noch nicht als Dienst — Status kommt mit Stufe R2 (Herzschlag ans Cockpit)"),
+]
+IMPORT_QUELLEN = ("flex", "optionapp", "optionomega")
+
+
+def _port_offen(port: int) -> bool:
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
 class BacktestZuordnungAntwort(BaseModel):
     oo_strategie: str
     oa_strategie: str
@@ -1956,6 +1999,7 @@ def erzeuge_app(
     *,
     ui_verzeichnis: str | pathlib.Path | None = None,
     mit_journal: bool = False,
+    pruefe_port=None,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
 
@@ -1969,7 +2013,11 @@ def erzeuge_app(
     ``mit_journal`` schaltet die Journal-Routen dazu (AP-07j): Ohne den
     Schalter bleibt das OpenAPI-Schema ausschließlich lesend. Das Modulobjekt
     ``app`` startet mit Journal — die Oberfläche braucht es.
+
+    ``pruefe_port`` ersetzt die Erreichbarkeitsprüfung der Seite „System“
+    (AP-14a) — nur für Tests.
     """
+    pruefe_port = pruefe_port or _port_offen
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
 
     if ui_verzeichnis is not None:
@@ -2647,6 +2695,30 @@ def erzeuge_app(
             anzahl_trades=len(e.trades),
             anzahl_gleich=sum(1 for t in e.trades if t.grund == "gleich"),
         )
+
+    @applikation.get("/system", response_model=SystemAntwort)
+    def system() -> SystemAntwort:
+        """Zustand der Station (AP-14a): welche Dienste erreichbar sind und wann
+        jede Quelle zuletzt eingelesen wurde."""
+        dienste = [
+            DienstAntwort(name=name, port=port,
+                          erreichbar=None if port is None else pruefe_port(port),
+                          hinweis=hinweis)
+            for name, port, hinweis in DIENSTE
+        ]
+        with engine.connect() as verbindung:
+            stand = {
+                quelle: (zuletzt, bis)
+                for quelle, zuletzt, bis in verbindung.execute(
+                    select(import_runs.c.quelle, func.max(import_runs.c.importiert_am),
+                           func.max(import_runs.c.zeitraum_bis))
+                    .group_by(import_runs.c.quelle))
+            }
+        return SystemAntwort(dienste=dienste, importe=[
+            ImportStandAntwort(quelle=q, zuletzt=stand.get(q, (None, None))[0],
+                               daten_bis=stand.get(q, (None, None))[1])
+            for q in IMPORT_QUELLEN
+        ])
 
     @applikation.get("/backtests", response_model=BacktestsAntwort)
     def backtests(von: date | None = None, bis: date | None = None) -> BacktestsAntwort:
