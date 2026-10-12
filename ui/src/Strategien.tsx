@@ -219,7 +219,11 @@ export default function Strategien(): JSX.Element {
                   {z.strategie === null ? (
                     <em>ohne Strategie</em>
                   ) : (
-                    <Link to={`/?strategie=${encodeURIComponent(z.strategie)}`}>
+                    <Link
+                      to={`/?strategie=${encodeURIComponent(z.strategie)}${
+                        ansicht === "schritte" ? "&ansicht=schritte" : ""
+                      }`}
+                    >
                       {z.strategie}
                     </Link>
                   )}

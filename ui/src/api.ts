@@ -23,6 +23,9 @@ export interface Kette {
   menge: string | null
   struktur_summe_netto: string | null
   realisiert_bisher?: string | null
+  // AP-06se: Schrittansicht — Nummer des Glieds und Zahl der Glieder.
+  schritt?: number | null
+  schritte_gesamt?: number | null
   waehrung: string | null
   waehrungen: string[]
   sicht: string
@@ -241,6 +244,8 @@ export interface KettenAbfrage extends KettenFilter {
   bis?: string | null
   limit: number
   offset: number
+  // AP-06se: 'schritte' = eine Zeile je Kettenglied (Roll-Schritt).
+  ansicht?: 'ketten' | 'schritte'
 }
 
 export function holeKetten(abfrage: KettenAbfrage): Promise<KettenListe> {
@@ -252,6 +257,7 @@ export function holeKetten(abfrage: KettenAbfrage): Promise<KettenListe> {
   if (abfrage.bis) zusaetze.set('bis', abfrage.bis)
   zusaetze.set('limit', String(abfrage.limit))
   zusaetze.set('offset', String(abfrage.offset))
+  if (abfrage.ansicht === 'schritte') zusaetze.set('ansicht', 'schritte')
   return hole(`/ketten?${zusaetze.toString()}`) as Promise<KettenListe>
 }
 

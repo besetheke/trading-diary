@@ -295,7 +295,14 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
         </td>
       )
     case 'anzahl_rolls':
-      return <td className="zahl">{kette.anzahl_rolls}</td>
+      // AP-06se: In der Schrittansicht steht hier die Nummer des Glieds.
+      return kette.schritt ? (
+        <td className="zahl" title="Glied der Kette (1 = Eröffnung, danach jeweils ein Roll)">
+          {kette.schritt} / {kette.schritte_gesamt}
+        </td>
+      ) : (
+        <td className="zahl">{kette.anzahl_rolls}</td>
+      )
     case 'endzustand':
       return <td>{kette.endzustand ?? '—'}</td>
     // AP-13x: OA-Strategie der Kette (AP-13wk), reines Durchreichen; leer
@@ -450,6 +457,11 @@ export default function Positionen(): JSX.Element {
   const richtung: Richtung =
     richtungParam === 'asc' || richtungParam === 'desc' ? richtungParam : 'desc'
 
+  // AP-06se: Schrittansicht — jedes Kettenglied als eigene Zeile, um eine
+  // Strategie gezielt mit OptionApp zu vergleichen. Steht in der Adresse.
+  const ansicht: 'ketten' | 'schritte' =
+    suche.get('ansicht') === 'schritte' ? 'schritte' : 'ketten'
+
   const [entwurf, setzeEntwurf] = useState<Entwurf>(() => entwurfAusAdresse(suche))
   const [liste, setzeListe] = useState<KettenListe | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
@@ -504,6 +516,7 @@ export default function Positionen(): JSX.Element {
       bis: zeitraum.bis,
       limit,
       offset,
+      ansicht,
     })
       .then((ergebnis) => {
         if (!abgebrochen) setzeListe(ergebnis)
@@ -514,7 +527,7 @@ export default function Positionen(): JSX.Element {
     return () => {
       abgebrochen = true
     }
-  }, [filterText, limit, offset, sortierung, richtung, zeitraum.von, zeitraum.bis])
+  }, [filterText, limit, offset, sortierung, richtung, zeitraum.von, zeitraum.bis, ansicht])
 
   // AP-08g2b: Verlauf und Ergebnis für dieselbe Auswahl. Der Zeitraum gilt
   // hier am Schließungstag (AP-07f, Z2); Blättern und Sortieren ändern die
@@ -577,6 +590,7 @@ export default function Positionen(): JSX.Element {
     // — von/bis wandern aus der aktuellen Adresse in die neue.
     if (zeitraum.von) naechste.set('von', zeitraum.von)
     if (zeitraum.bis) naechste.set('bis', zeitraum.bis)
+    if (ansicht === 'schritte') naechste.set('ansicht', 'schritte')
     setzeSuche(naechste) // limit und offset fallen auf die Vorgabe zurück
   }
 
@@ -587,6 +601,15 @@ export default function Positionen(): JSX.Element {
     const naechste = new URLSearchParams()
     if (zeitraum.von) naechste.set('von', zeitraum.von)
     if (zeitraum.bis) naechste.set('bis', zeitraum.bis)
+    if (ansicht === 'schritte') naechste.set('ansicht', 'schritte')
+    setzeSuche(naechste)
+  }
+
+  function ansichtWaehlen(neu: 'ketten' | 'schritte'): void {
+    const naechste = new URLSearchParams(suche)
+    if (neu === 'schritte') naechste.set('ansicht', 'schritte')
+    else naechste.delete('ansicht')
+    naechste.delete('offset')
     setzeSuche(naechste)
   }
 
@@ -844,6 +867,24 @@ export default function Positionen(): JSX.Element {
         </section>
       ) : (
         <>
+          <div className="diagramm-wahl" role="group" aria-label="Ansicht der Liste">
+            <button
+              type="button"
+              aria-pressed={ansicht === 'ketten'}
+              title="Eine Zeile je Kette, Rolls zusammen"
+              onClick={() => ansichtWaehlen('ketten')}
+            >
+              Ketten (Rolls zusammen)
+            </button>
+            <button
+              type="button"
+              aria-pressed={ansicht === 'schritte'}
+              title="Eine Zeile je Kettenglied — so zählt OptionApp seine Trades. Die Filter wirken auf die Kette; die Auswertung oben bleibt die der Ketten."
+              onClick={() => ansichtWaehlen('schritte')}
+            >
+              Schritte einzeln (wie OA)
+            </button>
+          </div>
           <table className="positionen">
             <thead>
               <tr>
@@ -874,7 +915,7 @@ export default function Positionen(): JSX.Element {
             </thead>
             <tbody>
               {liste.treffer.map((kette) => (
-                <tr key={kette.chain_id}>
+                <tr key={`${kette.chain_id}-${kette.schritt ?? 0}`}>
                   {sichtbare.map((id) => zelle(kette, id, verweisSpalte))}
                 </tr>
               ))}

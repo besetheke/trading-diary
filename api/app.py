@@ -166,6 +166,10 @@ class KetteAntwort(BaseModel):
     # geschlossenen Glieder (Roll-Schritte), in der Währung der Kette; die
     # Struktursumme bleibt leer. Nur in der Liste gefüllt.
     realisiert_bisher: str | None = None
+    # AP-06se: Schrittansicht — Nummer des Glieds und Zahl der Glieder der
+    # Kette; in der Kettenansicht leer.
+    schritt: int | None = None
+    schritte_gesamt: int | None = None
 
 
 class StrukturAntwort(BaseModel):
@@ -1227,6 +1231,75 @@ def _realisiert_bisher(verbindung: Connection, chain_ids: list[int]) -> dict[int
     return {c: s for c, s in summe.items() if len(waehrungen[c]) == 1}
 
 
+def _schritte_liste(
+    engine, bedingungen, sortierung: str, richtung: str, limit: int, offset: int
+) -> KettenListeAntwort:
+    """Schrittansicht von ``GET /ketten`` (AP-06se): eine Zeile je Glied."""
+    verbund = (
+        chains.join(chain_links, chain_links.c.chain_id == chains.c.chain_id)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+    )
+    sortier_spalte = chains.c[sortierung]
+    with engine.connect() as verbindung:
+        gesamt = verbindung.execute(
+            select(func.count()).select_from(verbund).where(*bedingungen)
+        ).scalar_one()
+        zeilen = verbindung.execute(
+            select(
+                chains,
+                chain_links.c.sequenz.label("s_sequenz"),
+                structures.c.waehrung.label("s_waehrung"),
+                structures.c.eroeffnet_am.label("s_auf"),
+                structures.c.geschlossen_am.label("s_zu"),
+                structures.c.netto_pnl.label("s_netto"),
+                structures.c.eroeffnungspreis.label("s_ep"),
+                structures.c.schlusspreis.label("s_sp"),
+                structures.c.menge.label("s_menge"),
+            )
+            .select_from(verbund)
+            .where(*bedingungen)
+            .order_by(
+                sortier_spalte.is_(None),
+                sortier_spalte.desc() if richtung == "desc" else sortier_spalte.asc(),
+                chains.c.chain_id,
+                chain_links.c.sequenz,
+                structures.c.structure_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        ).mappings().all()
+        ids = sorted({z["chain_id"] for z in zeilen})
+        anzahl: dict[int, int] = {}
+        letzte = {}
+        for chain_id, n, hoechste in verbindung.execute(
+            select(chain_links.c.chain_id, func.count(), func.max(chain_links.c.sequenz))
+            .where(chain_links.c.chain_id.in_(ids))
+            .group_by(chain_links.c.chain_id)
+        ):
+            anzahl[chain_id] = n
+            letzte[chain_id] = hoechste
+        unrealisiert = _unrealisiert_je_kette(verbindung, ids)
+    treffer = []
+    for z in zeilen:
+        k = dict(z)
+        k["eroeffnet_am"], k["beendet_am"] = z["s_auf"], z["s_zu"]
+        # Roll-Schritte tragen keinen Endzustand der Kette; erst das letzte
+        # Glied einer beendeten Kette.
+        letztes = z["s_sequenz"] == letzte[z["chain_id"]]
+        k["endzustand"] = z["endzustand"] if letztes else None
+        offen_letztes = letztes and z["s_zu"] is None
+        unreal = unrealisiert.get(z["chain_id"], (None, 0)) if offen_letztes else (None, 0)
+        treffer.append(KetteAntwort(
+            **_kette_als_dict(k, 1, [z["s_waehrung"]], z["s_netto"], z["s_ep"], z["s_sp"],
+                              z["s_menge"]),
+            unrealisiert_eur=unreal[0],
+            offene_legs_ohne_kurs=unreal[1],
+            schritt=z["s_sequenz"],
+            schritte_gesamt=anzahl[z["chain_id"]],
+        ))
+    return KettenListeAntwort(gesamt=gesamt, treffer=treffer)
+
+
 def _ketten_zuschuesse(
     verbindung: Connection, chain_ids: list[int]
 ) -> dict[
@@ -1903,8 +1976,12 @@ def erzeuge_app(
         richtung: Richtung = "desc",
         limit: Annotated[int, Query(ge=1, le=500)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
+        ansicht: Literal["ketten", "schritte"] = "ketten",
     ) -> KettenListeAntwort:
-        """Liste der Ketten — `gesamt` zählt vor der Begrenzung (Vertrag 4)."""
+        """Liste der Ketten — `gesamt` zählt vor der Begrenzung (Vertrag 4).
+        ``ansicht=schritte`` (AP-06se) liefert statt einer Zeile je Kette eine
+        je Glied (Roll-Schritt), so wie OptionApp seine Trades zählt; die
+        Filter wirken auf die Kette, die Glieder einer Kette stehen beieinander."""
         # AP-04sw, Plan §5: „Keine Abfrage liefert Zeilen aus beiden Sichten
         # in einer Summe." Die Lese-API zeigt ausschließlich die Kontosicht
         # — die Kettensicht hat noch keine eigene Oberfläche/Route.
@@ -1935,6 +2012,8 @@ def erzeuge_app(
             von=von,
             bis=bis,
         )
+        if ansicht == "schritte":
+            return _schritte_liste(engine, bedingungen, sortierung, richtung, limit, offset)
         with engine.connect() as verbindung:
             gesamt = verbindung.execute(
                 select(func.count()).select_from(chains).where(*bedingungen)

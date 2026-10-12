@@ -32,3 +32,13 @@ Nicht Teil: unrealisierte Ergebnisse in der Scorecard; die OA-Sicht je Trade
 
 Tests: `tests/test_strategien_schritte.py`, `tests/test_api_strategien_schritte.py`,
 `tests/test_api_ketten_bisher.py`.
+
+## Nachtrag AP-06se (12.10.2026)
+
+`GET /ketten?ansicht=schritte`: eine Zeile je Kettenglied (Filter wirken auf die
+Kette, Glieder stehen beieinander; `schritt`/`schritte_gesamt`; Ergebnis,
+Zeiten, Preise und Menge des Glieds; Endzustand und Unrealisiert nur am letzten
+Glied). Positionsliste: Umschalter wie in der Scorecard, in der Adresse
+(`ansicht=schritte`); die Scorecard-Links geben die Ansicht weiter. Die
+Auswertung oben auf der Seite bleibt die der Ketten.
+Test: `tests/test_api_ketten_schritte.py`.
