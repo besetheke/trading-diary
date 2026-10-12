@@ -474,6 +474,19 @@ export interface RollerEdge {
   ts?: string | null
 }
 
+// AP-14d: Geschichte der Kette im Journal (nur bei eindeutigem Treffer).
+export interface RollerKette {
+  chain_id: number
+  ketten?: number // Zahl gleicher Ketten (gleiche Strikes), zusammengefasst
+  anzahl_rolls: number
+  strategie: string | null
+  eroeffnet_am: string
+  realisiert_bisher: string | null
+  praemie_offen_eur: string | null
+  praemie_aktuell_eur: string | null
+  unrealisiert_eur: string | null
+}
+
 export interface RollerBreach {
   position_key: string
   symbol: string
@@ -489,6 +502,7 @@ export interface RollerBreach {
   puffer: number | null
   seit: string | null
   edge: RollerEdge | null
+  kette?: RollerKette
 }
 
 export interface RollerSpread {
@@ -501,6 +515,7 @@ export interface RollerSpread {
   menge: number
   short_delta: number | null
   underlying: number | null
+  kette?: RollerKette
 }
 
 export interface RollerStatus {

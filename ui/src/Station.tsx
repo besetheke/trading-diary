@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import Betrag from "./Betrag";
 import { fehlerText, holeBreakout, holeRoller, holeSystem } from "./api";
-import type { BreakoutStand, RollerAntwort, System } from "./api";
+import type { BreakoutStand, RollerAntwort, RollerKette, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -95,6 +97,35 @@ function zahl(wert: number | null | undefined, stellen = 1): string {
     : wert.toLocaleString("de-DE", { minimumFractionDigits: stellen, maximumFractionDigits: stellen });
 }
 
+// AP-14d: Was hat diese Position schon gekostet? Kette im Journal: Rolls,
+// bereits realisiertes Ergebnis (Roll-Schritte), Prämie der offenen Legs.
+function KettenZelle({ k }: { k?: RollerKette }): JSX.Element {
+  if (!k) {
+    return (
+      <td className="kette" title="Keine eindeutige offene Kette im Journal (Stand des letzten Flex-Imports; heute Eröffnetes fehlt noch)">
+        —
+      </td>
+    );
+  }
+  return (
+    <td className="kette">
+      <Link to={`/positionen/${k.chain_id}`} title={k.strategie ?? undefined}>
+        {k.anzahl_rolls} {k.anzahl_rolls === 1 ? "Roll" : "Rolls"}
+      </Link>
+      {k.ketten && k.ketten > 1 ? ` (${k.ketten} Ketten)` : ""}
+      {" · "}
+      bisher <Betrag wert={k.realisiert_bisher} />
+      {k.praemie_offen_eur !== null && (
+        <>
+          {" · "}
+          Prämie <Betrag wert={k.praemie_offen_eur} />
+          {k.praemie_aktuell_eur !== null && <> → <Betrag wert={k.praemie_aktuell_eur} /></>}
+        </>
+      )}
+    </td>
+  );
+}
+
 function verfall(jjjjmmtt: string): string {
   return jjjjmmtt.length === 8
     ? `${jjjjmmtt.slice(6, 8)}.${jjjjmmtt.slice(4, 6)}.${jjjjmmtt.slice(0, 4)}`
@@ -170,6 +201,9 @@ export function RollerSeite(): JSX.Element {
                 <th className="zahl" title="Theoretischer Wert des Rolls in Indexpunkten">Roll Theo</th>
                 <th className="zahl" title="Positiv = Markt verlangt mehr als das Modell (teuer)">Edge</th>
                 <th>Bewertung</th>
+                <th title="Geschichte dieser Kette im Journal: Rolls, bisher realisiert (EUR), Prämie bei Eröffnung → aktuell">
+                  Kette im Journal
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -186,6 +220,7 @@ export function RollerSeite(): JSX.Element {
                   <td className="zahl">{zahl(b.edge?.theo_roll)}</td>
                   <td className="zahl">{zahl(b.edge?.edge_abs, 2)}</td>
                   <td>{b.edge ? `${b.edge.verdict ?? "—"} (${b.edge.data_quality ?? "—"})` : "—"}</td>
+                  <KettenZelle k={b.kette} />
                 </tr>
               ))}
             </tbody>
@@ -205,6 +240,7 @@ export function RollerSeite(): JSX.Element {
               <th className="zahl">Short / Long</th>
               <th className="zahl">|Δ| Short</th>
               <th className="zahl">Basiswert</th>
+              <th>Kette im Journal</th>
             </tr>
           </thead>
           <tbody>
@@ -219,6 +255,7 @@ export function RollerSeite(): JSX.Element {
                 </td>
                 <td className="zahl">{zahl(p.short_delta, 2)}</td>
                 <td className="zahl">{zahl(p.underlying, 1)}</td>
+                <KettenZelle k={p.kette} />
               </tr>
             ))}
           </tbody>

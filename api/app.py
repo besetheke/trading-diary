@@ -590,6 +590,101 @@ def _hole_roller_status(port: int) -> dict | None:
         return None
 
 
+def _roller_symbol(symbol: str) -> str:
+    """SPXW/RUTW/NDXW … gehören im Journal zum Index (SPX/RUT/NDX)."""
+    return symbol[:-1] if symbol.endswith("W") and symbol[:-1] in ("SPX", "RUT", "NDX") else symbol
+
+
+_VERTIKALEN = ("BPS", "BCS", "Vertical")
+
+
+def _fasse_ketten_zusammen(infos: list[dict]) -> dict:
+    """Mehrere offene Ketten mit denselben Strikes sind für den Roller eine
+    Position (AP-14d): Rolls = Maximum, Beträge = Summen (leer bleibt leer),
+    ``ketten`` = Anzahl, ``chain_id`` = die kleinere, Eröffnung = die früheste."""
+    def summe(feld: str) -> str | None:
+        werte = [Decimal(i[feld]) for i in infos if i[feld] is not None]
+        return _als_text(sum(werte, Decimal("0"))) if werte else None
+
+    erste = min(infos, key=lambda i: i["chain_id"])
+    return {
+        "chain_id": erste["chain_id"], "ketten": len(infos),
+        "anzahl_rolls": max(i["anzahl_rolls"] for i in infos), "strategie": erste["strategie"],
+        "eroeffnet_am": min(i["eroeffnet_am"] for i in infos),
+        "realisiert_bisher": summe("realisiert_bisher"),
+        "praemie_offen_eur": summe("praemie_offen_eur"),
+        "praemie_aktuell_eur": summe("praemie_aktuell_eur"),
+        "unrealisiert_eur": summe("unrealisiert_eur"),
+    }
+
+
+def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
+    """Ergänzt Spreads und Breaches des Roller-Status um ``kette`` — die Geschichte
+    der Kette im Journal (AP-14d): Zahl der Rolls, bereits realisiertes Ergebnis,
+    Prämie der offenen Legs bei Eröffnung und aktuell, Unrealisiertes, Strategie.
+    Zuordnung über Basiswert, Verfall und Short-Strike (bei Spreads auch Long);
+    Stand ist der des letzten Flex-Imports — heute Eröffnetes hat noch keine Kette
+    (``None``)."""
+    def verfall(text: str) -> date | None:
+        try:
+            return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+        except (ValueError, TypeError):
+            return None
+
+    zeilen = verbindung.execute(
+        select(chain_links.c.chain_id, structures.c.underlying, structures.c.expiry,
+               structures.c.short_strike, structures.c.long_strike)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+        .where(structures.c.sicht == SICHT, structures.c.geschlossen_am.is_(None),
+               structures.c.typ.in_(_VERTIKALEN))
+    ).all()
+    je_short: dict[tuple, set[int]] = {}
+    je_paar: dict[tuple, set[int]] = {}
+    for chain_id, basis, ablauf, kurz, lang in zeilen:
+        if kurz is None or ablauf is None:
+            continue
+        je_short.setdefault((basis, ablauf, float(kurz)), set()).add(chain_id)
+        if lang is not None:
+            je_paar.setdefault((basis, ablauf, float(kurz), float(lang)), set()).add(chain_id)
+
+    def finde(symbol, ablauf_text, kurz, lang) -> tuple[int, ...]:
+        ablauf = verfall(ablauf_text or "")
+        if ablauf is None or kurz is None:
+            return ()
+        basis = _roller_symbol(symbol)
+        treffer = (je_paar.get((basis, ablauf, float(kurz), float(lang)), set())
+                   if lang is not None else je_short.get((basis, ablauf, float(kurz)), set()))
+        return tuple(sorted(treffer))
+
+    positionen = []
+    for s in status.get("spreads", []):
+        positionen.append(
+            (s, finde(s["symbol"], s.get("expiration"), s.get("short"), s.get("long"))))
+    for b in status.get("breaches", []):
+        positionen.append(
+            (b, finde(b["symbol"], b.get("expiration"), b.get("short_strike"), None)))
+    ids = sorted({c for _, treffer in positionen for c in treffer})
+    info: dict[int, dict] = {}
+    if ids:
+        ketten = {k["chain_id"]: k for k in verbindung.execute(
+            select(chains).where(chains.c.chain_id.in_(ids))).mappings()}
+        bisher = _realisiert_bisher(verbindung, ids)
+        unreal = _unrealisiert_je_kette(verbindung, ids)
+        for chain_id in ids:
+            k = ketten[chain_id]
+            u = unreal.get(chain_id, KEIN_UNREAL)
+            info[chain_id] = {
+                "chain_id": chain_id, "anzahl_rolls": k["anzahl_rolls"],
+                "strategie": k["oa_strategie"], "eroeffnet_am": k["eroeffnet_am"].isoformat(),
+                "realisiert_bisher": _als_text(bisher.get(chain_id)),
+                "praemie_offen_eur": u[2], "praemie_aktuell_eur": u[3], "unrealisiert_eur": u[0],
+            }
+    for position, treffer in positionen:
+        if treffer:  # nur bei Treffer — sonst bleibt die Position wie gemeldet
+            position["kette"] = _fasse_ketten_zusammen([info[c] for c in treffer])
+    return status
+
+
 def _port_offen(port: int) -> bool:
     import socket
     try:
@@ -2795,6 +2890,12 @@ def erzeuge_app(
         if roller_port is None:
             return RollerAntwort(erreichbar=False, status=None)
         status = hole_roller_status(roller_port)
+        if status is not None:
+            try:
+                with engine.connect() as verbindung:
+                    status = _roller_kette_ergaenzen(verbindung, status)
+            except Exception:  # noqa: BLE001 — die Journal-Historie darf den Status nie verhindern
+                pass
         return RollerAntwort(erreichbar=status is not None, status=status)
 
     @applikation.get("/backtests", response_model=BacktestsAntwort)
