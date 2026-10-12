@@ -418,6 +418,73 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-12a: Option-Omega-Backtests — Beträge als Text, USD je Kontrakt.
+export interface BacktestZuordnung {
+  oo_strategie: string
+  oa_strategie: string
+  erkennung: 'heuristik' | 'manuell'
+  status: 'vorschlag' | 'bestaetigt' | 'abgelehnt'
+  treffer: number
+  anteil: string
+  eindeutig: boolean
+  oo_anzahl: number
+  erster: string | null
+  letzter: string | null
+}
+
+export interface BacktestVergleich {
+  oo_strategie: string
+  oa_strategie: string
+  paare: number
+  summe_backtest: string
+  summe_live: string
+  differenz: string
+  nur_backtest: number
+  summe_nur_backtest: string
+  nur_live: number
+  summe_nur_live: string
+  offen: number
+}
+
+export interface Backtests {
+  zuordnungen: BacktestZuordnung[]
+  vergleich: BacktestVergleich[]
+  ohne_zuordnung: { oo_strategie: string; anzahl: number }[]
+}
+
+export interface BacktestPaar {
+  art: 'paar' | 'nur_backtest' | 'nur_live' | 'offen'
+  zeit_backtest: string | null
+  zeit_live: string | null
+  oa_trade: string | null
+  kontrakte_backtest: number | null
+  kontrakte_live: number | null
+  pl_backtest: string | null
+  pl_live: string | null
+  differenz: string | null
+}
+
+export function holeBacktests(): Promise<Backtests> {
+  return hole('/backtests') as Promise<Backtests>
+}
+
+export function holeBacktestPaare(oo: string, oa: string): Promise<BacktestPaar[]> {
+  const suche = new URLSearchParams({ oo_strategie: oo, oa_strategie: oa })
+  return hole(`/backtests/paare?${suche.toString()}`) as Promise<BacktestPaar[]>
+}
+
+export function entscheideBacktest(
+  oo: string,
+  oa: string,
+  status: 'bestaetigt' | 'abgelehnt' | 'vorschlag',
+): Promise<unknown> {
+  return schicke('POST', '/journal/backtests/zuordnung', {
+    oo_strategie: oo,
+    oa_strategie: oa,
+    status,
+  })
+}
+
 // AP-13ab: Abgleich OA ↔ IB — Beträge als Text in der Währung des Trades.
 export interface OaTradeVergleich {
   oa_trade: string

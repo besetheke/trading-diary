@@ -49,6 +49,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, or_, select, update
 from sqlalchemy.engine import Connection
 
+from analytics.backtest import backtest_bericht
 from analytics.cashflows import cashflow_bericht
 from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht, im_filter
 from analytics.ib_abgleich import ib_abgleich_bericht
@@ -74,6 +75,7 @@ from journal.schema import (
     instruments,
     journal_entries,
     legs,
+    oo_zuordnung,
     optionapp_trades,
     structures,
     tags,
@@ -487,6 +489,66 @@ class RollkandidatenAntwort(BaseModel):
     anzahl_gruppen: int
     anzahl_kandidaten: int
     gruppen: list[RollgruppeAntwort]
+
+
+# AP-12a: Backtests — Geld als Text (Vertrag 8), USD je Kontrakt.
+class BacktestZuordnungAntwort(BaseModel):
+    oo_strategie: str
+    oa_strategie: str
+    erkennung: str
+    status: str
+    treffer: int
+    anteil: str
+    eindeutig: bool
+    # Alle Trades der OO-Strategie — „4 Treffer, eindeutig" bei 1.395
+    # Backtest-Trades ist ein Zufall, keine Zuordnung.
+    oo_anzahl: int
+    erster: date | None
+    letzter: date | None
+
+
+class BacktestVergleichAntwort(BaseModel):
+    oo_strategie: str
+    oa_strategie: str
+    paare: int
+    summe_backtest: str
+    summe_live: str
+    differenz: str
+    nur_backtest: int
+    summe_nur_backtest: str
+    nur_live: int
+    summe_nur_live: str
+    offen: int
+
+
+class BacktestOhneAntwort(BaseModel):
+    oo_strategie: str
+    anzahl: int
+
+
+class BacktestsAntwort(BaseModel):
+    zuordnungen: list[BacktestZuordnungAntwort]
+    vergleich: list[BacktestVergleichAntwort]
+    ohne_zuordnung: list[BacktestOhneAntwort]
+
+
+class BacktestPaarAntwort(BaseModel):
+    art: str
+    zeit_backtest: datetime | None
+    zeit_live: datetime | None
+    oa_trade: str | None
+    kontrakte_backtest: int | None
+    kontrakte_live: int | None
+    pl_backtest: str | None
+    pl_live: str | None
+    differenz: str | None
+
+
+class BacktestZuordnungEingabe(BaseModel):
+    oo_strategie: str
+    oa_strategie: str
+    # ``vorschlag`` nimmt eine Entscheidung zurück.
+    status: Literal["bestaetigt", "abgelehnt", "vorschlag"]
 
 
 class RollurteilEingabe(BaseModel):
@@ -2444,6 +2506,48 @@ def erzeuge_app(
             anzahl_gleich=sum(1 for t in e.trades if t.grund == "gleich"),
         )
 
+    @applikation.get("/backtests", response_model=BacktestsAntwort)
+    def backtests() -> BacktestsAntwort:
+        """Option-Omega-Backtests (AP-12a): Zuordnung OO-Strategie →
+        OA-Strategie (Vorschläge und Entscheidungen) und Vergleich je
+        Kontrakt in USD."""
+        b = backtest_bericht(db_pfad)
+        return BacktestsAntwort(
+            zuordnungen=[
+                BacktestZuordnungAntwort(**{**z.__dict__, "anteil": _als_text(z.anteil)})
+                for z in b.zuordnungen
+            ],
+            vergleich=[
+                BacktestVergleichAntwort(
+                    oo_strategie=z.oo_strategie, oa_strategie=z.oa_strategie, paare=z.paare,
+                    summe_backtest=_als_text(z.summe_backtest),
+                    summe_live=_als_text(z.summe_live), differenz=_als_text(z.differenz),
+                    nur_backtest=z.nur_backtest,
+                    summe_nur_backtest=_als_text(z.summe_nur_backtest),
+                    nur_live=z.nur_live, summe_nur_live=_als_text(z.summe_nur_live),
+                    offen=z.offen)
+                for z in b.vergleich
+            ],
+            ohne_zuordnung=[BacktestOhneAntwort(oo_strategie=s, anzahl=n)
+                            for s, n in b.ohne_zuordnung],
+        )
+
+    @applikation.get("/backtests/paare", response_model=list[BacktestPaarAntwort])
+    def backtest_paare(oo_strategie: str, oa_strategie: str) -> list[BacktestPaarAntwort]:
+        """Die Trades einer Zuordnung im Einzelnen (AP-12a)."""
+        for z in backtest_bericht(db_pfad).vergleich:
+            if (z.oo_strategie, z.oa_strategie) == (oo_strategie, oa_strategie):
+                return [
+                    BacktestPaarAntwort(**{
+                        **d.__dict__,
+                        "pl_backtest": _als_text(d.pl_backtest),
+                        "pl_live": _als_text(d.pl_live),
+                        "differenz": _als_text(d.differenz),
+                    })
+                    for d in z.details
+                ]
+        raise HTTPException(status_code=404, detail="Zuordnung nicht gefunden")
+
     @applikation.get("/strategien", response_model=StrategienAntwort)
     def strategien(von: date | None = None, bis: date | None = None) -> StrategienAntwort:
         """Strategie-Scorecard (AP-06sc): je OA-Strategie die geschlossenen
@@ -2843,6 +2947,21 @@ def erzeuge_app(
     # -----------------------------------------------------------------------
 
     if mit_journal:
+
+        @applikation.post("/journal/backtests/zuordnung")
+        def backtest_zuordnung(eingabe: BacktestZuordnungEingabe) -> dict:
+            """Entscheidung über eine Zuordnung OO → OA (AP-12a); ``vorschlag``
+            nimmt sie zurück. Kurze Transaktion (Regel 9)."""
+            schluessel = and_(oo_zuordnung.c.oo_strategie == eingabe.oo_strategie,
+                              oo_zuordnung.c.oa_strategie == eingabe.oa_strategie)
+            with engine.begin() as verbindung:
+                verbindung.execute(delete(oo_zuordnung).where(schluessel))
+                if eingabe.status != "vorschlag":
+                    verbindung.execute(insert(oo_zuordnung).values(
+                        oo_strategie=eingabe.oo_strategie, oa_strategie=eingabe.oa_strategie,
+                        status=eingabe.status, erkennung="manuell",
+                        entschieden_am=datetime.now()))
+            return {"status": eingabe.status}
 
         @applikation.post("/journal/rollkandidaten/urteil", response_model=RollurteilAntwort)
         def rollurteil(eingabe: RollurteilEingabe) -> RollurteilAntwort:

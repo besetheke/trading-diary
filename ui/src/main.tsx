@@ -13,6 +13,7 @@ import Positionen from './Positionen'
 import Rollkandidaten from './Rollkandidaten'
 import Strategien from './Strategien'
 import OaAbgleich from './OaAbgleich'
+import Backtests from './Backtests'
 import Tag from './Tag'
 import Uebersicht from './Uebersicht'
 import './stil.css'
@@ -51,6 +52,7 @@ function Kopf(): JSX.Element {
         <Link to={`/${mit}`}>Positionen</Link>
         <Link to={`/strategie${mit}`}>Strategien</Link>
         <Link to={`/abgleich${mit}`}>Abgleich OA</Link>
+        <Link to="/backtest">Backtests</Link>
         <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
         <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
         <Link to={`/monat${mit}`}>Kalender</Link>
@@ -107,6 +109,8 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             <Route path="/strategie" element={<Strategien />} />
             {/* AP-13ab: /oa-abgleich ist der API-Endpunkt, die Seite /abgleich. */}
             <Route path="/abgleich" element={<OaAbgleich />} />
+            {/* AP-12a: /backtests ist der API-Endpunkt, die Seite /backtest. */}
+            <Route path="/backtest" element={<Backtests />} />
             <Route path="*" element={<Unbekannt />} />
           </Routes>
         </main>

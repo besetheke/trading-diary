@@ -26,10 +26,23 @@ from analytics.steuer import als_csv as steuer_als_csv
 from ingest import flex_abruf
 from ingest.flex import import_flex_file, nachtragen_realisiert
 from ingest.optionapp import import_optionapp_file, import_optionapp_ordner
+from ingest.optionomega import (
+    OoFormatFehler,
+    import_optionomega_file,
+    import_optionomega_ordner,
+)
 from journal.durchsicht import kandidaten_ausschreiben, urteile_einlesen
 from journal.kampagnen_durchsicht import kampagnen_ausschreiben, kampagnen_urteile_einlesen
 from journal.rebuild import rebuild
 from journal.steuer import steuer_bericht
+
+
+def _oo_bericht(name: str, ergebnis) -> None:
+    if ergebnis.schon_importiert:
+        print(f"Option Omega {name}: bereits importiert")
+        return
+    print(f"Option Omega {name}: {ergebnis.zeilen_gesamt} Zeilen, {ergebnis.zeilen_neu} neu, "
+          f"{ergebnis.zeilen_aktualisiert} aktualisiert")
 
 
 def _oa_bericht(name: str, ergebnis) -> None:
@@ -103,6 +116,18 @@ def main(argv: list[str] | None = None) -> int:
     oa_importer.add_argument(
         "--db",
         default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    oo_importer = unterbefehle.add_parser(
+        "import-optionomega",
+        help="Option-Omega-Backtest-Export (CSV) einlesen (AP-12a)",
+    )
+    oo_importer.add_argument(
+        "datei", type=pathlib.Path,
+        help="CSV-Datei oder Ordner mit Exporten (neuester zuletzt)",
+    )
+    oo_importer.add_argument(
+        "--db", default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
     )
     abrufer = unterbefehle.add_parser(
@@ -306,6 +331,19 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for name, ergebnis in ergebnisse:
             _oa_bericht(name, ergebnis)
+    elif argumente.befehl == "import-optionomega":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        try:
+            if argumente.datei.is_dir():
+                ergebnisse = import_optionomega_ordner(db_pfad, argumente.datei)
+            else:
+                ergebnisse = [(argumente.datei.name,
+                               import_optionomega_file(db_pfad, argumente.datei))]
+        except (FileNotFoundError, OoFormatFehler) as fehler:
+            print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
+            return 1
+        for name, ergebnis in ergebnisse:
+            _oo_bericht(name, ergebnis)
     elif argumente.befehl == "abrufen":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         # Zugangsdaten → Ziel → Abruf → Speichern → Import → Rebuild: in
@@ -370,6 +408,15 @@ def main(argv: list[str] | None = None) -> int:
                 # Ein defekter OA-Export hält den Flex-Abruf nicht auf; er
                 # wird benannt und bleibt zur Prüfung liegen.
                 print(f"OptionApp-Import fehlgeschlagen: {fehler}", file=sys.stderr)
+        # AP-12a: OO-Backtests aus OO_ORDNER, sonst „oo" neben dem
+        # Flex-Zielordner; fehlt er, geschieht nichts.
+        oo_ordner = pathlib.Path(os.environ.get("OO_ORDNER") or ziel_pfad.parent / "oo")
+        if oo_ordner.is_dir():
+            try:
+                for name, oo_ergebnis in import_optionomega_ordner(db_pfad, oo_ordner):
+                    _oo_bericht(name, oo_ergebnis)
+            except OoFormatFehler as fehler:
+                print(f"Option-Omega-Import fehlgeschlagen: {fehler}", file=sys.stderr)
         if argumente.rebuild:
             try:
                 lauf = rebuild(db_pfad)

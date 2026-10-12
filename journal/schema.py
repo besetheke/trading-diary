@@ -859,6 +859,50 @@ campaign_ablehnungen = Table(
 )
 
 # Brücke zum Options Roller (§4.1): Absicht (Roller) gegen Ergebnis (Journal).
+# AP-12a: Option-Omega-Backtests. Eine Zeile je Trade des OO-Exports; ein
+# neuerer Export überschreibt die Werte einer bekannten Zeile (Rechnung, keine
+# Buchung — OF-83). Zeiten in US-Ostküstenzeit wie IB-Ausführungen.
+oo_trades = Table(
+    "oo_trades",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("import_run_id", ForeignKey("import_runs.id"), nullable=False),
+    # Freier Text aus OO — kein Schlüssel zu OA; die Zuordnung errechnet
+    # engine.oo_zuordnung aus den Trades selbst.
+    Column("strategie", Text, nullable=False),
+    Column("eroeffnet", DateTime, nullable=False, index=True),
+    Column("geschlossen", DateTime, nullable=True),
+    Column("basiswert", Text, nullable=False),
+    Column("legs_roh", Text, nullable=False),
+    Column("kontrakte", Integer, nullable=False),
+    # Prämie je Kontrakt (Vorzeichen wie OO: + Credit, − Debit), P/L gesamt.
+    Column("praemie", ExactDecimal, nullable=False),
+    Column("pl", ExactDecimal, nullable=False),
+    Column("kommission_eroeffnung", ExactDecimal, nullable=True),
+    Column("kommission_schluss", ExactDecimal, nullable=True),
+    Column("eroeffnungskurs", ExactDecimal, nullable=True),
+    Column("schlusskurs", ExactDecimal, nullable=True),
+    Column("grund", Text, nullable=False),
+    # ``Backtest Completed``: am Ende des Backtests noch offen.
+    Column("offen", Boolean, nullable=False),
+    Column("roh_json", Text, nullable=False),
+    UniqueConstraint("strategie", "eroeffnet", "legs_roh", name="uq_oo_trades_strategie"),
+)
+
+# AP-12a: Entscheidungen des Nutzers zu den errechneten Vorschlägen
+# OO-Strategie → OA-Strategie. Vorschläge selbst werden nie gespeichert.
+oo_zuordnung = Table(
+    "oo_zuordnung",
+    metadata,
+    Column("oo_strategie", Text, primary_key=True),
+    Column("oa_strategie", Text, primary_key=True),
+    Column("status", Text, nullable=False),
+    Column("erkennung", Text, nullable=False),
+    Column("entschieden_am", DateTime, nullable=False),
+    CheckConstraint("status IN ('bestaetigt', 'abgelehnt')", name="ck_oo_zuordnung_status"),
+    CheckConstraint("erkennung IN ('manuell')", name="ck_oo_zuordnung_erkennung"),
+)
+
 roller_link = Table(
     "roller_link",
     metadata,

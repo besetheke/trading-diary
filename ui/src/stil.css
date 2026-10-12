@@ -1173,3 +1173,9 @@ table.bestandteile tr.summe td {
   font-weight: 600;
   border-top: 1px solid var(--rand);
 }
+
+/* AP-12a: Backtests */
+.backtests tr.gedimmt { opacity: 0.55; }
+.backtests tr.klickbar { cursor: pointer; }
+.backtests tr.gewaehlt { background: var(--hover, rgba(128, 128, 128, 0.18)); }
+.backtests .knoepfe { white-space: nowrap; }

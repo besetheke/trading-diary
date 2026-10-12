@@ -3385,3 +3385,20 @@ zur selben Zeit (Daten 2022/23, Optionsseite fehlt) — lose, weiter im Ergebnis
    Backtest je Strategie. Offen: Zuordnung Backtest → OA-Strategie
    (`trade-log1145-1315.csv`: SPX, 0DTE IC/Fly, Einstieg 11:45/12:15/12:45/13:15,
    05/2022–07/2026, Spalte „Strategy" leer).
+
+## OF-83 · Option-Omega-Backtests: Annahmen (AP-12a, 12.10.2026)
+
+1. **Zuordnung OO → OA** wird aus den Trades errechnet (Tag, Uhrzeit ±20 min,
+   Struktur, relative Breite ±30 %), nie aus dem Namen. Die Schwellen sind
+   Annahmen, am Echtbestand geprüft: 1.530 + 1.395 OO-Zeilen, 18 von 19
+   OO-Strategien eindeutig. Mehrdeutig: „RIF50" (Bot 2026 umbenannt RIC1 → RIF50),
+   „ORB Fly" (mehrere Fly-Bots), „SPY IF7" (speist SPY: IF7 und XSP: IF7).
+2. **Zeitzone** von OO = US-Ostküste (belegt: Eröffnungen fallen minutengenau
+   auf IB-Ausführungen). OF-76 Punkt 4 damit geklärt.
+3. **Neuerer Export überschreibt** bekannte Zeilen (Backtest = Rechnung).
+4. **Leere `Strategy`** (Datei `trade-log1145-1315.csv`): Dateiname als Strategie;
+   die Zuordnung ergibt SPY: IF7 mit nur 4 Treffern — die Datei ist ein
+   Backtest, der zu keinem laufenden Bot passt. Offen: Nutzer fragen, welche
+   Strategie das ist.
+5. Vergleich in USD je Kontrakt; Live = OA-Gewinn, nicht IB-Ergebnis (Verrechnung).
+   Die Zerlegung der Abweichung (OF-76 Punkt 6) bleibt zurückgestellt.

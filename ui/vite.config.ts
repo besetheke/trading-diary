@@ -42,6 +42,7 @@ export default defineConfig({
       '/uebersicht': 'http://localhost:8000',
       '/strategien': 'http://localhost:8000',
       '/oa-abgleich': 'http://localhost:8000',
+      '/backtests': 'http://localhost:8000',
       '/rollkandidaten': 'http://localhost:8000',
     },
   },
