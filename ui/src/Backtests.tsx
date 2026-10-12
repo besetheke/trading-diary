@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { BacktestPaar, Backtests as Daten } from "./api";
 import {
   entscheideBacktest,
@@ -238,33 +238,24 @@ export default function Backtests(): JSX.Element {
                 nur Bot
               </th>
               <th className="zahl">offen</th>
-              <th title="Je Paar genau eine Ursache; die Summen ergeben zusammen die Differenz">
-                Ursachen der Differenz
-              </th>
-              <th
-                className="zahl"
-                title="Ergebnis des Bots, das durch abweichende Kontraktzahlen entsteht (Dollar insgesamt)"
-              >
-                Kontrakt-Effekt
-              </th>
             </tr>
           </thead>
           <tbody>
             {daten.vergleich.map((v) => {
               const gewaehlt =
                 auswahl?.oo === v.oo_strategie && auswahl?.oa === v.oa_strategie;
+              const klick = () =>
+                setzeAuswahl(
+                  gewaehlt ? null : { oo: v.oo_strategie, oa: v.oa_strategie },
+                );
               return (
+                <Fragment key={`${v.oo_strategie}|${v.oa_strategie}`}>
                 <tr
-                  key={`${v.oo_strategie}|${v.oa_strategie}`}
                   className={gewaehlt ? "gewaehlt klickbar" : "klickbar"}
-                  onClick={() =>
-                    setzeAuswahl(
-                      gewaehlt ? null : { oo: v.oo_strategie, oa: v.oa_strategie },
-                    )
-                  }
+                  onClick={klick}
                 >
                   <td>{v.oo_strategie}</td>
-                  <td>{v.oa_strategie}</td>
+                  <td className="bot">{v.oa_strategie}</td>
                   <td className="zahl">{v.paare}</td>
                   <td className="zahl">
                     <Betrag wert={v.summe_backtest} waehrung="USD" />
@@ -296,26 +287,36 @@ export default function Backtests(): JSX.Element {
                     )}
                   </td>
                   <td className="zahl">{v.offen || ""}</td>
-                  <td className="ursachen">
-                    {v.ursachen.map((u) => (
-                      <span
-                        key={u.ursache}
-                        className="ursache"
-                        title={URSACHE[u.ursache]?.hinweis}
-                      >
-                        {URSACHE[u.ursache]?.text ?? u.ursache} {u.anzahl}×{" "}
-                        <Betrag wert={u.summe} waehrung="USD" />
-                      </span>
-                    ))}
-                  </td>
-                  <td className="zahl">
-                    {Number(v.kontrakt_effekt) === 0 ? (
-                      ""
-                    ) : (
-                      <Betrag wert={v.kontrakt_effekt} waehrung="USD" />
-                    )}
-                  </td>
                 </tr>
+                {v.ursachen.length > 0 && (
+                  <tr
+                    className={gewaehlt ? "gewaehlt klickbar ursachenzeile" : "klickbar ursachenzeile"}
+                    onClick={klick}
+                  >
+                    <td colSpan={9} className="ursachen">
+                      <span className="beschriftung">Ursachen der Differenz:</span>
+                      {v.ursachen.map((u) => (
+                        <span
+                          key={u.ursache}
+                          className="ursache"
+                          title={URSACHE[u.ursache]?.hinweis}
+                        >
+                          {URSACHE[u.ursache]?.text ?? u.ursache} {u.anzahl}×{" "}
+                          <Betrag wert={u.summe} waehrung="USD" />
+                        </span>
+                      ))}
+                      {Number(v.kontrakt_effekt) !== 0 && (
+                        <span
+                          className="ursache"
+                          title="Ergebnis des Bots, das durch abweichende Kontraktzahlen entsteht (Dollar insgesamt)"
+                        >
+                          · Kontrakt-Effekt <Betrag wert={v.kontrakt_effekt} waehrung="USD" />
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
