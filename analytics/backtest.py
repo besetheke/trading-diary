@@ -117,15 +117,27 @@ def _je_kontrakt(betrag: Decimal, kontrakte: int) -> Decimal:
     return (betrag / kontrakte).quantize(CENT, ROUND_HALF_UP)
 
 
+def _lokale_paare(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile]
+                  ) -> dict[str, str]:
+    """Paarung eines Backtests mit EINEM Bot (AP-12b): Trades eines anderen
+    Bots nehmen ihm keinen Partner weg — derselbe Backtest kann gegen
+    mehrere Bots laufen (SPY: IF7 und XSP: IF7)."""
+    return paaren(
+        [z.eroeffnung for z in oo if z.eroeffnung.strategie == oo_s],
+        [z.eroeffnung for z in live if z.eroeffnung.strategie == oa_s],
+    )
+
+
 def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
-               paare: dict[str, str]) -> VergleichZeile:
+               paare: dict[str, str], gepaart: set[str]) -> VergleichZeile:
+    """``paare``: die Paarung dieses Backtests mit diesem Bot; ``gepaart``:
+    alle Live-Trades dieses Bots, die irgendein zugeordneter Backtest erklärt."""
     eigene_oo = [z for z in oo if z.eroeffnung.strategie == oo_s]
     eigene_live = [z for z in live if z.eroeffnung.strategie == oa_s]
     live_je = {z.eroeffnung.schluessel: z for z in live}
     zeile = VergleichZeile(oo_s, oa_s)
     live_tage = [z.eroeffnung.zeit.date() for z in eigene_live]
     oo_tage = [z.eroeffnung.zeit.date() for z in eigene_oo]
-    gepaart = set(paare.values())
     for o in eigene_oo:
         e = o.eroeffnung
         partner = live_je.get(paare.get(e.schluessel, ""))
@@ -186,19 +198,36 @@ def backtest_auswertung(oo: list[OoZeile], live: list[LiveZeile],
 
     anzahl = Counter(e.strategie for e in oo_e)
     zuordnungen = []
+    oo_je_id = {z.eroeffnung.schluessel: z.eroeffnung for z in oo}
+    lokal_alle: dict[tuple[str, str], dict[str, str]] = {}
+    for k in set(vorschlag) | set(entscheidungen):
+        lokal_alle[k] = _lokale_paare(k[0], k[1], oo, live)
     for k in sorted(set(vorschlag) | set(entscheidungen),
-                    key=lambda k: (k[0], -roh[k], k[1])):
-        n = roh[k]
+                    key=lambda k: (k[0], -len(lokal_alle[k]), k[1])):
+        # Treffer: Paarung dieses Backtests mit genau diesem Bot (AP-12b) —
+        # dieselbe Zahl wie im Vergleich. Der Anteil bleibt der an allen
+        # Treffern des Vorschlags (nächster Bot gewinnt).
+        eigene_tage = [oo_je_id[s].zeit.date() for s in lokal_alle[k]]
+        n = len(eigene_tage)
         anteil = ((Decimal(n) / je_oo[k[0]]).quantize(ANTEIL, ROUND_HALF_UP)
                   if je_oo[k[0]] else Decimal("0"))
         zuordnungen.append(ZuordnungZeile(
             k[0], k[1], "manuell" if k in entscheidungen else "heuristik",
             entscheidungen.get(k, "vorschlag"), n, anteil, anteil >= EINDEUTIG_AB,
-            anzahl[k[0]], min(tage[k]) if n else None, max(tage[k]) if n else None))
+            anzahl[k[0]], min(eigene_tage) if n else None,
+            max(eigene_tage) if n else None))
 
     aktiv = [z for z in zuordnungen if z.status != "abgelehnt"]
-    vergleich = [_vergleich(z.oo_strategie, z.oa_strategie, oo, live, paare)
-                 for z in sorted(aktiv, key=lambda z: (z.oo_strategie, z.oa_strategie))]
+    lokal = {(z.oo_strategie, z.oa_strategie):
+             _lokale_paare(z.oo_strategie, z.oa_strategie, oo, live) for z in aktiv}
+    erklaert: dict[str, set[str]] = defaultdict(set)
+    for (_, oa_s), p in lokal.items():
+        erklaert[oa_s] |= set(p.values())
+    vergleich = [
+        _vergleich(z.oo_strategie, z.oa_strategie, oo, live,
+                   lokal[(z.oo_strategie, z.oa_strategie)], erklaert[z.oa_strategie])
+        for z in sorted(aktiv, key=lambda z: (z.oo_strategie, z.oa_strategie))
+    ]
     mit = {z.oo_strategie for z in aktiv}
     ohne = [(s, anzahl[s]) for s in sorted(anzahl) if s not in mit]
     return BacktestBericht(zuordnungen, vergleich, ohne)
