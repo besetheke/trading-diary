@@ -22,6 +22,7 @@ export interface Kette {
   // API ihn liefert.
   menge: string | null
   struktur_summe_netto: string | null
+  realisiert_bisher?: string | null
   waehrung: string | null
   waehrungen: string[]
   sicht: string
@@ -550,6 +551,8 @@ export interface StrategieZeile {
   haltedauer_tage: string | null
   erste_schliessung: string | null
   letzte_schliessung: string | null
+  bisher_offene_eur: string
+  max_drawdown_schritte_eur: string
 }
 
 export interface Strategien {
@@ -560,8 +563,13 @@ export interface Strategien {
   abgrenzung_eur: string
 }
 
-export function holeStrategien(von?: string | null, bis?: string | null): Promise<Strategien> {
+export function holeStrategien(
+  von?: string | null,
+  bis?: string | null,
+  ansicht: 'positionen' | 'schritte' = 'positionen',
+): Promise<Strategien> {
   const suche = new URLSearchParams()
+  if (ansicht !== 'positionen') suche.set('ansicht', ansicht)
   if (von) suche.set('von', von)
   if (bis) suche.set('bis', bis)
   const text = suche.toString()

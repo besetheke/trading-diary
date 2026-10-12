@@ -162,6 +162,10 @@ class KetteAntwort(BaseModel):
     # und offene ohne Bestand laut IB: kein Wert. Nur in der Liste gefüllt.
     unrealisiert_eur: str | None = None
     offene_legs_ohne_kurs: int = 0
+    # AP-06sd: bei offenen Ketten das schon realisierte Ergebnis der
+    # geschlossenen Glieder (Roll-Schritte), in der Währung der Kette; die
+    # Struktursumme bleibt leer. Nur in der Liste gefüllt.
+    realisiert_bisher: str | None = None
 
 
 class StrukturAntwort(BaseModel):
@@ -431,6 +435,10 @@ class StrategieZeileAntwort(BaseModel):
     haltedauer_tage: str | None
     erste_schliessung: datetime | None
     letzte_schliessung: datetime | None
+    # AP-06sd: realisierte Schritte offener Ketten und Drawdown über alle
+    # realisierten Schritte.
+    bisher_offene_eur: str
+    max_drawdown_schritte_eur: str
 
 
 class StrategienAntwort(BaseModel):
@@ -1199,6 +1207,26 @@ def _kampagne_als_dict(zeile, anzahl_ketten: int) -> dict:
     )
 
 
+def _realisiert_bisher(verbindung: Connection, chain_ids: list[int]) -> dict[int, Decimal]:
+    """Summe der Ergebnisse der geschlossenen Glieder je **offener** Kette
+    (AP-06sd) — nur bei einer einzigen Währung und wenn mindestens ein Glied
+    ein Ergebnis trägt."""
+    if not chain_ids:
+        return {}
+    summe: dict[int, Decimal] = {}
+    waehrungen: dict[int, set[str]] = {}
+    for chain_id, waehrung, netto in verbindung.execute(
+        select(chain_links.c.chain_id, structures.c.waehrung, structures.c.netto_pnl)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+        .join(chains, chains.c.chain_id == chain_links.c.chain_id)
+        .where(chain_links.c.chain_id.in_(chain_ids), chains.c.beendet_am.is_(None))
+    ):
+        waehrungen.setdefault(chain_id, set()).add(waehrung)
+        if netto is not None:
+            summe[chain_id] = summe.get(chain_id, Decimal("0")) + netto
+    return {c: s for c, s in summe.items() if len(waehrungen[c]) == 1}
+
+
 def _ketten_zuschuesse(
     verbindung: Connection, chain_ids: list[int]
 ) -> dict[
@@ -1934,6 +1962,7 @@ def erzeuge_app(
             ).mappings().all()
             zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
             unrealisiert = _unrealisiert_je_kette(verbindung, [z["chain_id"] for z in zeilen])
+            bisher = _realisiert_bisher(verbindung, [z["chain_id"] for z in zeilen])
         leer = (0, [], None, None, None, None)
         return KettenListeAntwort(
             gesamt=gesamt,
@@ -1942,6 +1971,7 @@ def erzeuge_app(
                     **_kette_als_dict(z, *zuschuesse.get(z["chain_id"], leer)),
                     unrealisiert_eur=unrealisiert.get(z["chain_id"], (None, 0))[0],
                     offene_legs_ohne_kurs=unrealisiert.get(z["chain_id"], (None, 0))[1],
+                    realisiert_bisher=_als_text(bisher.get(z["chain_id"])),
                 )
                 for z in zeilen
             ],
@@ -2549,12 +2579,19 @@ def erzeuge_app(
         raise HTTPException(status_code=404, detail="Zuordnung nicht gefunden")
 
     @applikation.get("/strategien", response_model=StrategienAntwort)
-    def strategien(von: date | None = None, bis: date | None = None) -> StrategienAntwort:
+    def strategien(
+        von: date | None = None,
+        bis: date | None = None,
+        ansicht: Literal["positionen", "schritte"] = "positionen",
+    ) -> StrategienAntwort:
         """Strategie-Scorecard (AP-06sc): je OA-Strategie die geschlossenen
-        Positionen der Kontosicht — ``von``/``bis`` am Tag der Schließung."""
+        Positionen der Kontosicht — ``von``/``bis`` am Tag der Schließung.
+        ``ansicht=schritte`` (AP-06sd) zählt jedes Kettenglied einzeln, wie
+        OptionApp seine Trades."""
         _datumspaar_pruefen(von, bis, "von", "bis")
-        bericht = strategie_bericht(db_pfad, von=von, bis=bis)
+        bericht = strategie_bericht(db_pfad, von=von, bis=bis, ansicht=ansicht)
         felder_geld = (
+            "bisher_offene_eur", "max_drawdown_schritte_eur",
             "summe_eur", "durchschnitt_eur", "durchschnitt_gewinn_eur",
             "durchschnitt_verlust_eur", "groesster_gewinn_eur", "groesster_verlust_eur",
             "max_drawdown_eur", "trefferquote", "profit_faktor", "zuteilungsquote",

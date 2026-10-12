@@ -328,7 +328,16 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
     case 'struktur_summe_netto':
       return (
         <td className="zahl">
-          <Betrag wert={kette.struktur_summe_netto} waehrung={kette.waehrung ?? undefined} />
+          {kette.struktur_summe_netto === null && kette.realisiert_bisher ? (
+            <span
+              title="Bereits realisiert (geschlossene Rollschritte) — die Kette ist noch offen, das Gesamtergebnis steht erst am Ende fest"
+            >
+              <Betrag wert={kette.realisiert_bisher} waehrung={kette.waehrung ?? undefined} />
+              <span className="nebenbei"> bisher</span>
+            </span>
+          ) : (
+            <Betrag wert={kette.struktur_summe_netto} waehrung={kette.waehrung ?? undefined} />
+          )}
         </td>
       )
     case 'unrealisiert_eur':

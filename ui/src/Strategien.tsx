@@ -21,6 +21,8 @@ type Spalte =
   | "profit_faktor"
   | "groesster_verlust_eur"
   | "max_drawdown_eur"
+  | "max_drawdown_schritte_eur"
+  | "bisher_offene_eur"
   | "zuteilungsquote"
   | "haltedauer_tage";
 
@@ -58,6 +60,18 @@ const SPALTEN: { id: Spalte; titel: string; hinweis?: string }[] = [
       "Größter Rückgang der aufsummierten Ergebnisse in der Reihenfolge der Schließung",
   },
   {
+    id: "max_drawdown_schritte_eur",
+    titel: "Drawdown inkl. Rolls",
+    hinweis:
+      "Wie Max. Drawdown, aber über alle bereits realisierten Schritte — auch die Roll-Schritte noch offener Positionen",
+  },
+  {
+    id: "bisher_offene_eur",
+    titel: "Bisher in offenen",
+    hinweis:
+      "Bereits realisiertes Ergebnis offener Positionen (Roll-Schritte), in der Summe noch nicht enthalten",
+  },
+  {
     id: "zuteilungsquote",
     titel: "Zuteilungen",
     hinweis: "Anteil der Positionen mit Zuteilung (Aktie geliefert)",
@@ -88,14 +102,17 @@ export default function Strategien(): JSX.Element {
     ab: true,
   });
   const [mitOhne, setzeMitOhne] = useState(true);
+  const [ansicht, setzeAnsicht] = useState<"positionen" | "schritte">(
+    "positionen",
+  );
 
   useEffect(() => {
     setzeDaten(null);
     setzeFehler(null);
-    holeStrategien(zeitraum.von, zeitraum.bis)
+    holeStrategien(zeitraum.von, zeitraum.bis, ansicht)
       .then(setzeDaten)
       .catch((e) => setzeFehler(fehlerText(e)));
-  }, [zeitraum.von, zeitraum.bis]);
+  }, [zeitraum.von, zeitraum.bis, ansicht]);
 
   if (fehler) {
     return (
@@ -130,9 +147,28 @@ export default function Strategien(): JSX.Element {
       <p className="sicht">
         Je OptionApp-Strategie die im Zeitraum geschlossenen Positionen
         (Kontosicht, netto in EUR, Kurs des jeweiligen Tages). Zuteilungen und
-        Covered Calls gehören zur Position, die sie ausgelöst hat. Spaltenkopf
-        klicken zum Sortieren.
+        Covered Calls gehören zur Position, die sie ausgelöst hat. „Schritte
+        einzeln“ zählt jedes Rollglied als eigenen Trade, wie OptionApp.
+        Spaltenkopf klicken zum Sortieren.
       </p>
+      <div className="diagramm-wahl" role="group" aria-label="Ansicht">
+        <button
+          type="button"
+          aria-pressed={ansicht === "positionen"}
+          title="Eine Position = eine ganze Kette inklusive aller Rolls"
+          onClick={() => setzeAnsicht("positionen")}
+        >
+          Ketten (Rolls zusammen)
+        </button>
+        <button
+          type="button"
+          aria-pressed={ansicht === "schritte"}
+          title="Jedes Glied einer Kette zählt einzeln — so zählt OptionApp seine Trades"
+          onClick={() => setzeAnsicht("schritte")}
+        >
+          Schritte einzeln (wie OA)
+        </button>
+      </div>
       <label className="umschalter">
         <input
           type="checkbox"
@@ -215,6 +251,16 @@ export default function Strategien(): JSX.Element {
                 </td>
                 <td className="zahl">
                   <Betrag wert={z.max_drawdown_eur} />
+                </td>
+                <td className="zahl">
+                  <Betrag wert={z.max_drawdown_schritte_eur} />
+                </td>
+                <td className="zahl">
+                  {Number(z.bisher_offene_eur) === 0 ? (
+                    "—"
+                  ) : (
+                    <Betrag wert={z.bisher_offene_eur} />
+                  )}
                 </td>
                 <td className="zahl">{prozent(z.zuteilungsquote)}</td>
                 <td

@@ -65,6 +65,12 @@ class StrategieZeile:
     haltedauer_tage: Decimal | None
     erste_schliessung: datetime | None
     letzte_schliessung: datetime | None
+    # AP-06sd: bereits realisierte Schritte offener Positionen (Roll-Schritte
+    # einer noch laufenden Kette) und der Drawdown über ALLE realisierten
+    # Schritte der Strategie in Reihenfolge der Schließung — beides zählt
+    # die klassische Scorecard erst, wenn die Kette endet.
+    bisher_offene_eur: Decimal = _NULL
+    max_drawdown_schritte_eur: Decimal = _NULL
 
 
 @dataclass(frozen=True)
@@ -92,8 +98,9 @@ def _quote(z: Decimal | int, n: Decimal | int) -> Decimal | None:
 def strategie_auswertung(positionen: list[dict]) -> list[StrategieZeile]:
     """``positionen``: ``chain_id``, ``strategie``, ``eroeffnet_am``,
     ``beendet_am`` (None = offen), ``netto_eur`` (None = kein Kurs oder offen),
-    ``zuteilung`` (bool). Ergebnis nach Summe absteigend, bei Gleichstand nach
-    Name."""
+    ``zuteilung`` (bool); optional ``schritte``: Liste (Schließzeit, netto EUR)
+    der bereits geschlossenen Glieder (AP-06sd). Ergebnis nach Summe
+    absteigend, bei Gleichstand nach Name."""
     je: dict[str | None, list[dict]] = {}
     for p in positionen:
         je.setdefault(p["strategie"], []).append(p)
@@ -125,6 +132,20 @@ def strategie_auswertung(positionen: list[dict]) -> list[StrategieZeile]:
             for p in gezaehlt
         ]
         anzahl = len(werte)
+        alle_schritte = sorted(
+            (s for p in liste for s in p.get("schritte", ()) if s[1] is not None),
+            key=lambda s: s[0],
+        )
+        kurve_s = hoch_s = drawdown_s = _NULL
+        for _, w in alle_schritte:
+            kurve_s += w
+            hoch_s = max(hoch_s, kurve_s)
+            drawdown_s = min(drawdown_s, kurve_s - hoch_s)
+        bisher = sum(
+            (s[1] for p in liste if p["beendet_am"] is None
+             for s in p.get("schritte", ()) if s[1] is not None),
+            _NULL,
+        )
         zeilen.append(
             StrategieZeile(
                 strategie=strategie,
@@ -152,18 +173,54 @@ def strategie_auswertung(positionen: list[dict]) -> list[StrategieZeile]:
                 else None,
                 erste_schliessung=gezaehlt[0]["beendet_am"] if gezaehlt else None,
                 letzte_schliessung=gezaehlt[-1]["beendet_am"] if gezaehlt else None,
+                bisher_offene_eur=bisher,
+                max_drawdown_schritte_eur=drawdown_s,
             )
         )
     zeilen.sort(key=lambda z: (-z.summe_eur, z.strategie or ""))
     return zeilen
 
 
+def schritte_als_positionen(
+    ketten_zeilen: list[dict],
+    struktur_zeilen: list[dict],
+    glieder_zeilen: list[dict],
+    netto_je_struktur: dict[int, Decimal | None],
+    mit_zuteilung: set[int],
+) -> list[dict]:
+    """Schrittansicht (AP-06sd): jedes Glied einer Kette ist eine eigene
+    Position — so zählt OptionApp ihre Trades. Strategie und Zuteilung erbt
+    das Glied von seiner Kette; ein noch offenes Glied zählt nur als offen.
+    Reihenfolge: Kette, dann Eröffnung des Glieds."""
+    kette_von = {g["structure_id"]: g["chain_id"] for g in glieder_zeilen}
+    ketten = {k["chain_id"]: k for k in ketten_zeilen}
+    positionen = []
+    for s in sorted(struktur_zeilen, key=lambda s: (
+            kette_von.get(s["structure_id"], 0), s["eroeffnet_am"], s["structure_id"])):
+        chain_id = kette_von.get(s["structure_id"])
+        if chain_id not in ketten:
+            continue
+        ende = s["geschlossen_am"]
+        positionen.append(dict(
+            chain_id=chain_id, strategie=ketten[chain_id]["oa_strategie"],
+            eroeffnet_am=s["eroeffnet_am"], beendet_am=ende,
+            netto_eur=netto_je_struktur.get(s["structure_id"]) if ende is not None else None,
+            zuteilung=chain_id in mit_zuteilung,
+        ))
+    return positionen
+
+
 def strategie_bericht(
-    db_pfad: str | pathlib.Path, *, von: date | None = None, bis: date | None = None
+    db_pfad: str | pathlib.Path,
+    *,
+    von: date | None = None,
+    bis: date | None = None,
+    ansicht: str = "positionen",
 ) -> StrategieBericht:
     """Lesende Hülle: Positionen der Kontosicht; ``von``/``bis`` begrenzen auf
     Positionen, die im Zeitraum geschlossen wurden (offene zählen, wenn sie
-    vor ``bis`` eröffnet wurden). Schreibt nichts."""
+    vor ``bis`` eröffnet wurden). ``ansicht="schritte"`` (AP-06sd) zählt jedes
+    Glied einer Kette als eigene Position, wie OptionApp. Schreibt nichts."""
     engine = create_db_engine(db_pfad)
     with engine.connect() as v:
         ketten_zeilen = [dict(z) for z in v.execute(select(
@@ -173,6 +230,7 @@ def strategie_bericht(
         ).where(chains.c.sicht == "konto")).mappings()]
         struktur_zeilen = [dict(z) for z in v.execute(select(
             structures.c.structure_id, structures.c.typ, structures.c.waehrung,
+            structures.c.eroeffnet_am,
             structures.c.brutto_pnl, structures.c.kommission, structures.c.netto_pnl,
             structures.c.geschlossen_am,
         ).where(structures.c.sicht == "konto")).mappings()]
@@ -205,6 +263,30 @@ def strategie_bericht(
     mit_zuteilung = {
         g["chain_id"] for g in glieder_zeilen if g["verknuepfungstyp"] == "zuteilung"
     }
+    netto_je_struktur = {
+        s.structure_id: s.netto_eur_wirtschaftlich for s in grundlage.strukturen
+    }
+    if ansicht == "schritte":
+        positionen = []
+        for pos in schritte_als_positionen(
+            ketten_zeilen, struktur_zeilen, glieder_zeilen, netto_je_struktur, mit_zuteilung
+        ):
+            ende = pos["beendet_am"]
+            if ende is not None:
+                if (von is not None and ende.date() < von) or (
+                        bis is not None and ende.date() > bis):
+                    continue
+            elif bis is not None and pos["eroeffnet_am"].date() > bis:
+                continue
+            positionen.append(pos)
+        return _bericht(positionen, ketten_zeilen, struktur_zeilen, glieder_zeilen, leg_zeilen,
+                        ausfuehrungs_zeilen, instrumenten_zeilen, von, bis)
+    schritte_je_kette: dict[int, list] = {}
+    glieder_von = {g["structure_id"]: g["chain_id"] for g in glieder_zeilen}
+    for s in struktur_zeilen:
+        if s["geschlossen_am"] is not None and s["structure_id"] in glieder_von:
+            schritte_je_kette.setdefault(glieder_von[s["structure_id"]], []).append(
+                (s["geschlossen_am"], netto_je_struktur.get(s["structure_id"])))
     positionen = []
     for k in ketten_zeilen:
         ende = k["beendet_am"]
@@ -220,7 +302,14 @@ def strategie_bericht(
             eroeffnet_am=k["eroeffnet_am"], beendet_am=ende,
             netto_eur=netto_je_kette.get(k["chain_id"]) if ende is not None else None,
             zuteilung=k["chain_id"] in mit_zuteilung,
+            schritte=schritte_je_kette.get(k["chain_id"], []),
         ))
+    return _bericht(positionen, ketten_zeilen, struktur_zeilen, glieder_zeilen, leg_zeilen,
+                    ausfuehrungs_zeilen, instrumenten_zeilen, von, bis)
+
+
+def _bericht(positionen, ketten_zeilen, struktur_zeilen, glieder_zeilen, leg_zeilen,
+             ausfuehrungs_zeilen, instrumenten_zeilen, von, bis) -> StrategieBericht:
     zeilen = strategie_auswertung(positionen)
     equity = equity_auswertung(
         ketten_zeilen, struktur_zeilen, glieder_zeilen, leg_zeilen,
