@@ -518,6 +518,12 @@ class DienstAntwort(BaseModel):
     hinweis: str | None = None
 
 
+class RollerAntwort(BaseModel):
+    erreichbar: bool
+    # Status des Roller-Dienstes unverändert durchgereicht (nur lesend).
+    status: dict | None
+
+
 class ImportStandAntwort(BaseModel):
     quelle: str
     zuletzt: datetime | None
@@ -541,6 +547,17 @@ DIENSTE: list[tuple[str, int | None, str | None]] = [
      "Läuft noch nicht als Dienst — Status kommt mit Stufe R2 (Herzschlag ans Cockpit)"),
 ]
 IMPORT_QUELLEN = ("flex", "optionapp", "optionomega")
+
+
+def _hole_roller_status(port: int) -> dict | None:
+    """Status des Roller-Dienstes (``GET /status``); ``None``, wenn er nicht
+    antwortet. Nur lesend, nur 127.0.0.1, kurzes Zeitlimit."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as antwort:
+            return json.loads(antwort.read().decode("utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def _port_offen(port: int) -> bool:
@@ -2000,6 +2017,8 @@ def erzeuge_app(
     ui_verzeichnis: str | pathlib.Path | None = None,
     mit_journal: bool = False,
     pruefe_port=None,
+    roller_port: int | None = None,
+    hole_roller_status=None,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
 
@@ -2015,9 +2034,12 @@ def erzeuge_app(
     ``app`` startet mit Journal — die Oberfläche braucht es.
 
     ``pruefe_port`` ersetzt die Erreichbarkeitsprüfung der Seite „System“
-    (AP-14a) — nur für Tests.
+    (AP-14a) — nur für Tests. ``roller_port`` ist der Statusport des
+    Roller-Dienstes (AP-14b); ohne Angabe gilt er als nicht angebunden.
+    ``hole_roller_status`` ersetzt die HTTP-Abfrage (nur für Tests).
     """
     pruefe_port = pruefe_port or _port_offen
+    hole_roller_status = hole_roller_status or _hole_roller_status
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
 
     if ui_verzeichnis is not None:
@@ -2700,12 +2722,18 @@ def erzeuge_app(
     def system() -> SystemAntwort:
         """Zustand der Station (AP-14a): welche Dienste erreichbar sind und wann
         jede Quelle zuletzt eingelesen wurde."""
-        dienste = [
-            DienstAntwort(name=name, port=port,
-                          erreichbar=None if port is None else pruefe_port(port),
-                          hinweis=hinweis)
-            for name, port, hinweis in DIENSTE
-        ]
+        dienste = []
+        for name, port, hinweis in DIENSTE:
+            if name == "Options Roller" and roller_port is not None:
+                # AP-14b: der Roller ist angebunden — echter Status statt Platzhalter.
+                dienste.append(DienstAntwort(
+                    name=name, port=roller_port,
+                    erreichbar=hole_roller_status(roller_port) is not None,
+                    hinweis="Dienst ohne Fenster: python -m roller.dienst"))
+                continue
+            dienste.append(DienstAntwort(
+                name=name, port=port, erreichbar=None if port is None else pruefe_port(port),
+                hinweis=hinweis))
         with engine.connect() as verbindung:
             stand = {
                 quelle: (zuletzt, bis)
@@ -2719,6 +2747,16 @@ def erzeuge_app(
                                daten_bis=stand.get(q, (None, None))[1])
             for q in IMPORT_QUELLEN
         ])
+
+    @applikation.get("/roller-status", response_model=RollerAntwort)
+    def roller() -> RollerAntwort:
+        """Status des Options-Roller-Dienstes (AP-14b): Breaches, Spreads,
+        Scanner, IB-Verbindung. Reicht nur durch; nie ein Fehler, wenn der
+        Dienst aus ist."""
+        if roller_port is None:
+            return RollerAntwort(erreichbar=False, status=None)
+        status = hole_roller_status(roller_port)
+        return RollerAntwort(erreichbar=status is not None, status=status)
 
     @applikation.get("/backtests", response_model=BacktestsAntwort)
     def backtests(von: date | None = None, bis: date | None = None) -> BacktestsAntwort:
@@ -3435,4 +3473,9 @@ def erzeuge_app(
 # Vertrag 1: Modulobjekt mit dem Pfad wie die CLI — Umgebungsvariable
 # JOURNAL_DB, sonst journal.db (OF-06). Mit Journal (AP-07j): Die Oberfläche
 # des täglichen Journals braucht die schreibenden Routen.
-app = erzeuge_app(os.environ.get("JOURNAL_DB", "journal.db"), mit_journal=True)
+app = erzeuge_app(
+    os.environ.get("JOURNAL_DB", "journal.db"),
+    mit_journal=True,
+    # AP-14b: Statusport des Roller-Dienstes; 0 schaltet die Anbindung ab.
+    roller_port=int(os.environ.get("ROLLER_STATUS_PORT", "8600")) or None,
+)

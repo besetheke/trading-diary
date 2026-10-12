@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fehlerText, holeSystem } from "./api";
-import type { System } from "./api";
+import { fehlerText, holeRoller, holeSystem } from "./api";
+import type { RollerAntwort, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -89,48 +89,154 @@ export function SystemSeite(): JSX.Element {
   );
 }
 
+function zahl(wert: number | null | undefined, stellen = 1): string {
+  return wert === null || wert === undefined
+    ? "—"
+    : wert.toLocaleString("de-DE", { minimumFractionDigits: stellen, maximumFractionDigits: stellen });
+}
+
+function verfall(jjjjmmtt: string): string {
+  return jjjjmmtt.length === 8
+    ? `${jjjjmmtt.slice(6, 8)}.${jjjjmmtt.slice(4, 6)}.${jjjjmmtt.slice(0, 4)}`
+    : jjjjmmtt;
+}
+
 export function RollerSeite(): JSX.Element {
-  const [daten] = useSystem();
-  const tws = daten?.dienste.filter((d) => d.name.startsWith("TWS") || d.name.startsWith("IB"));
+  const [daten, setzeDaten] = useState<RollerAntwort | null>(null);
+  const [fehler, setzeFehler] = useState<string | null>(null);
+  useEffect(() => {
+    let aktiv = true;
+    const laden = () =>
+      holeRoller()
+        .then((d) => aktiv && setzeDaten(d))
+        .catch((e) => aktiv && setzeFehler(fehlerText(e)));
+    laden();
+    const takt = window.setInterval(laden, 15000);
+    return () => {
+      aktiv = false;
+      window.clearInterval(takt);
+    };
+  }, []);
+
+  if (fehler) return <p className="fehler">{fehler}</p>;
+  if (daten === null) return <p className="laedt">Frage den Roller …</p>;
+  if (!daten.erreichbar || daten.status === null) {
+    return (
+      <section className="station">
+        <h2>Options Roller</h2>
+        <p className="hinweis">
+          Der Roller-Dienst läuft nicht. Starten im Ordner des Rollers mit{" "}
+          <code>.venv\Scripts\python -m roller.dienst</code> (nur lesend; E-Mails
+          mit <code>--mails</code>). Diese Seite aktualisiert sich selbst.
+        </p>
+      </section>
+    );
+  }
+  const s = daten.status;
+  const alter = Math.round((Date.now() - new Date(s.herzschlag).getTime()) / 1000);
   return (
     <section className="station">
       <h2>Options Roller</h2>
       <p className="sicht">
-        Hier entsteht die Bedienung des Rollers: Positionen mit Danger-Strikes,
-        Breaches, Roll-Edge und Rollvorschläge zur Freigabe. Der Roller läuft
-        dafür als eigener Dienst ohne Fenster.
+        Stufe {s.stufe}: nur lesen — der Dienst setzt keine Orders ab.{" "}
+        <span className={s.ib.verbunden ? "ampel gruen" : "ampel rot"}>
+          {s.ib.verbunden ? `IB verbunden (Port ${s.ib.port})` : "IB nicht verbunden"}
+        </span>{" "}
+        · {s.positionen.spreads} Spreads, {s.positionen.einzel} Einzelpositionen · Scan{" "}
+        {s.scanner.laeufe}× (
+        {s.scanner.letzter_lauf ? zeitDe(s.scanner.letzter_lauf) : "noch keiner"}, alle{" "}
+        {s.scanner.intervall_s ?? "—"} s) · Symbole: {s.scanner.symbole.join(", ") || "—"} ·
+        Herzschlag vor {alter} s
       </p>
-      <ol className="stufen">
-        <li>
-          <strong>R1 Inbetriebnahme</strong> — erledigt am 12.10.2026: TWS API,
-          Fehlermeldungen der neuen API, Order-Sperre, Lesetest gegen TWS.
-        </li>
-        <li>
-          <strong>R2 Sichtbar</strong> — Status, Breaches und Roll-Edge auf
-          dieser Seite.
-        </li>
-        <li>
-          <strong>R3 Vorschlag und Freigabe per Klick</strong> — zuerst im
-          Paper-Konto.
-        </li>
-        <li>
-          <strong>R4 Schattenmodus</strong> — entscheidet automatisch, schickt
-          nichts ab.
-        </li>
-        <li>
-          <strong>R5 Automatik mit Leitplanken</strong> — Rolls je Kette und
-          Roll-Verlust begrenzt, Tageslimits, Not-Aus.
-        </li>
-      </ol>
-      {tws && (
-        <p className="sicht">
-          IB-Verbindung:{" "}
-          {tws
-            .filter((d) => d.erreichbar)
-            .map((d) => d.name)
-            .join(", ") || "keine TWS und kein Gateway erreichbar"}
-        </p>
+
+      <h3>Breaches ({s.breaches.length})</h3>
+      {s.breaches.length === 0 ? (
+        <p className="hinweis">Kein Short-Strike hat seinen Danger-Strike überschritten.</p>
+      ) : (
+        <div className="tabelle-rahmen">
+          <table className="strategie-tabelle">
+            <thead>
+              <tr>
+                <th>Basiswert</th>
+                <th>Verfall</th>
+                <th>Seite</th>
+                <th className="zahl">DTE</th>
+                <th className="zahl">Short</th>
+                <th className="zahl">Danger</th>
+                <th className="zahl" title="Abstand Basiswert zu Short in Indexpunkten; negativ = im Geld">
+                  Puffer
+                </th>
+                <th className="zahl">|Δ| Short</th>
+                <th className="zahl" title="Theoretischer Wert des Rolls in Indexpunkten">Roll Theo</th>
+                <th className="zahl" title="Positiv = Markt verlangt mehr als das Modell (teuer)">Edge</th>
+                <th>Bewertung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.breaches.map((b) => (
+                <tr key={b.position_key}>
+                  <td>{b.symbol}</td>
+                  <td>{verfall(b.expiration)}</td>
+                  <td>{b.right === "P" ? "Put" : "Call"}</td>
+                  <td className="zahl">{b.dte}</td>
+                  <td className="zahl">{zahl(b.short_strike, 0)}</td>
+                  <td className="zahl">{zahl(b.danger_strike, 1)}</td>
+                  <td className="zahl">{zahl(b.puffer, 0)}</td>
+                  <td className="zahl">{zahl(b.short_delta, 2)}</td>
+                  <td className="zahl">{zahl(b.edge?.theo_roll)}</td>
+                  <td className="zahl">{zahl(b.edge?.edge_abs, 2)}</td>
+                  <td>{b.edge ? `${b.edge.verdict ?? "—"} (${b.edge.data_quality ?? "—"})` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+
+      <h3>Offene Spreads ({s.spreads.length})</h3>
+      <div className="tabelle-rahmen">
+        <table className="strategie-tabelle">
+          <thead>
+            <tr>
+              <th>Basiswert</th>
+              <th>Typ</th>
+              <th>Verfall</th>
+              <th className="zahl">Menge</th>
+              <th className="zahl">Short / Long</th>
+              <th className="zahl">|Δ| Short</th>
+              <th className="zahl">Basiswert</th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.spreads.map((p) => (
+              <tr key={p.key}>
+                <td>{p.symbol}</td>
+                <td>{p.typ}</td>
+                <td>{verfall(p.expiration)}</td>
+                <td className="zahl">{p.menge}</td>
+                <td className="zahl">
+                  {zahl(p.short, 0)} / {zahl(p.long, 0)}
+                </td>
+                <td className="zahl">{zahl(p.short_delta, 2)}</td>
+                <td className="zahl">{zahl(p.underlying, 1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Stufen</h3>
+      <ol className="stufen">
+        <li><strong>R1 Inbetriebnahme</strong> — erledigt.</li>
+        <li><strong>R2 Sichtbar</strong> — diese Seite, Dienst ohne Fenster.</li>
+        <li><strong>R3 Vorschlag und Freigabe per Klick</strong> — zuerst im Paper-Konto.</li>
+        <li><strong>R4 Schattenmodus</strong> — entscheidet automatisch, schickt nichts ab.</li>
+        <li><strong>R5 Automatik mit Leitplanken</strong> — Rolls je Kette und Roll-Verlust begrenzt, Tageslimits, Not-Aus.</li>
+      </ol>
+      <details>
+        <summary>Protokoll des Dienstes</summary>
+        <pre className="protokoll">{s.log.slice(-40).join("\n")}</pre>
+      </details>
     </section>
   );
 }

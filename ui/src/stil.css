@@ -1220,3 +1220,4 @@ header nav.bereichsnav a.aktiv {
   border: 1px solid var(--linie, #d8d4cc);
   border-radius: 4px;
 }
+.station pre.protokoll { max-height: 22rem; overflow: auto; font-size: 0.8em; background: #f1eee8; padding: 0.6rem; border-radius: 4px; }

@@ -428,6 +428,76 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-14b: Status des Roller-Dienstes (durchgereicht, nur lesend).
+export interface RollerEdge {
+  theo_roll?: number | null
+  edge_abs?: number | null
+  edge_ccy?: string | null
+  implied_term_spread?: number | null
+  verdict?: string | null
+  status?: string | null
+  data_quality?: string | null
+  ts?: string | null
+}
+
+export interface RollerBreach {
+  position_key: string
+  symbol: string
+  expiration: string
+  right: string
+  short_strike: number
+  danger_strike: number
+  target_delta: number
+  underlying: number | null
+  short_delta: number | null
+  dte: number
+  menge: number
+  puffer: number | null
+  seit: string | null
+  edge: RollerEdge | null
+}
+
+export interface RollerSpread {
+  key: string
+  typ: string
+  symbol: string
+  expiration: string
+  short: number
+  long: number
+  menge: number
+  short_delta: number | null
+  underlying: number | null
+}
+
+export interface RollerStatus {
+  dienst: string
+  stufe: string
+  gestartet: string
+  herzschlag: string
+  orders: { freigegeben: boolean; modus: string }
+  ib: { verbunden: boolean; host: string; port: number; client_id: number }
+  positionen: { spreads: number; einzel: number }
+  scanner: {
+    letzter_lauf: string | null
+    laeufe: number
+    dauer_s: number | null
+    intervall_s: number | null
+    symbole: string[]
+  }
+  breaches: RollerBreach[]
+  spreads: RollerSpread[]
+  log: string[]
+}
+
+export interface RollerAntwort {
+  erreichbar: boolean
+  status: RollerStatus | null
+}
+
+export function holeRoller(): Promise<RollerAntwort> {
+  return hole('/roller-status') as Promise<RollerAntwort>
+}
+
 // AP-14a: Zustand der Station (Seite „System“).
 export interface Dienst {
   name: string
