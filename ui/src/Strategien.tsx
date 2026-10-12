@@ -83,6 +83,10 @@ const SPALTEN: { id: Spalte; titel: string; hinweis?: string }[] = [
   },
 ];
 
+// In der Schrittansicht zählt jedes Glied einzeln — die beiden Roll-Spalten
+// wären dort immer leer.
+const NUR_KETTEN: Spalte[] = ["max_drawdown_schritte_eur", "bisher_offene_eur"];
+
 function sortierwert(z: StrategieZeile, s: Spalte): number | string {
   if (s === "strategie") return z.strategie ?? "";
   if (s === "anzahl") return z.anzahl;
@@ -124,6 +128,9 @@ export default function Strategien(): JSX.Element {
   }
   if (daten === null) return <p className="laedt">Lade Strategien …</p>;
 
+  const spalten = SPALTEN.filter(
+    (s) => ansicht === "positionen" || !NUR_KETTEN.includes(s.id),
+  );
   const zeilen = daten.zeilen
     .filter((z) => mitOhne || z.strategie !== null)
     .sort((a, b) => {
@@ -181,7 +188,7 @@ export default function Strategien(): JSX.Element {
         <table className="strategie-tabelle">
           <thead>
             <tr>
-              {SPALTEN.map((s) => (
+              {spalten.map((s) => (
                 <th
                   key={s.id}
                   title={s.hinweis}
@@ -252,16 +259,20 @@ export default function Strategien(): JSX.Element {
                 <td className="zahl">
                   <Betrag wert={z.max_drawdown_eur} />
                 </td>
-                <td className="zahl">
-                  <Betrag wert={z.max_drawdown_schritte_eur} />
-                </td>
-                <td className="zahl">
-                  {Number(z.bisher_offene_eur) === 0 ? (
-                    "—"
-                  ) : (
-                    <Betrag wert={z.bisher_offene_eur} />
-                  )}
-                </td>
+                {ansicht === "positionen" && (
+                  <>
+                    <td className="zahl">
+                      <Betrag wert={z.max_drawdown_schritte_eur} />
+                    </td>
+                    <td className="zahl">
+                      {Number(z.bisher_offene_eur) === 0 ? (
+                        "—"
+                      ) : (
+                        <Betrag wert={z.bisher_offene_eur} />
+                      )}
+                    </td>
+                  </>
+                )}
                 <td className="zahl">{prozent(z.zuteilungsquote)}</td>
                 <td
                   className="zahl"
