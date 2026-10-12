@@ -50,6 +50,7 @@ from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, or_, s
 from sqlalchemy.engine import Connection
 
 from analytics.backtest import backtest_bericht
+from analytics.breakout import breakout_bericht
 from analytics.cashflows import cashflow_bericht
 from analytics.equity import EquityErgebnis, LoseLegFilter, equity_bericht, im_filter
 from analytics.ib_abgleich import ib_abgleich_bericht
@@ -516,6 +517,35 @@ class DienstAntwort(BaseModel):
     # None = (noch) nicht prüfbar, z. B. der Roller vor R2.
     erreichbar: bool | None
     hinweis: str | None = None
+
+
+class BreakoutHypotheseAntwort(BaseModel):
+    id: str
+    frage: str | None
+    universum: str | None
+    stufe: str | None
+    prioritaet: str | None
+    status: str | None
+    evidenz: str | None
+    entscheidung: str | None
+
+
+class BreakoutErgebnisAntwort(BaseModel):
+    id: str
+    status: str | None
+    sitzungen: int | None
+    gesamt_punkte_05: float | None
+    mittel_punkte_05: float | None
+    bootstrap_p05: float | None
+    gates: dict[str, bool]
+
+
+class BreakoutAntwort(BaseModel):
+    gefunden: bool
+    stand: str | None
+    ziel: str | None
+    hypothesen: list[BreakoutHypotheseAntwort]
+    ergebnisse: list[BreakoutErgebnisAntwort]
 
 
 class RollerAntwort(BaseModel):
@@ -2019,6 +2049,7 @@ def erzeuge_app(
     pruefe_port=None,
     roller_port: int | None = None,
     hole_roller_status=None,
+    bo_ordner: str | pathlib.Path | None = None,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
 
@@ -2037,6 +2068,7 @@ def erzeuge_app(
     (AP-14a) — nur für Tests. ``roller_port`` ist der Statusport des
     Roller-Dienstes (AP-14b); ohne Angabe gilt er als nicht angebunden.
     ``hole_roller_status`` ersetzt die HTTP-Abfrage (nur für Tests).
+    ``bo_ordner`` ist der Ordner der BO Research Suite (AP-14c, nur lesend).
     """
     pruefe_port = pruefe_port or _port_offen
     hole_roller_status = hole_roller_status or _hole_roller_status
@@ -2747,6 +2779,13 @@ def erzeuge_app(
                                daten_bis=stand.get(q, (None, None))[1])
             for q in IMPORT_QUELLEN
         ])
+
+    @applikation.get("/breakout-stand", response_model=BreakoutAntwort)
+    def breakout() -> BreakoutAntwort:
+        """Stand der BO Research Suite (AP-14c): Ziel, Hypothesenregister und
+        Zusammenfassung der Discovery-Ergebnisse. Nur lesend; Validation und
+        Holdout bleiben versiegelt und werden nie gelesen."""
+        return BreakoutAntwort(**breakout_bericht(bo_ordner))
 
     @applikation.get("/roller-status", response_model=RollerAntwort)
     def roller() -> RollerAntwort:
@@ -3478,4 +3517,6 @@ app = erzeuge_app(
     mit_journal=True,
     # AP-14b: Statusport des Roller-Dienstes; 0 schaltet die Anbindung ab.
     roller_port=int(os.environ.get("ROLLER_STATUS_PORT", "8600")) or None,
+    # AP-14c: Ordner der BO Research Suite (nur lesend).
+    bo_ordner=os.environ.get("BO_ORDNER", r"C:\10_Coding\BO Research Suite"),
 )

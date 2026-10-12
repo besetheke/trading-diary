@@ -1221,3 +1221,4 @@ header nav.bereichsnav a.aktiv {
   border-radius: 4px;
 }
 .station pre.protokoll { max-height: 22rem; overflow: auto; font-size: 0.8em; background: #f1eee8; padding: 0.6rem; border-radius: 4px; }
+.station p.ziel { max-width: 70ch; }

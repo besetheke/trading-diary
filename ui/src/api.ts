@@ -428,6 +428,40 @@ export function loescheNotiz(id: number): Promise<null> {
   return schicke('DELETE', `/journal/notizen/${id}`) as Promise<null>
 }
 
+// AP-14c: Stand der BO Research Suite (nur lesend).
+export interface BreakoutHypothese {
+  id: string
+  frage: string | null
+  universum: string | null
+  stufe: string | null
+  prioritaet: string | null
+  status: string | null
+  evidenz: string | null
+  entscheidung: string | null
+}
+
+export interface BreakoutErgebnis {
+  id: string
+  status: string | null
+  sitzungen: number | null
+  gesamt_punkte_05: number | null
+  mittel_punkte_05: number | null
+  bootstrap_p05: number | null
+  gates: Record<string, boolean>
+}
+
+export interface BreakoutStand {
+  gefunden: boolean
+  stand: string | null
+  ziel: string | null
+  hypothesen: BreakoutHypothese[]
+  ergebnisse: BreakoutErgebnis[]
+}
+
+export function holeBreakout(): Promise<BreakoutStand> {
+  return hole('/breakout-stand') as Promise<BreakoutStand>
+}
+
 // AP-14b: Status des Roller-Dienstes (durchgereicht, nur lesend).
 export interface RollerEdge {
   theo_roll?: number | null

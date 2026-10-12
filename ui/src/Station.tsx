@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fehlerText, holeRoller, holeSystem } from "./api";
-import type { RollerAntwort, System } from "./api";
+import { fehlerText, holeBreakout, holeRoller, holeSystem } from "./api";
+import type { BreakoutStand, RollerAntwort, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -269,15 +269,112 @@ export function MomentumSeite(): JSX.Element {
   );
 }
 
+function statusKlasse(status: string | null): string {
+  const s = (status ?? "").toLowerCase();
+  if (s.includes("retired") || s.includes("failed") || s.includes("nicht bestanden")) return "ampel rot";
+  if (s.includes("blocked") || s.includes("pause")) return "ampel grau";
+  if (s.includes("alle gates")) return "ampel gruen";
+  return "ampel grau";
+}
+
 export function BreakoutSeite(): JSX.Element {
+  const [daten, setzeDaten] = useState<BreakoutStand | null>(null);
+  const [fehler, setzeFehler] = useState<string | null>(null);
+  useEffect(() => {
+    holeBreakout()
+      .then(setzeDaten)
+      .catch((e) => setzeFehler(fehlerText(e)));
+  }, []);
+  if (fehler) return <p className="fehler">{fehler}</p>;
+  if (daten === null) return <p className="laedt">Lese BO Research Suite …</p>;
+  if (!daten.gefunden) {
+    return (
+      <section className="station">
+        <h2>Breakout Research</h2>
+        <p className="hinweis">
+          Die BO Research Suite wurde nicht gefunden. Erwartet in
+          C:\10_Coding\BO Research Suite (anderer Ort: Umgebungsvariable BO_ORDNER).
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="station">
       <h2>Breakout Research</h2>
       <p className="sicht">
-        Platz für die Breakout-Forschung (Identifizieren und Testen von
-        BO-Strategien). Wird eingebunden, sobald das Projekt unter
-        C:\10_Coding liegt.
+        Forschungsstand der BO Research Suite, nur lesend (Stand {daten.stand ?? "unbekannt"}). Das
+        Projekt läuft nach eigenen Regeln: Validation und Holdout bleiben versiegelt, je Hypothese
+        gibt es genau einen Discovery-Lauf. Ein sauber laufender Test ist kein Beleg für einen
+        Handelsvorteil.
       </p>
+      {daten.ziel && <p className="ziel">{daten.ziel}</p>}
+
+      <h3>Discovery-Ergebnisse ({daten.ergebnisse.length})</h3>
+      <div className="tabelle-rahmen">
+        <table className="strategie-tabelle">
+          <thead>
+            <tr>
+              <th>Hypothese</th>
+              <th>Status</th>
+              <th className="zahl">Sitzungen</th>
+              <th className="zahl" title="Mittel je Sitzung in SPX-Punkten bei 0,5 Punkten Kosten">
+                Ø Punkte (0,5 Kosten)
+              </th>
+              <th className="zahl" title="Untere 5-%-Grenze des Bootstrap, primäre Kennzahl; über 0 = Voraussetzung">
+                Bootstrap p05
+              </th>
+              <th className="zahl" title="Bestandene Gates von allen">Gates</th>
+            </tr>
+          </thead>
+          <tbody>
+            {daten.ergebnisse.map((e) => {
+              const ok = Object.values(e.gates).filter(Boolean).length;
+              return (
+                <tr key={e.id}>
+                  <td>{e.id}</td>
+                  <td>
+                    <span className={statusKlasse(e.status)}>{e.status ?? "—"}</span>
+                  </td>
+                  <td className="zahl">{e.sitzungen ?? "—"}</td>
+                  <td className="zahl">{zahl(e.mittel_punkte_05, 2)}</td>
+                  <td className="zahl">{zahl(e.bootstrap_p05, 2)}</td>
+                  <td className="zahl">
+                    {Object.keys(e.gates).length ? `${ok} / ${Object.keys(e.gates).length}` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Hypothesenregister ({daten.hypothesen.length})</h3>
+      <div className="tabelle-rahmen">
+        <table className="strategie-tabelle">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Frage</th>
+              <th>Stufe</th>
+              <th>Status</th>
+              <th>Entscheidung</th>
+            </tr>
+          </thead>
+          <tbody>
+            {daten.hypothesen.map((h) => (
+              <tr key={h.id}>
+                <td>{h.id}</td>
+                <td title={h.evidenz ?? undefined}>{h.frage ?? "—"}</td>
+                <td>{h.stufe ?? "—"}</td>
+                <td>
+                  <span className={statusKlasse(h.status)}>{h.status ?? "—"}</span>
+                </td>
+                <td>{h.entscheidung ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
