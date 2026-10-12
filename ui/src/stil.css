@@ -1179,3 +1179,5 @@ table.bestandteile tr.summe td {
 .backtests tr.klickbar { cursor: pointer; }
 .backtests tr.gewaehlt { background: var(--hover, rgba(128, 128, 128, 0.18)); }
 .backtests .knoepfe { white-space: nowrap; }
+.backtests .ursachen { font-size: 0.85em; }
+.backtests .ursache { display: inline-block; margin-right: 0.9em; white-space: nowrap; }

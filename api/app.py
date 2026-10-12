@@ -536,6 +536,15 @@ class BacktestVergleichAntwort(BaseModel):
     nur_live: int
     summe_nur_live: str
     offen: int
+    # AP-12c: Ursachen der Differenz (Summe = differenz) und der Kontrakteffekt.
+    ursachen: list["BacktestUrsacheAntwort"]
+    kontrakt_effekt: str
+
+
+class BacktestUrsacheAntwort(BaseModel):
+    ursache: str
+    anzahl: int
+    summe: str
 
 
 class BacktestOhneAntwort(BaseModel):
@@ -559,6 +568,9 @@ class BacktestPaarAntwort(BaseModel):
     pl_backtest: str | None
     pl_live: str | None
     differenz: str | None
+    ursache: str | None
+    zeitversatz_min: int | None
+    kontrakt_effekt: str | None
 
 
 class BacktestZuordnungEingabe(BaseModel):
@@ -2637,11 +2649,12 @@ def erzeuge_app(
         )
 
     @applikation.get("/backtests", response_model=BacktestsAntwort)
-    def backtests() -> BacktestsAntwort:
+    def backtests(von: date | None = None, bis: date | None = None) -> BacktestsAntwort:
         """Option-Omega-Backtests (AP-12a): Zuordnung OO-Strategie →
         OA-Strategie (Vorschläge und Entscheidungen) und Vergleich je
-        Kontrakt in USD."""
-        b = backtest_bericht(db_pfad)
+        Kontrakt in USD. ``von``/``bis`` am Tag der Eröffnung (AP-12c)."""
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        b = backtest_bericht(db_pfad, von=von, bis=bis)
         return BacktestsAntwort(
             zuordnungen=[
                 BacktestZuordnungAntwort(**{**z.__dict__, "anteil": _als_text(z.anteil)})
@@ -2655,7 +2668,13 @@ def erzeuge_app(
                     nur_backtest=z.nur_backtest,
                     summe_nur_backtest=_als_text(z.summe_nur_backtest),
                     nur_live=z.nur_live, summe_nur_live=_als_text(z.summe_nur_live),
-                    offen=z.offen)
+                    offen=z.offen,
+                    ursachen=[
+                        BacktestUrsacheAntwort(ursache=k, anzahl=u.anzahl,
+                                               summe=_als_text(u.summe))
+                        for k, u in sorted(z.ursachen.items(), key=lambda kv: kv[1].summe)
+                    ],
+                    kontrakt_effekt=_als_text(z.kontrakt_effekt))
                 for z in b.vergleich
             ],
             ohne_zuordnung=[BacktestOhneAntwort(oo_strategie=s, anzahl=n)
@@ -2663,9 +2682,13 @@ def erzeuge_app(
         )
 
     @applikation.get("/backtests/paare", response_model=list[BacktestPaarAntwort])
-    def backtest_paare(oo_strategie: str, oa_strategie: str) -> list[BacktestPaarAntwort]:
-        """Die Trades einer Zuordnung im Einzelnen (AP-12a)."""
-        for z in backtest_bericht(db_pfad).vergleich:
+    def backtest_paare(
+        oo_strategie: str, oa_strategie: str, von: date | None = None, bis: date | None = None
+    ) -> list[BacktestPaarAntwort]:
+        """Die Trades einer Zuordnung im Einzelnen (AP-12a), im selben Zeitraum
+        wie ``GET /backtests`` (AP-12c)."""
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        for z in backtest_bericht(db_pfad, von=von, bis=bis).vergleich:
             if (z.oo_strategie, z.oa_strategie) == (oo_strategie, oa_strategie):
                 return [
                     BacktestPaarAntwort(**{
@@ -2673,6 +2696,7 @@ def erzeuge_app(
                         "pl_backtest": _als_text(d.pl_backtest),
                         "pl_live": _als_text(d.pl_live),
                         "differenz": _als_text(d.differenz),
+                        "kontrakt_effekt": _als_text(d.kontrakt_effekt),
                     })
                     for d in z.details
                 ]

@@ -37,10 +37,20 @@ from engine.oo_zuordnung import (
     kontrakte,
     paaren,
     vorschlaege,
+    zuordnen_eins_zu_eins,
 )
 from ingest.optionomega import legs_lesen
 from journal.db import create_db_engine
 from journal.schema import executions, instruments, oo_trades, oo_zuordnung, optionapp_trades
+
+# AP-12c: Schwellen der Ursachenbestimmung — Annahmen (OF-84), hier an einer
+# Stelle änderbar.
+TOLERANZ_JE_KONTRAKT = Decimal("10")          # USD: darunter „in Toleranz"
+EINSTIEG_MINUTEN = 3                          # darüber: „Einstiegszeit"
+AUSSTIEG_MINUTEN = 5                          # darüber: „Exit-Logik"
+# Backtest-Schlussgründe, die einen Verfall bedeuten (alles andere ist ein
+# vorzeitiger Ausstieg des Backtests).
+OO_VERFALL = ("Expired", "Would've Exercised")
 
 CENT = Decimal("0.01")
 ANTEIL = Decimal("0.0001")
@@ -53,6 +63,8 @@ class OoZeile:
     kontrakte: int
     pl: Decimal
     offen: bool
+    geschlossen: datetime | None = None
+    grund: str = ""
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,10 @@ class LiveZeile:
     kontrakte: int
     profit: Decimal | None  # USD; None = offen oder andere Währung
     offen: bool
+    # AP-12c: Ausstieg laut IB — Zeit der letzten schließenden Ausführung und ob
+    # er ein Verfall war; None, solange keine schließende Ausführung bekannt ist.
+    ende: datetime | None = None
+    ausgelaufen: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +93,12 @@ class ZuordnungZeile:
     letzter: date | None
 
 
+@dataclass
+class UrsachenSumme:
+    anzahl: int = 0
+    summe: Decimal = Decimal("0")
+
+
 @dataclass(frozen=True)
 class VergleichDetail:
     art: str
@@ -88,6 +110,9 @@ class VergleichDetail:
     pl_backtest: Decimal | None
     pl_live: Decimal | None
     differenz: Decimal | None
+    ursache: str | None = None
+    zeitversatz_min: int | None = None
+    kontrakt_effekt: Decimal | None = None
 
 
 @dataclass
@@ -103,6 +128,10 @@ class VergleichZeile:
     nur_live: int = 0
     summe_nur_live: Decimal = Decimal("0")
     offen: int = 0
+    # AP-12c: jedes Paar mit genau einer Ursache; Summe über die Ursachen =
+    # differenz. Der Kontrakteffekt (Dollar insgesamt) steht daneben.
+    ursachen: dict[str, UrsachenSumme] = field(default_factory=dict)
+    kontrakt_effekt: Decimal = Decimal("0")
     details: list[VergleichDetail] = field(default_factory=list)
 
 
@@ -117,12 +146,39 @@ def _je_kontrakt(betrag: Decimal, kontrakte: int) -> Decimal:
     return (betrag / kontrakte).quantize(CENT, ROUND_HALF_UP)
 
 
+def _strikes(legs) -> list[tuple]:
+    return sorted((leg.right, leg.seite, leg.strike) for leg in legs)
+
+
+def _ursache(o: OoZeile, x: LiveZeile, bt: Decimal, lv: Decimal) -> tuple[str, int]:
+    """Genau eine Ursache je Paar, in fester Prüfreihenfolge (AP-12c):
+    Kontraktzahl, Toleranz, Einstiegszeit, Strikeauswahl, Exit-Logik, Slippage.
+    Dazu der Zeitversatz des Einstiegs in Minuten (Bot − Backtest)."""
+    versatz = round((x.eroeffnung.zeit - o.eroeffnung.zeit).total_seconds() / 60)
+    if o.kontrakte != x.kontrakte:
+        return "kontrakte", versatz
+    if abs(lv - bt) <= TOLERANZ_JE_KONTRAKT:
+        return "toleranz", versatz
+    if abs(versatz) > EINSTIEG_MINUTEN:
+        return "einstiegszeit", versatz
+    if _strikes(o.eroeffnung.legs) != _strikes(x.eroeffnung.legs):
+        return "strikeauswahl", versatz
+    if x.ausgelaufen is not None and o.geschlossen is not None:
+        oo_verfall = o.grund in OO_VERFALL
+        if oo_verfall != x.ausgelaufen:
+            return "exit", versatz
+        if not oo_verfall and x.ende is not None and abs(
+                (x.ende - o.geschlossen).total_seconds()) > AUSSTIEG_MINUTEN * 60:
+            return "exit", versatz
+    return "slippage", versatz
+
+
 def _lokale_paare(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile]
                   ) -> dict[str, str]:
     """Paarung eines Backtests mit EINEM Bot (AP-12b): Trades eines anderen
     Bots nehmen ihm keinen Partner weg — derselbe Backtest kann gegen
     mehrere Bots laufen (SPY: IF7 und XSP: IF7)."""
-    return paaren(
+    return zuordnen_eins_zu_eins(
         [z.eroeffnung for z in oo if z.eroeffnung.strategie == oo_s],
         [z.eroeffnung for z in live if z.eroeffnung.strategie == oa_s],
     )
@@ -155,9 +211,16 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
             zeile.paare += 1
             zeile.summe_backtest += bt
             zeile.summe_live += lv
+            ursache, versatz = _ursache(o, partner, bt, lv)
+            effekt = (partner.kontrakte - o.kontrakte) * lv if ursache == "kontrakte" else None
+            u = zeile.ursachen.setdefault(ursache, UrsachenSumme())
+            u.anzahl += 1
+            u.summe += lv - bt
+            if effekt is not None:
+                zeile.kontrakt_effekt += effekt
             zeile.details.append(VergleichDetail(
                 "paar", e.zeit, partner.eroeffnung.zeit, partner.eroeffnung.schluessel,
-                o.kontrakte, partner.kontrakte, bt, lv, lv - bt))
+                o.kontrakte, partner.kontrakte, bt, lv, lv - bt, ursache, versatz, effekt))
         elif partner is None and live_tage and min(live_tage) <= e.zeit.date() <= max(live_tage):
             zeile.nur_backtest += 1
             zeile.summe_nur_backtest += bt
@@ -233,6 +296,37 @@ def backtest_auswertung(oo: list[OoZeile], live: list[LiveZeile],
     return BacktestBericht(zuordnungen, vergleich, ohne)
 
 
+CSV_KOPF = (
+    "backtest;bot;art;eroeffnung_backtest;eroeffnung_bot;oa_trade;versatz_min;"
+    "kontrakte_backtest;kontrakte_bot;pl_backtest;pl_bot;differenz;ursache;kontrakt_effekt"
+)
+
+
+def als_csv(bericht: BacktestBericht) -> str:
+    """Alle Paare und Einzelfälle der nicht abgelehnten Zuordnungen als CSV
+    (Semikolon, Beträge je Kontrakt in USD mit zwei Nachkommastellen, leer =
+    kein Wert) — für den Monatsvergleich in Excel."""
+    def geld(w: Decimal | None) -> str:
+        return "" if w is None else f"{w:.2f}"
+
+    def zeit(z: datetime | None) -> str:
+        return "" if z is None else z.strftime("%Y-%m-%d %H:%M:%S")
+
+    def zahl(n) -> str:
+        return "" if n is None else str(n)
+
+    zeilen = [CSV_KOPF]
+    for v in bericht.vergleich:
+        for d in v.details:
+            zeilen.append(";".join([
+                v.oo_strategie, v.oa_strategie, d.art, zeit(d.zeit_backtest), zeit(d.zeit_live),
+                d.oa_trade or "", zahl(d.zeitversatz_min), zahl(d.kontrakte_backtest),
+                zahl(d.kontrakte_live), geld(d.pl_backtest), geld(d.pl_live),
+                geld(d.differenz), d.ursache or "", geld(d.kontrakt_effekt),
+            ]))
+    return "\n".join(zeilen)
+
+
 def _live_laden(v) -> list[LiveZeile]:
     oa = {}
     for z in v.execute(select(optionapp_trades)).mappings():
@@ -245,7 +339,7 @@ def _live_laden(v) -> list[LiveZeile]:
     for z in v.execute(
         select(executions.c.oa_trade, executions.c.handelszeit, executions.c.side,
                executions.c.menge, instruments.c.underlying, instruments.c.right,
-               instruments.c.strike, instruments.c.expiry)
+               instruments.c.strike, instruments.c.expiry, executions.c.ereignistyp)
         .join(instruments, instruments.c.conid == executions.c.conid)
         .where(executions.c.oa_trade.is_not(None), executions.c.ereignistyp == "trade",
                instruments.c.asset_class.in_(("OPT", "FOP")))
@@ -261,22 +355,38 @@ def _live_laden(v) -> list[LiveZeile]:
                 Decimal(z["strike"]), z["expiry"])
             for z in zeilen if z["handelszeit"] - beginn <= EROEFFNUNG_FENSTER
         )
+        # Ausstieg (AP-12c): die Ausführungen nach dem Eröffnungsfenster.
+        schliessend = [z for z in zeilen if z["handelszeit"] - beginn > EROEFFNUNG_FENSTER]
         strategie, profit, offen = oa[nummer]
         e = Eroeffnung(nummer, strategie, beginn, zeilen[0]["underlying"], legs)
-        ergebnis.append(LiveZeile(e, kontrakte(legs), profit, offen))
+        ergebnis.append(LiveZeile(
+            e, kontrakte(legs), profit, offen,
+            ende=max((z["handelszeit"] for z in schliessend), default=None),
+            ausgelaufen=(all(z["ereignistyp"] != "trade" for z in schliessend)
+                         if schliessend else None),
+        ))
     return ergebnis
 
 
-def backtest_bericht(db_pfad: str | pathlib.Path) -> BacktestBericht:
+def backtest_bericht(
+    db_pfad: str | pathlib.Path, *, von: date | None = None, bis: date | None = None
+) -> BacktestBericht:
+    """Lesende Hülle. ``von``/``bis`` begrenzen beide Seiten auf den Tag der
+    Eröffnung — so lässt sich Monat für Monat vergleichen (AP-12c)."""
     engine = create_db_engine(db_pfad)
     with engine.connect() as v:
         oo = [
             OoZeile(Eroeffnung(str(z["id"]), z["strategie"], z["eroeffnet"], z["basiswert"],
                                tuple(legs_lesen(z["legs_roh"], z["eroeffnet"].date()))),
-                    z["kontrakte"], z["pl"], z["offen"])
+                    z["kontrakte"], z["pl"], z["offen"], z["geschlossen"], z["grund"])
             for z in v.execute(select(oo_trades)).mappings()
         ]
         live = _live_laden(v)
         entscheidungen = {(z["oo_strategie"], z["oa_strategie"]): z["status"]
                           for z in v.execute(select(oo_zuordnung)).mappings()}
+    def im_zeitraum(tag: date) -> bool:
+        return (von is None or tag >= von) and (bis is None or tag <= bis)
+
+    oo = [z for z in oo if im_zeitraum(z.eroeffnung.zeit.date())]
+    live = [z for z in live if im_zeitraum(z.eroeffnung.zeit.date())]
     return backtest_auswertung(oo, live, entscheidungen)

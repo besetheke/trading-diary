@@ -14,7 +14,10 @@ import argparse
 import os
 import pathlib
 import sys
+from datetime import date
 
+from analytics.backtest import als_csv as backtest_als_csv
+from analytics.backtest import backtest_bericht
 from analytics.degradation import als_csv as degradation_als_csv
 from analytics.degradation import degradations_bericht
 from analytics.equity import als_csv as equity_als_csv
@@ -127,6 +130,19 @@ def main(argv: list[str] | None = None) -> int:
         help="CSV-Datei oder Ordner mit Exporten (neuester zuletzt)",
     )
     oo_importer.add_argument(
+        "--db", default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
+    bt_bericht = unterbefehle.add_parser(
+        "backtest-bericht",
+        help="Paare Backtest ↔ Bot mit Ursache der Abweichung als CSV schreiben (AP-12c)",
+    )
+    bt_bericht.add_argument("datei", type=pathlib.Path, help="Pfad zur Zieldatei (CSV)")
+    bt_bericht.add_argument("--von", type=date.fromisoformat, default=None,
+                            help="Erster Eröffnungstag (JJJJ-MM-TT)")
+    bt_bericht.add_argument("--bis", type=date.fromisoformat, default=None,
+                            help="Letzter Eröffnungstag (JJJJ-MM-TT)")
+    bt_bericht.add_argument(
         "--db", default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
     )
@@ -344,6 +360,15 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for name, ergebnis in ergebnisse:
             _oo_bericht(name, ergebnis)
+    elif argumente.befehl == "backtest-bericht":
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        bericht = backtest_bericht(db_pfad, von=argumente.von, bis=argumente.bis)
+        # UTF-8 mit BOM wie die anderen Berichte (Regel 13).
+        with open(argumente.datei, "w", encoding="utf-8-sig", newline="\n") as datei:
+            datei.write(backtest_als_csv(bericht) + "\n")
+        zeilen = sum(len(v.details) for v in bericht.vergleich)
+        print(f"Backtest-Bericht nach {argumente.datei}: {len(bericht.vergleich)} Zuordnungen, "
+              f"{zeilen} Zeilen")
     elif argumente.befehl == "abrufen":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         # Zugangsdaten → Ziel → Abruf → Speichern → Import → Rebuild: in

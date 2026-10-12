@@ -137,6 +137,53 @@ def paaren(
     return paare
 
 
+PAARUNG_EINS_ZU_EINS = timedelta(minutes=90)
+
+
+def _strike_abstand(a, b) -> Decimal:
+    """Summe der Strike-Unterschiede, sortierte Strikes gegeneinander — nur ein
+    Tiebreaker bei gleichem Zeitabstand."""
+    sa = sorted(leg.strike for leg in a)
+    sb = sorted(leg.strike for leg in b)
+    if len(sa) != len(sb):
+        return Decimal(0)
+    return sum((abs(x - y) for x, y in zip(sa, sb, strict=True)), Decimal(0))
+
+
+def zuordnen_eins_zu_eins(
+    oo: list[Eroeffnung], live: list[Eroeffnung], toleranz: timedelta = PAARUNG_EINS_ZU_EINS
+) -> dict[str, str]:
+    """Paarung für den Vergleich eines BESTÄTIGTEN Paars Backtest ↔ Bot
+    (AP-12c): derselbe Tag, dieselbe Familie, Signatur und Breite wie in
+    ``paaren``, aber jeder Live-Trade nur einmal und mit großem Zeitfenster —
+    sonst bliebe ein später einsteigender Bot ohne Partner und die Ursache
+    „Einstiegszeit" wäre nie sichtbar. Der kleinste Zeitabstand gewinnt, dann
+    der kleinste Strike-Abstand; Rest nach Schlüssel."""
+    kandidaten = []
+    for o in oo:
+        if not o.legs:
+            continue
+        tag = o.zeit.date()
+        sig = signatur(o.legs, tag)
+        breite = spannweite(o.legs)
+        for x in live:
+            if not x.legs or x.zeit.date() != tag:
+                continue
+            if familie(x.basiswert) != familie(o.basiswert) or signatur(x.legs, tag) != sig:
+                continue
+            if abs(x.zeit - o.zeit) > toleranz or not _passt_breite(breite, spannweite(x.legs)):
+                continue
+            kandidaten.append((abs(x.zeit - o.zeit), _strike_abstand(o.legs, x.legs),
+                               o.schluessel, x.schluessel))
+    paare: dict[str, str] = {}
+    belegt: set[str] = set()
+    for _, _, o_id, x_id in sorted(kandidaten):
+        if o_id not in paare and x_id not in belegt:
+            paare[o_id] = x_id
+            belegt.add(x_id)
+    return paare
+
+
 def vorschlaege(
     oo: list[Eroeffnung], live: list[Eroeffnung], paare: dict[str, str]
 ) -> list[Vorschlag]:

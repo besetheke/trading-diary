@@ -3402,3 +3402,16 @@ zur selben Zeit (Daten 2022/23, Optionsseite fehlt) — lose, weiter im Ergebnis
    Strategie das ist.
 5. Vergleich in USD je Kontrakt; Live = OA-Gewinn, nicht IB-Ergebnis (Verrechnung).
    Die Zerlegung der Abweichung (OF-76 Punkt 6) bleibt zurückgestellt.
+
+## OF-84 · Ursachenbestimmung Backtest ↔ Bot: Schwellen (AP-12c, 12.10.2026)
+
+Annahmen, an einer Stelle änderbar (`analytics/backtest.py`):
+Toleranz 10 USD je Kontrakt · Einstieg „anders“ ab > 3 Minuten · Ausstieg „anders“
+bei Verfall gegen vorzeitig oder > 5 Minuten · Paarung bis 90 Minuten, eins zu
+eins. OO-Schlussgründe `Expired` und `Would've Exercised` gelten als Verfall.
+Der Ausstieg des Bots kommt aus den IB-Ausführungen (letzte schließende
+Ausführung; Verfall, wenn alle schließenden Ereignisse Verfall/Ausübung/Zuteilung
+sind), nicht aus OAs Zeitstempeln (Zeitzone ungeprüft, OF-76/AP-13). Offen: ob die
+Schwellen zu den früheren Monatsberichten des Nutzers passen — Vergleich Juli/
+August mit der früheren Auswertung (Juli: 78 Paare, Live ≈ 1.250 $ unter dem
+Backtest; August: 102 von 138 zugeordnet, Live 1.560 $ darüber).

@@ -442,6 +442,12 @@ export interface BacktestZuordnung {
   letzter: string | null
 }
 
+export interface BacktestUrsache {
+  ursache: string
+  anzahl: number
+  summe: string
+}
+
 export interface BacktestVergleich {
   oo_strategie: string
   oa_strategie: string
@@ -454,6 +460,8 @@ export interface BacktestVergleich {
   nur_live: number
   summe_nur_live: string
   offen: number
+  ursachen: BacktestUrsache[]
+  kontrakt_effekt: string
 }
 
 export interface Backtests {
@@ -472,14 +480,32 @@ export interface BacktestPaar {
   pl_backtest: string | null
   pl_live: string | null
   differenz: string | null
+  ursache: string | null
+  zeitversatz_min: number | null
+  kontrakt_effekt: string | null
 }
 
-export function holeBacktests(): Promise<Backtests> {
-  return hole('/backtests') as Promise<Backtests>
+function zeitraumSuche(von?: string | null, bis?: string | null): URLSearchParams {
+  const suche = new URLSearchParams()
+  if (von) suche.set('von', von)
+  if (bis) suche.set('bis', bis)
+  return suche
 }
 
-export function holeBacktestPaare(oo: string, oa: string): Promise<BacktestPaar[]> {
-  const suche = new URLSearchParams({ oo_strategie: oo, oa_strategie: oa })
+export function holeBacktests(von?: string | null, bis?: string | null): Promise<Backtests> {
+  const text = zeitraumSuche(von, bis).toString()
+  return hole(`/backtests${text ? `?${text}` : ''}`) as Promise<Backtests>
+}
+
+export function holeBacktestPaare(
+  oo: string,
+  oa: string,
+  von?: string | null,
+  bis?: string | null,
+): Promise<BacktestPaar[]> {
+  const suche = zeitraumSuche(von, bis)
+  suche.set('oo_strategie', oo)
+  suche.set('oa_strategie', oa)
   return hole(`/backtests/paare?${suche.toString()}`) as Promise<BacktestPaar[]>
 }
 

@@ -8,6 +8,7 @@ import {
 } from "./api";
 import Betrag from "./Betrag";
 import { datumDe, zeitDe } from "./format";
+import { useZeitraum } from "./zeitraum";
 
 // AP-12a: Option-Omega-Backtests gegen die Bots. Zuordnung und alle Beträge
 // kommen fertig aus GET /backtests (Vertrag 8) — USD je Kontrakt.
@@ -31,9 +32,39 @@ const ART: Record<string, { text: string; hinweis: string }> = {
   offen: { text: "offen", hinweis: "Noch nicht abgeschlossen" },
 };
 
+// AP-12c: Ursache je Paar — genau eine, in dieser Prüfreihenfolge.
+const URSACHE: Record<string, { text: string; hinweis: string }> = {
+  kontrakte: {
+    text: "Kontraktzahl",
+    hinweis: "Backtest und Bot handeln verschieden viele Kontrakte",
+  },
+  toleranz: {
+    text: "in Toleranz",
+    hinweis: "Unterschied höchstens 10 USD je Kontrakt",
+  },
+  einstiegszeit: {
+    text: "Einstiegszeit",
+    hinweis: "Der Bot steigt mehr als 3 Minuten früher oder später ein",
+  },
+  strikeauswahl: {
+    text: "Strikeauswahl",
+    hinweis: "Der Bot wählt andere Strikes als der Backtest",
+  },
+  exit: {
+    text: "Exit-Logik",
+    hinweis:
+      "Einer steigt vorzeitig aus, der andere läuft bis zum Verfall (oder mehr als 5 Minuten Unterschied)",
+  },
+  slippage: {
+    text: "Slippage",
+    hinweis: "Alles gleich außer den Fills — Rest der Differenz",
+  },
+};
+
 type Auswahl = { oo: string; oa: string };
 
 export default function Backtests(): JSX.Element {
+  const [zeitraum] = useZeitraum();
   const [daten, setzeDaten] = useState<Daten | null>(null);
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [stand, setzeStand] = useState(0);
@@ -41,18 +72,18 @@ export default function Backtests(): JSX.Element {
   const [paare, setzePaare] = useState<BacktestPaar[] | null>(null);
 
   useEffect(() => {
-    holeBacktests()
+    holeBacktests(zeitraum.von, zeitraum.bis)
       .then(setzeDaten)
       .catch((e) => setzeFehler(fehlerText(e)));
-  }, [stand]);
+  }, [stand, zeitraum.von, zeitraum.bis]);
 
   useEffect(() => {
     setzePaare(null);
     if (auswahl === null) return;
-    holeBacktestPaare(auswahl.oo, auswahl.oa)
+    holeBacktestPaare(auswahl.oo, auswahl.oa, zeitraum.von, zeitraum.bis)
       .then(setzePaare)
       .catch((e) => setzeFehler(fehlerText(e)));
-  }, [auswahl, stand]);
+  }, [auswahl, stand, zeitraum.von, zeitraum.bis]);
 
   function entscheide(
     oo: string,
@@ -207,6 +238,15 @@ export default function Backtests(): JSX.Element {
                 nur Bot
               </th>
               <th className="zahl">offen</th>
+              <th title="Je Paar genau eine Ursache; die Summen ergeben zusammen die Differenz">
+                Ursachen der Differenz
+              </th>
+              <th
+                className="zahl"
+                title="Ergebnis des Bots, das durch abweichende Kontraktzahlen entsteht (Dollar insgesamt)"
+              >
+                Kontrakt-Effekt
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -256,6 +296,25 @@ export default function Backtests(): JSX.Element {
                     )}
                   </td>
                   <td className="zahl">{v.offen || ""}</td>
+                  <td className="ursachen">
+                    {v.ursachen.map((u) => (
+                      <span
+                        key={u.ursache}
+                        className="ursache"
+                        title={URSACHE[u.ursache]?.hinweis}
+                      >
+                        {URSACHE[u.ursache]?.text ?? u.ursache} {u.anzahl}×{" "}
+                        <Betrag wert={u.summe} waehrung="USD" />
+                      </span>
+                    ))}
+                  </td>
+                  <td className="zahl">
+                    {Number(v.kontrakt_effekt) === 0 ? (
+                      ""
+                    ) : (
+                      <Betrag wert={v.kontrakt_effekt} waehrung="USD" />
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -266,8 +325,10 @@ export default function Backtests(): JSX.Element {
         Bot = OA-Gewinn je Trade (nicht das IB-Ergebnis, das zwischen Bots
         verrechnet wird), geteilt durch die Kontrakte; Backtest = OO-P/L je
         Kontrakt. „nur Backtest“ zählt nur Tage, an denen der Bot lief; „nur
-        Bot“ nur Tage im Zeitraum des Backtests. Zeile anklicken für die
-        einzelnen Trades.
+        Bot“ nur Tage im Zeitraum des Backtests. Der Zeitraum oben begrenzt
+        beide Seiten auf den Tag der Eröffnung — für den Monatsvergleich einfach
+        den Monat wählen. Paare entstehen eins zu eins innerhalb von 90 Minuten.
+        Zeile anklicken für die einzelnen Trades.
       </p>
 
       {auswahl && (
@@ -286,10 +347,12 @@ export default function Backtests(): JSX.Element {
                     <th>Backtest</th>
                     <th>Bot</th>
                     <th>OA-Trade</th>
+                    <th title="Einstieg des Bots minus Einstieg des Backtests">Versatz</th>
                     <th className="zahl">Kontrakte</th>
                     <th className="zahl">Backtest</th>
                     <th className="zahl">Bot</th>
                     <th className="zahl">Differenz</th>
+                    <th>Ursache</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,6 +362,11 @@ export default function Backtests(): JSX.Element {
                       <td>{zeitDe(p.zeit_backtest)}</td>
                       <td>{zeitDe(p.zeit_live)}</td>
                       <td>{p.oa_trade ?? "—"}</td>
+                      <td className="zahl">
+                        {p.zeitversatz_min === null
+                          ? "—"
+                          : `${p.zeitversatz_min > 0 ? "+" : ""}${p.zeitversatz_min} min`}
+                      </td>
                       <td className="zahl">
                         {p.kontrakte_backtest ?? "—"} / {p.kontrakte_live ?? "—"}
                       </td>
@@ -322,6 +390,9 @@ export default function Backtests(): JSX.Element {
                         ) : (
                           <Betrag wert={p.differenz} waehrung="USD" />
                         )}
+                      </td>
+                      <td title={p.ursache ? URSACHE[p.ursache]?.hinweis : undefined}>
+                        {p.ursache ? (URSACHE[p.ursache]?.text ?? p.ursache) : ""}
                       </td>
                     </tr>
                   ))}
