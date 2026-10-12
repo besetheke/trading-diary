@@ -170,6 +170,11 @@ class KetteAntwort(BaseModel):
     # Kette; in der Kettenansicht leer.
     schritt: int | None = None
     schritte_gesamt: int | None = None
+    # AP-06sf: Prämienwert der offenen Legs in EUR aus Verkäufersicht (Credit
+    # positiv): bei Eröffnung (ohne Kommission) und laut IBs letztem Marktwert.
+    # Probe: offen − aktuell − Kommission = unrealisiert. Nur offene Ketten.
+    praemie_offen_eur: str | None = None
+    praemie_aktuell_eur: str | None = None
 
 
 class StrukturAntwort(BaseModel):
@@ -1231,6 +1236,9 @@ def _realisiert_bisher(verbindung: Connection, chain_ids: list[int]) -> dict[int
     return {c: s for c, s in summe.items() if len(waehrungen[c]) == 1}
 
 
+KEIN_UNREAL: tuple[None, int, None, None] = (None, 0, None, None)
+
+
 def _schritte_liste(
     engine, bedingungen, sortierung: str, richtung: str, limit: int, offset: int
 ) -> KettenListeAntwort:
@@ -1288,12 +1296,15 @@ def _schritte_liste(
         letztes = z["s_sequenz"] == letzte[z["chain_id"]]
         k["endzustand"] = z["endzustand"] if letztes else None
         offen_letztes = letztes and z["s_zu"] is None
-        unreal = unrealisiert.get(z["chain_id"], (None, 0)) if offen_letztes else (None, 0)
+        unreal = (unrealisiert.get(z["chain_id"], KEIN_UNREAL) if offen_letztes
+                  else KEIN_UNREAL)
         treffer.append(KetteAntwort(
             **_kette_als_dict(k, 1, [z["s_waehrung"]], z["s_netto"], z["s_ep"], z["s_sp"],
                               z["s_menge"]),
             unrealisiert_eur=unreal[0],
             offene_legs_ohne_kurs=unreal[1],
+            praemie_offen_eur=unreal[2],
+            praemie_aktuell_eur=unreal[3],
             schritt=z["s_sequenz"],
             schritte_gesamt=anzahl[z["chain_id"]],
         ))
@@ -1754,7 +1765,8 @@ def _bewertungsgrundlage(verbindung: Connection, offene: list[dict], bis: date |
         z["exec_id"]: dict(z)
         for z in verbindung.execute(
             select(executions.c.exec_id, executions.c.conid, executions.c.side,
-                   executions.c.preis).where(executions.c.exec_id.in_(exec_ids))
+                   executions.c.preis, executions.c.buchungskurs,
+                   ).where(executions.c.exec_id.in_(exec_ids))
         ).mappings()
     } if exec_ids else {}
     mult = {
@@ -1766,9 +1778,11 @@ def _bewertungsgrundlage(verbindung: Connection, offene: list[dict], bis: date |
 
 def _unrealisiert_je_kette(
     verbindung: Connection, chain_ids: list[int]
-) -> dict[int, tuple[str | None, int]]:
+) -> dict[int, tuple[str | None, int, str | None, str | None]]:
     """AP-07ku: je Kette (unrealisiert EUR als Text oder None, offene Legs ohne
-    Kurs). Kein Wert, solange kein offenes Leg bewertet ist."""
+    Kurs). Kein Wert, solange kein offenes Leg bewertet ist. AP-06sf: dazu der
+    Prämienwert der offenen Legs bei Eröffnung und laut IBs Marktwert (EUR,
+    Verkäufersicht, Credit positiv); der aktuelle nur mit bewerteten Legs."""
     if not chain_ids:
         return {}
     zeilen = verbindung.execute(
@@ -1794,7 +1808,12 @@ def _unrealisiert_je_kette(
     ergebnis = {}
     for chain_id, kette_legs in je_kette.items():
         e = unrealisiert_auswertung(kette_legs, exec_je_id, mult, bestand, stichtag)
-        ergebnis[chain_id] = (_als_text(e.eur) if e.anzahl_legs else None, e.ohne_kurs)
+        ergebnis[chain_id] = (
+            _als_text(e.eur) if e.anzahl_legs else None,
+            e.ohne_kurs,
+            _als_text(e.praemie_eur),
+            _als_text(e.aktuell_eur) if e.anzahl_legs else None,
+        )
     return ergebnis
 
 
@@ -2048,8 +2067,10 @@ def erzeuge_app(
             treffer=[
                 KetteAntwort(
                     **_kette_als_dict(z, *zuschuesse.get(z["chain_id"], leer)),
-                    unrealisiert_eur=unrealisiert.get(z["chain_id"], (None, 0))[0],
-                    offene_legs_ohne_kurs=unrealisiert.get(z["chain_id"], (None, 0))[1],
+                    unrealisiert_eur=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[0],
+                    offene_legs_ohne_kurs=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[1],
+                    praemie_offen_eur=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[2],
+                    praemie_aktuell_eur=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[3],
                     realisiert_bisher=_als_text(bisher.get(z["chain_id"])),
                 )
                 for z in zeilen

@@ -42,3 +42,13 @@ Glied). Positionsliste: Umschalter wie in der Scorecard, in der Adresse
 (`ansicht=schritte`); die Scorecard-Links geben die Ansicht weiter. Die
 Auswertung oben auf der Seite bleibt die der Ketten.
 Test: `tests/test_api_ketten_schritte.py`.
+
+## Nachtrag AP-06sf (12.10.2026)
+
+Prämienwert offener Positionen: `GET /ketten` trägt `praemie_offen_eur` (Prämie
+der offenen Legs bei Eröffnung, ohne Kommission; auch ohne Bestand laut IB
+bekannt, sofern ein Buchungskurs da ist) und `praemie_aktuell_eur` (−IBs
+Marktwert der bewerteten Legs); EUR, Verkäufersicht, Credit positiv. Probe:
+offen − aktuell − Kommission = Unrealisiert. Positionsliste: zwei neue Spalten
+(„Prämie offen³“, „Prämie aktuell³“), in der Schrittansicht am offenen Glied.
+Test: `tests/test_api_ketten_praemie.py`.

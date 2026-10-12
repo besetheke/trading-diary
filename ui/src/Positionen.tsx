@@ -49,6 +49,8 @@ type SpaltenId =
   | 'schlusspreis'
   | 'struktur_summe_netto'
   | 'unrealisiert_eur'
+  | 'praemie_offen_eur'
+  | 'praemie_aktuell_eur'
   | 'waehrung'
 
 interface Spalte {
@@ -85,6 +87,15 @@ const SPALTEN: Record<SpaltenId, Spalte> = {
   struktur_summe_netto: { titel: 'Ergebnis netto¹', sortierbar: false },
   // AP-07ku: offene Legs zu IBs letztem Marktwert gegen den Einstand, EUR.
   unrealisiert_eur: { titel: 'Unrealisiert²', sortierbar: false },
+  // AP-06sf: Prämienwert der offenen Position in EUR, Verkäufersicht.
+  praemie_offen_eur: {
+    titel: 'Prämie offen³',
+    sortierbar: false,
+  },
+  praemie_aktuell_eur: {
+    titel: 'Prämie aktuell³',
+    sortierbar: false,
+  },
   waehrung: { titel: 'Währung', sortierbar: false },
 }
 
@@ -97,6 +108,8 @@ const ZAHL_SPALTEN: SpaltenId[] = [
   'schlusspreis',
   'struktur_summe_netto',
   'unrealisiert_eur',
+  'praemie_offen_eur',
+  'praemie_aktuell_eur',
 ]
 const NICHT_SORTIERBAR_TITEL =
   'Nicht sortierbar — der Wert gilt nur für die angezeigte Seite'
@@ -112,18 +125,25 @@ function istSortierbareSpalte(wert: string | null): wert is Sortierspalte {
 // Vorgabe — vollständig oder gar nicht, nichts wird still repariert.
 // AP-07ku: v3 kennt die Spalte „Unrealisiert“. Eine unter v2 gespeicherte Wahl
 // wird übernommen und um die neue Spalte ergänzt (nach „Ergebnis netto“).
-const SPALTEN_SCHLUESSEL = 'positionen.spalten.v3'
+// AP-06sf: v4 kennt „Prämie offen/aktuell“; eine v3-Wahl wird um beide ergänzt.
+const SPALTEN_SCHLUESSEL = 'positionen.spalten.v4'
 
 function leseSpalten(): SpaltenId[] | null {
   try {
     let roh = window.localStorage.getItem(SPALTEN_SCHLUESSEL)
     if (roh === null) {
-      const alt = window.localStorage.getItem('positionen.spalten.v2')
+      const alt =
+        window.localStorage.getItem('positionen.spalten.v3') ??
+        window.localStorage.getItem('positionen.spalten.v2')
       if (alt === null) return null
       const liste = JSON.parse(alt) as string[]
       if (Array.isArray(liste) && !liste.includes('unrealisiert_eur')) {
         const nach = liste.indexOf('struktur_summe_netto')
         liste.splice(nach >= 0 ? nach + 1 : liste.length, 0, 'unrealisiert_eur')
+      }
+      if (Array.isArray(liste) && !liste.includes('praemie_offen_eur')) {
+        const nach = liste.indexOf('unrealisiert_eur')
+        liste.splice(nach >= 0 ? nach + 1 : liste.length, 0, 'praemie_offen_eur', 'praemie_aktuell_eur')
       }
       roh = JSON.stringify(liste)
     }
@@ -364,6 +384,22 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
           )}
         </td>
       )
+    case 'praemie_offen_eur':
+    case 'praemie_aktuell_eur': {
+      const wert = id === 'praemie_offen_eur' ? kette.praemie_offen_eur : kette.praemie_aktuell_eur
+      return (
+        <td
+          className="zahl"
+          title={
+            id === 'praemie_offen_eur'
+              ? 'Prämie der offenen Legs bei Eröffnung (Credit positiv), ohne Kommission'
+              : 'Prämienwert der offenen Legs laut IBs letztem Marktwert (Credit positiv)'
+          }
+        >
+          {wert === null || wert === undefined ? '—' : <Betrag wert={wert} />}
+        </td>
+      )
+    }
     case 'waehrung':
       return (
         <td>
@@ -955,6 +991,10 @@ export default function Positionen(): JSX.Element {
             gemeinsame Order belegt; Rolls in getrennten Orders sind Vorschläge.
             <br />² Nur offene Positionen: IBs letzter Marktwert gegen den Einstand des
             Journals, in EUR (Stand des letzten Berichts). „?“: offene Legs ohne Bestand laut IB.
+            <br />³ Nur offene Positionen, in EUR, aus Verkäufersicht (Credit positiv):
+            „Prämie offen“ = Prämie der offenen Legs bei Eröffnung (ohne Kommission),
+            „Prämie aktuell“ = Prämienwert laut IBs letztem Marktwert. Offen − aktuell
+            − Kommission = Unrealisiert. In der Schrittansicht steht der Wert am offenen Glied.
           </p>
         </>
       )}

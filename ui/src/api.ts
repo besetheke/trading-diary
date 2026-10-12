@@ -24,6 +24,9 @@ export interface Kette {
   struktur_summe_netto: string | null
   realisiert_bisher?: string | null
   // AP-06se: Schrittansicht — Nummer des Glieds und Zahl der Glieder.
+  // AP-06sf: Prämienwert der offenen Legs (EUR, Verkäufersicht, Credit positiv).
+  praemie_offen_eur?: string | null
+  praemie_aktuell_eur?: string | null
   schritt?: number | null
   schritte_gesamt?: number | null
   waehrung: string | null
