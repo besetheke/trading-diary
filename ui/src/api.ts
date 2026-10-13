@@ -539,26 +539,50 @@ export interface RollerStatus {
   log: string[]
 }
 
-export interface RollerStrategie {
-  aktiv: boolean
-  vorgabe: string
-  paper: boolean
-  letzte_pruefung: string | null
-  position: { verfall: string; short: number; long: number; menge: number } | null
-  short_delta: number | null
-  signal: boolean
-  grund: string
-  vorschlag: {
-    verfall: string; short: number; long: number
-    neu_verfall: string; neu_short: number; neu_long: number
-    debit_alt: number; kredit_neu: number; netto: number; limit: number; natuerlich: number
-    erstellt: string
-  } | null
-  letzter_roll: { gefuellt: boolean; netto?: number; zeit: string; status?: string } | null
+export interface RollerRollPlan {
+  kette: string; strategie: string
+  verfall: string; short: number; long: number; short_delta: number; dte: number; gap: boolean
+  neu_verfall: string; neu_dte: number; neu_short: number; neu_long: number; neu_delta: number | null
+  wochen: number; verschiebung: number
+  debit_alt: number; netto: number; max_debit: number; limit: number; natuerlich: number
+  erstellt: string
 }
 
-export function sendeRollerBefehl(name: 'roll-freigabe' | 'strategie-pruefen'): Promise<unknown> {
-  return schicke('POST', `/journal/roller-befehl/${name}`, {})
+export interface RollerKetteStand {
+  kette_id: string
+  strategie: string
+  aktiv: { verfall: string; short: number; long: number; menge: number }
+  erstkredit: number | null
+  netto: number
+  rolls: number
+  pt_limit: number | null
+  spot?: number | null
+  short_delta?: number | null
+  dte?: number
+  schwelle?: number | null
+  signal?: boolean
+  gap?: boolean
+  grund?: string
+  alarm?: boolean
+  vorschlag?: RollerRollPlan | null
+  geprueft?: string
+}
+
+export interface RollerStrategie {
+  paper: boolean
+  letzte_pruefung: string | null
+  grund: string
+  vorgaben: { name: string; text: string }[]
+  ketten: RollerKetteStand[]
+  meldungen: string[]
+}
+
+export function sendeRollerBefehl(
+  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen',
+  parameter: { kette?: string; strategie?: string } = {},
+): Promise<unknown> {
+  const q = new URLSearchParams(parameter as Record<string, string>).toString()
+  return schicke('POST', `/journal/roller-befehl/${name}${q ? `?${q}` : ''}`, {})
 }
 
 export interface RollerAntwort {

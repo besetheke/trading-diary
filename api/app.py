@@ -590,7 +590,7 @@ def _hole_roller_status(port: int) -> dict | None:
         return None
 
 
-ROLLER_BEFEHLE = ("roll-freigabe", "strategie-pruefen")
+ROLLER_BEFEHLE = ("roll-freigabe", "strategie-pruefen", "oeffnen")
 
 
 def _sende_roller_befehl(port: int, name: str) -> tuple[int, dict]:
@@ -3386,15 +3386,20 @@ def erzeuge_app(
     if mit_journal:
 
         @applikation.post("/journal/roller-befehl/{name}")
-        def roller_befehl(name: str) -> dict:
-            """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` führt den
-            vorbereiteten Roll aus, ``strategie-pruefen`` rechnet neu. Nur diese
-            beiden Namen; Prüfung (Paper, Leitplanken) macht der Dienst."""
+        def roller_befehl(name: str, kette: str | None = None,
+                          strategie: str | None = None) -> dict:
+            """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` (``kette``)
+            führt den vorbereiteten Roll aus, ``oeffnen`` (``strategie``) eröffnet
+            eine Strategie, ``strategie-pruefen`` rechnet neu. Nur diese Namen;
+            Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst."""
             if name not in ROLLER_BEFEHLE:
                 raise HTTPException(status_code=404, detail="unbekannter Befehl")
             if roller_port is None:
                 raise HTTPException(status_code=503, detail="Roller nicht angebunden")
-            code, antwort = sende_roller_befehl(roller_port, name)
+            from urllib.parse import urlencode
+            parameter = {k: w for k, w in (("kette", kette), ("strategie", strategie)) if w}
+            ziel = f"{name}?{urlencode(parameter)}" if parameter else name
+            code, antwort = sende_roller_befehl(roller_port, ziel)
             if code != 200:
                 raise HTTPException(status_code=code, detail=antwort.get("fehler", "abgelehnt"))
             return antwort

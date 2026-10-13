@@ -134,50 +134,100 @@ function verfall(jjjjmmtt: string): string {
 
 function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
   const [meldung, setzeMeldung] = useState<string | null>(null);
-  const [laeuft, setzeLaeuft] = useState(false);
-  const v = s.vorschlag;
-  const tu = (name: "roll-freigabe" | "strategie-pruefen") => {
-    setzeLaeuft(true);
-    setzeMeldung(null);
-    sendeRollerBefehl(name)
-      .then((a) => setzeMeldung(name === "roll-freigabe" ? `Roll ausgeführt: ${JSON.stringify(a)}` : "Neu geprüft."))
+  const [laeuft, setzeLaeuft] = useState<string | null>(null);
+  const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
+  const tu = (
+    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen",
+    parameter: { kette?: string; strategie?: string } = {},
+  ) => {
+    setzeLaeuft(name + (parameter.kette ?? ""));
+    setzeMeldung(name === "strategie-pruefen" ? "Prüfe …" : "Order läuft — der Limit wird nachgezogen, das kann Minuten dauern …");
+    sendeRollerBefehl(name, parameter)
+      .then((a) => setzeMeldung(name === "strategie-pruefen" ? "Neu geprüft." : `Ergebnis: ${JSON.stringify(a)}`))
       .catch((e) => setzeMeldung(fehlerText(e)))
-      .finally(() => setzeLaeuft(false));
+      .finally(() => setzeLaeuft(null));
   };
+  const zahl = (x: number | null | undefined, n = 2) => (x === null || x === undefined ? "—" : x.toFixed(n));
   return (
     <>
-      <h3>Strategie (Paper)</h3>
-      <p className="sicht">{s.vorgabe}</p>
+      <h3>Strategien (Paper)</h3>
       <p className="sicht">
-        {s.position
-          ? `Position ${s.position.verfall} ${s.position.short}/${s.position.long} ×${s.position.menge}, Short-Δ ${
-              s.short_delta === null ? "—" : s.short_delta.toFixed(3)
-            }`
-          : "Keine Spread-Position"}{" "}
-        · {s.signal ? "ROLL-SIGNAL" : "kein Roll-Signal"} · {s.grund}
-        {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}
+        {s.paper ? "Paper-Konto verbunden" : "kein Paper-Konto — Orders gesperrt"} · {s.grund}
+        {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
+        <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
-      {v && (
-        <p className="sicht">
-          Vorschlag: {v.verfall} {v.short}/{v.long} → {v.neu_verfall} {v.neu_short}/{v.neu_long}, schließen{" "}
-          {v.debit_alt.toFixed(2)}, eröffnen {v.kredit_neu.toFixed(2)}, netto {v.netto.toFixed(2)} (Limit{" "}
-          {v.limit.toFixed(2)}, natürlich {v.natuerlich.toFixed(2)}). Kurse verzögert — der Limit wird bis zum
-          Netto-Mindestkredit nachgezogen.
-        </p>
-      )}
       <p>
-        <button disabled={laeuft} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>{" "}
-        <button disabled={laeuft || !v || !s.paper} onClick={() => tu("roll-freigabe")}
-          title={s.paper ? "Roll am Paper-Konto ausführen" : "Nur gegen das Paper-Konto"}>
-          Roll freigeben
+        <select value={wahl} onChange={(e) => setzeWahl(e.target.value)}>
+          {s.vorgaben.map((v) => (
+            <option key={v.name} value={v.name} title={v.text}>{v.name}</option>
+          ))}
+        </select>{" "}
+        <button disabled={laeuft !== null || !s.paper || !wahl} onClick={() => tu("oeffnen", { strategie: wahl })}>
+          Eröffnen
         </button>
       </p>
+      <p className="hinweis">{s.vorgaben.find((v) => v.name === wahl)?.text}</p>
+      {s.ketten.length === 0 ? (
+        <p className="hinweis">Keine offene Kette.</p>
+      ) : (
+        <div className="tabelle-rahmen">
+          <table className="strategie-tabelle">
+            <thead>
+              <tr>
+                <th>Kette</th>
+                <th>Strategie</th>
+                <th>Verfall</th>
+                <th className="zahl">DTE</th>
+                <th className="zahl">Short/Long</th>
+                <th className="zahl">|Δ| Short</th>
+                <th className="zahl">Schwelle</th>
+                <th className="zahl" title="Summe aller Kredite minus Debits der Kette">Netto</th>
+                <th className="zahl">Rolls</th>
+                <th className="zahl" title="Rückkauf-Limit des Profit-Targets">PT</th>
+                <th>Lage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.ketten.map((k) => (
+                <tr key={k.kette_id} className={k.alarm ? "warnung" : undefined}>
+                  <td>{k.kette_id}</td>
+                  <td>{k.strategie}</td>
+                  <td>{verfall(k.aktiv.verfall)}</td>
+                  <td className="zahl">{k.dte ?? "—"}</td>
+                  <td className="zahl">{k.aktiv.short}/{k.aktiv.long}</td>
+                  <td className="zahl">{k.short_delta === null || k.short_delta === undefined ? "—" : Math.abs(k.short_delta).toFixed(3)}</td>
+                  <td className="zahl">{zahl(k.schwelle)}</td>
+                  <td className="zahl">{zahl(k.netto)}</td>
+                  <td className="zahl">{k.rolls}</td>
+                  <td className="zahl">{zahl(k.pt_limit)}</td>
+                  <td>
+                    {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
+                    {k.grund ?? "—"}
+                    {k.vorschlag && (
+                      <div>
+                        Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
+                        (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
+                        |Δ| neu {zahl(k.vorschlag.neu_delta === null ? null : Math.abs(k.vorschlag.neu_delta), 3)}), netto{" "}
+                        {zahl(k.vorschlag.netto)}, Debit-Rahmen {zahl(k.vorschlag.max_debit)}{" "}
+                        <button disabled={laeuft !== null || !s.paper}
+                          onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                          Roll freigeben
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {meldung && <p className="hinweis">{meldung}</p>}
-      {s.letzter_roll && (
-        <p className="sicht">
-          Letzter Roll {zeitDe(s.letzter_roll.zeit)}: {s.letzter_roll.gefuellt ? "gefüllt" : "nicht gefüllt"}
-          {s.letzter_roll.netto !== undefined ? `, netto ${s.letzter_roll.netto.toFixed(2)}` : ""}
-        </p>
+      {s.meldungen.length > 0 && (
+        <details>
+          <summary>Meldungen ({s.meldungen.length})</summary>
+          <ul>{[...s.meldungen].reverse().map((m, i) => <li key={i}>{m}</li>)}</ul>
+        </details>
       )}
     </>
   );
