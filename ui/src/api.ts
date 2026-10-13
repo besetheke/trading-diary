@@ -524,6 +524,7 @@ export interface RollerStatus {
   gestartet: string
   herzschlag: string
   orders: { freigegeben: boolean; modus: string }
+  strategie?: RollerStrategie | null
   ib: { verbunden: boolean; host: string; port: number; client_id: number }
   positionen: { spreads: number; einzel: number }
   scanner: {
@@ -536,6 +537,28 @@ export interface RollerStatus {
   breaches: RollerBreach[]
   spreads: RollerSpread[]
   log: string[]
+}
+
+export interface RollerStrategie {
+  aktiv: boolean
+  vorgabe: string
+  paper: boolean
+  letzte_pruefung: string | null
+  position: { verfall: string; short: number; long: number; menge: number } | null
+  short_delta: number | null
+  signal: boolean
+  grund: string
+  vorschlag: {
+    verfall: string; short: number; long: number
+    neu_verfall: string; neu_short: number; neu_long: number
+    debit_alt: number; kredit_neu: number; netto: number; limit: number; natuerlich: number
+    erstellt: string
+  } | null
+  letzter_roll: { gefuellt: boolean; netto?: number; zeit: string; status?: string } | null
+}
+
+export function sendeRollerBefehl(name: 'roll-freigabe' | 'strategie-pruefen'): Promise<unknown> {
+  return schicke('POST', `/journal/roller-befehl/${name}`, {})
 }
 
 export interface RollerAntwort {

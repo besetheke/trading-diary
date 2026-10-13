@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
-import { fehlerText, holeBreakout, holeRoller, holeSystem } from "./api";
-import type { BreakoutStand, RollerAntwort, RollerKette, System } from "./api";
+import { fehlerText, holeBreakout, holeRoller, holeSystem, sendeRollerBefehl } from "./api";
+import type { BreakoutStand, RollerAntwort, RollerKette, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -132,6 +132,57 @@ function verfall(jjjjmmtt: string): string {
     : jjjjmmtt;
 }
 
+function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
+  const [meldung, setzeMeldung] = useState<string | null>(null);
+  const [laeuft, setzeLaeuft] = useState(false);
+  const v = s.vorschlag;
+  const tu = (name: "roll-freigabe" | "strategie-pruefen") => {
+    setzeLaeuft(true);
+    setzeMeldung(null);
+    sendeRollerBefehl(name)
+      .then((a) => setzeMeldung(name === "roll-freigabe" ? `Roll ausgeführt: ${JSON.stringify(a)}` : "Neu geprüft."))
+      .catch((e) => setzeMeldung(fehlerText(e)))
+      .finally(() => setzeLaeuft(false));
+  };
+  return (
+    <>
+      <h3>Strategie (Paper)</h3>
+      <p className="sicht">{s.vorgabe}</p>
+      <p className="sicht">
+        {s.position
+          ? `Position ${s.position.verfall} ${s.position.short}/${s.position.long} ×${s.position.menge}, Short-Δ ${
+              s.short_delta === null ? "—" : s.short_delta.toFixed(3)
+            }`
+          : "Keine Spread-Position"}{" "}
+        · {s.signal ? "ROLL-SIGNAL" : "kein Roll-Signal"} · {s.grund}
+        {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}
+      </p>
+      {v && (
+        <p className="sicht">
+          Vorschlag: {v.verfall} {v.short}/{v.long} → {v.neu_verfall} {v.neu_short}/{v.neu_long}, schließen{" "}
+          {v.debit_alt.toFixed(2)}, eröffnen {v.kredit_neu.toFixed(2)}, netto {v.netto.toFixed(2)} (Limit{" "}
+          {v.limit.toFixed(2)}, natürlich {v.natuerlich.toFixed(2)}). Kurse verzögert — der Limit wird bis zum
+          Netto-Mindestkredit nachgezogen.
+        </p>
+      )}
+      <p>
+        <button disabled={laeuft} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>{" "}
+        <button disabled={laeuft || !v || !s.paper} onClick={() => tu("roll-freigabe")}
+          title={s.paper ? "Roll am Paper-Konto ausführen" : "Nur gegen das Paper-Konto"}>
+          Roll freigeben
+        </button>
+      </p>
+      {meldung && <p className="hinweis">{meldung}</p>}
+      {s.letzter_roll && (
+        <p className="sicht">
+          Letzter Roll {zeitDe(s.letzter_roll.zeit)}: {s.letzter_roll.gefuellt ? "gefüllt" : "nicht gefüllt"}
+          {s.letzter_roll.netto !== undefined ? `, netto ${s.letzter_roll.netto.toFixed(2)}` : ""}
+        </p>
+      )}
+    </>
+  );
+}
+
 export function RollerSeite(): JSX.Element {
   const [daten, setzeDaten] = useState<RollerAntwort | null>(null);
   const [fehler, setzeFehler] = useState<string | null>(null);
@@ -169,7 +220,7 @@ export function RollerSeite(): JSX.Element {
     <section className="station">
       <h2>Options Roller</h2>
       <p className="sicht">
-        Stufe {s.stufe}: nur lesen — der Dienst setzt keine Orders ab.{" "}
+        Stufe {s.stufe}: {s.orders.freigegeben ? s.orders.modus : "nur lesen — der Dienst setzt keine Orders ab"}.{" "}
         <span className={s.ib.verbunden ? "ampel gruen" : "ampel rot"}>
           {s.ib.verbunden ? `IB verbunden (Port ${s.ib.port})` : "IB nicht verbunden"}
         </span>{" "}
@@ -179,6 +230,8 @@ export function RollerSeite(): JSX.Element {
         {s.scanner.intervall_s ?? "—"} s) · Symbole: {s.scanner.symbole.join(", ") || "—"} ·
         Herzschlag vor {alter} s
       </p>
+
+      {s.strategie && <StrategieKarte s={s.strategie} />}
 
       <h3>Breaches ({s.breaches.length})</h3>
       {s.breaches.length === 0 ? (

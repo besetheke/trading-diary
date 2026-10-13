@@ -590,6 +590,29 @@ def _hole_roller_status(port: int) -> dict | None:
         return None
 
 
+ROLLER_BEFEHLE = ("roll-freigabe", "strategie-pruefen")
+
+
+def _sende_roller_befehl(port: int, name: str) -> tuple[int, dict]:
+    """``POST /befehl/<name>`` an den Roller-Dienst (AP-14e). Der Dienst entscheidet
+    und prüft selbst (nur Paper, Leitplanken); hier wird nur durchgereicht.
+    Rückgabe: (Statuscode, Antwort). Lange Wartezeit: ein Roll wartet auf den Fill."""
+    import urllib.error
+    import urllib.request
+    url = f"http://127.0.0.1:{port}/befehl/{name}"
+    anfrage = urllib.request.Request(url, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(anfrage, timeout=900) as antwort:
+            return antwort.status, json.loads(antwort.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode("utf-8"))
+        except ValueError:
+            return e.code, {"fehler": "Roller-Dienst lehnt ab"}
+    except (OSError, ValueError):
+        return 503, {"fehler": "Roller-Dienst nicht erreichbar"}
+
+
 def _roller_symbol(symbol: str) -> str:
     """SPXW/RUTW/NDXW … gehören im Journal zum Index (SPX/RUT/NDX)."""
     return symbol[:-1] if symbol.endswith("W") and symbol[:-1] in ("SPX", "RUT", "NDX") else symbol
@@ -2144,6 +2167,7 @@ def erzeuge_app(
     pruefe_port=None,
     roller_port: int | None = None,
     hole_roller_status=None,
+    sende_roller_befehl=None,
     bo_ordner: str | pathlib.Path | None = None,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
@@ -2163,10 +2187,12 @@ def erzeuge_app(
     (AP-14a) — nur für Tests. ``roller_port`` ist der Statusport des
     Roller-Dienstes (AP-14b); ohne Angabe gilt er als nicht angebunden.
     ``hole_roller_status`` ersetzt die HTTP-Abfrage (nur für Tests).
+    ``sende_roller_befehl`` ersetzt den Befehl an den Roller (AP-14e, nur für Tests).
     ``bo_ordner`` ist der Ordner der BO Research Suite (AP-14c, nur lesend).
     """
     pruefe_port = pruefe_port or _port_offen
     hole_roller_status = hole_roller_status or _hole_roller_status
+    sende_roller_befehl = sende_roller_befehl or _sende_roller_befehl
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
 
     if ui_verzeichnis is not None:
@@ -3358,6 +3384,20 @@ def erzeuge_app(
     # -----------------------------------------------------------------------
 
     if mit_journal:
+
+        @applikation.post("/journal/roller-befehl/{name}")
+        def roller_befehl(name: str) -> dict:
+            """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` führt den
+            vorbereiteten Roll aus, ``strategie-pruefen`` rechnet neu. Nur diese
+            beiden Namen; Prüfung (Paper, Leitplanken) macht der Dienst."""
+            if name not in ROLLER_BEFEHLE:
+                raise HTTPException(status_code=404, detail="unbekannter Befehl")
+            if roller_port is None:
+                raise HTTPException(status_code=503, detail="Roller nicht angebunden")
+            code, antwort = sende_roller_befehl(roller_port, name)
+            if code != 200:
+                raise HTTPException(status_code=code, detail=antwort.get("fehler", "abgelehnt"))
+            return antwort
 
         @applikation.post("/journal/backtests/zuordnung")
         def backtest_zuordnung(eingabe: BacktestZuordnungEingabe) -> dict:
