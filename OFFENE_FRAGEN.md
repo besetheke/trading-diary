@@ -3415,3 +3415,21 @@ sind), nicht aus OAs Zeitstempeln (Zeitzone ungeprüft, OF-76/AP-13). Offen: ob 
 Schwellen zu den früheren Monatsberichten des Nutzers passen — Vergleich Juli/
 August mit der früheren Auswertung (Juli: 78 Paare, Live ≈ 1.250 $ unter dem
 Backtest; August: 102 von 138 zugeordnet, Live 1.560 $ darüber).
+
+## OF-85 · Roller R3: Annahmen der Rollregel (AP-14f, 13.10.2026)
+
+Vom Nutzer festgelegt: Delta-Staffel nach DTE, +1/+2 Wochen, Put horizontal/diagonal,
+Call diagonal, kostenneutral (Vorschlag übernommen), Gap-Debit 50 % des Erstkredits,
+Profit-Target als Restwert mit Kettenbezug, Early Exit aktiv (Roll-Regel hat Vorrang),
+kein zulässiger Roll → nur alarmieren, Wiedereinstieg zurückgestellt.
+
+Annahmen im Code (`options-roller/roller/strategie.py`), bitte bestätigen oder ändern:
+1. Höchstens **3 Rolls** je Kette, danach Alarm.
+2. Kumulierter Roll-Debit höchstens **100 % des Erstkredits**, danach Alarm.
+3. Early Exit: |Delta| **≥ 0,15**, Fenster **30 min** vor dem letzten Handel; als
+   Vorschlag mit Freigabe (nicht automatisch).
+4. „Kostenneutral“ je Basiswert: höchstens **0,10** Debit (SPX), **0,05** (RUT), **1,0** (DAX).
+5. Neues Short-Delta nach dem Roll mindestens **0,05** unter der Schwelle der neuen Laufzeit.
+6. Gap: |Delta| ≥ Schwelle **+ 0,10** oder Short im Geld.
+7. Nachziehen bei einem horizontalen Put-Roll: gewählt wird er nur mit Kredit am
+   Mittelkurs; beim Nachziehen darf er bis zum Debit-Rahmen gehen.
