@@ -32,8 +32,9 @@ Betrieb auf dem Server vor.
    „geschlossen“, Mail. Testketten K002–K004 verfallen am 20.10.2026.
 4. Wiederanlauf im Ernstfall: Dienst während eines Rolls beenden, Neustart; liegengebliebene
    Order storniert, Profit-Target wiederhergestellt, Meldung.
-5. Deployment: Roller-Dienst in `Schnellstart` und Seite „System“, Konfiguration je Rechner
-   (IB-Port, Client-IDs), `ibapi` und Mail-Schlüssel auf dem Server, Prüfskript nach Deploy.
+5. Deployment — vorbereitet 13.10.2026: `Schnellstart` startet den Roller mit,
+   `config.json` Abschnitt `dienst` je Rechner, `roller.pruefung`, `werkzeuge\server\Deploy.ps1`;
+   der Umzug selbst ist AP-15.
 
 ## Danach
 
@@ -78,6 +79,8 @@ Die Paper-Simulation füllt Kombis meist erst nahe am natürlichen Preis.
 - Early Exit aktiv: am Verfallstag in den letzten 30 min, wenn |Delta| ≥ 0,15 und kein Roll
   fällig ist (Roll-Regel 0,38 hat Vorrang); Vorschlag mit Freigabe.
 - Handelszeit laut IB (Feiertage, Halbtage), 15 min Abstand zu Beginn und Ende.
+- Keine Obergrenze für die Zahl der Rolls; kumulierter Roll-Debit höchstens 100 % des
+  Erstkredits, danach Alarm (OF-85, entschieden 13.10.2026).
 - Wiedereinstieg zurückgestellt. Mails an die eingetragenen Empfänger.
 
 **Roller, Stufe:** „R3 Vorschlag + Freigabe per Klick (Paper-Konto) — läuft“; Order-Sperre

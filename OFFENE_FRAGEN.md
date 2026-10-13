@@ -3433,3 +3433,8 @@ Annahmen im Code (`options-roller/roller/strategie.py`), bitte bestätigen oder 
 6. Gap: |Delta| ≥ Schwelle **+ 0,10** oder Short im Geld.
 7. Nachziehen bei einem horizontalen Put-Roll: gewählt wird er nur mit Kredit am
    Mittelkurs; beim Nachziehen darf er bis zum Debit-Rahmen gehen.
+
+**Entschieden 13.10.2026 (Nutzer):** Punkt 1 **nein** — keine Obergrenze für die Zahl der
+Rolls („wenn man früh genug rollt, kann man einiges reparieren“); die Kette begrenzt der
+kumulierte Roll-Debit (Punkt 2). Punkte 2–7 bestätigt. Umgesetzt in options-roller
+(`max_rolls = None`).

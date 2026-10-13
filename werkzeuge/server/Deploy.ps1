@@ -56,7 +56,10 @@ foreach ($r in $repos) {
         continue
     }
     $schmutz = git -C $ordner status --porcelain
-    if ($schmutz) { throw "$ordner hat lokale Aenderungen - auf dem Server wird nicht entwickelt:`n$schmutz" }
+    if ($schmutz) {
+        $text = "$ordner hat lokale Aenderungen - auf dem Server wird nicht entwickelt:`n$($schmutz -join "`n")"
+        if ($Trocken) { Write-Warning $text } else { throw $text }
+    }
 }
 
 # ------------------------------------------------------------------ 2. Anhalten
