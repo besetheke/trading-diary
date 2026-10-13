@@ -29,6 +29,16 @@ function Test-ServerLaeuft {
     }
 }
 
+# Roller-Dienst (AP-14f) mitstarten, falls vorhanden und nicht schon aktiv. Er hat eigene
+# Einstellungen (options-roller\config.json, Abschnitt "dienst") und eigene Logs; Beenden.ps1
+# laesst ihn bewusst laufen (offene Ketten). Ordner per ROLLER_ORDNER aenderbar.
+$rollerOrdner = if ($env:ROLLER_ORDNER) { $env:ROLLER_ORDNER } else { Join-Path (Split-Path -Parent $projekt) "options-roller" }
+$rollerStart = Join-Path $rollerOrdner "Start-Dienst.ps1"
+if (Test-Path $rollerStart) {
+    try { & $rollerStart -Still } catch {}
+    Set-Location $projekt
+}
+
 if (Test-ServerLaeuft) {
     Start-Process "http://127.0.0.1:8000/start"
     return

@@ -2882,7 +2882,7 @@ def erzeuge_app(
                 dienste.append(DienstAntwort(
                     name=name, port=roller_port,
                     erreichbar=hole_roller_status(roller_port) is not None,
-                    hinweis="Dienst ohne Fenster: python -m roller.dienst"))
+                    hinweis="Start mit Schnellstart (options-roller/Start-Dienst.ps1)"))
                 continue
             dienste.append(DienstAntwort(
                 name=name, port=port, erreichbar=None if port is None else pruefe_port(port),
