@@ -67,6 +67,17 @@ foreach ($r in $repos) {
     }
 }
 
+# Selbstpruefung (auch im Trockenlauf): jede Datei, die das Skript aufruft, muss existieren. Ein
+# Pfadfehler soll hier auffallen und nicht erst nach dem Anhalten der Dienste.
+$erwartet = @("$journal\setup.cmd", "$journal\test.cmd", "$journal\backup.cmd", "$journal\Schnellstart.ps1",
+              "$roller\Start-Dienst.ps1", "$roller\Beenden-Dienst.ps1", "$roller\requirements.txt")
+foreach ($datei in $erwartet) {
+    if (-not (Test-Path $datei)) {
+        $text = "Datei fehlt (oder Pfad kaputt): $datei"
+        if ($Trocken -or $Erstinstallation) { Write-Warning $text } else { throw $text }
+    }
+}
+
 # ------------------------------------------------------------------ 2. Anhalten
 Schritt "Dienste anhalten"
 Tu "Roller-Dienst beenden" { if (Test-Path "$roller\Beenden-Dienst.ps1") { & "$roller\Beenden-Dienst.ps1" } }
@@ -130,11 +141,11 @@ if ((Test-Path $lab) -and (Test-Path "$lab\pyproject.toml")) {
 Schritt "Tests (vor dem Start der Dienste)"
 Tu "Roller-Tests" { Push-Location $roller; try { & ".venv\Scripts\python.exe" -m pytest -q } finally { Pop-Location } }
 if ($VolleTests) {
-    Tu "Journal-Tests (voll)" { & cmd /c "$journal	est.cmd" -q }
+    Tu "Journal-Tests (voll)" { & cmd /c "$journal\test.cmd" -q }
 } else {
     # Rauchtest: Schnittstellen zum Roller, Journal-API, Oberflaechen-Routen, Rebuild-Kern, Import
     Tu "Journal-Rauchtest" {
-        & cmd /c "$journal	est.cmd" -q -x tests/test_api_roller.py tests/test_api_roller_befehl.py tests/test_api_roller_befehl_aufnehmen.py tests/test_api_roller_historie.py tests/test_api_system.py tests/test_api_journal.py tests/test_ui_routen.py tests/test_roller_verknuepfung.py
+        & cmd /c "$journal\test.cmd" -q -x tests/test_api_roller.py tests/test_api_roller_befehl.py tests/test_api_roller_befehl_aufnehmen.py tests/test_api_roller_historie.py tests/test_api_system.py tests/test_api_journal.py tests/test_ui_routen.py tests/test_roller_verknuepfung.py tests/test_skripte.py
     }
 }
 
