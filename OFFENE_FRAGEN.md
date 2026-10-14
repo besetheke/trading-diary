@@ -3447,7 +3447,15 @@ Long 7920 mit Erstkredit 4,5. Profit-Target Orders 8 und 10 waren innerhalb von 
 der Roller meldete „Bestand passt nicht zur Kette“. Gleichzeitig lieferte IB um 13:40 nur 6
 statt 8 Positionen (Verbindungsabbrüche zwischen 13:31 und 14:25).
 
-Arbeitshypothese: Die Eröffnung (Short 7895 / Long 7920, Kredit 4,5) war richtig. Die
+**Ursache geklärt (14.10.2026, Screenshot der TWS-Ausführungen):** Zwei Ausführungen „SPX Oct20
+7895/7920 Bull-Call BOT 1 @ 0,50“ um 13:39 und 13:44. Der Marktrückgang hatte den Call-Spread auf
+ca. 0,50 verbilligt; das Profit-Target (Kauf zu 0,50) wurde **zu Recht gefüllt** — die Kette war
+mit +4,0 am Ziel. Der Roller erkannte den Fill nicht (er verließ sich auf den Positionsbestand, der
+bei Verbindungsabbrüchen lückenhaft war) und setzte ein zweites Profit-Target, das ebenfalls
+gefüllt wurde und einen **umgekehrten** Spread (Long 7895 / Short 7920, Debit 0,50) eröffnete.
+Kein Simulationsfehler. Behoben (Roller `1667189`): Fills werden aus den echten Ausführungen
+(`orderRef`) erkannt und gebucht; weitere Rückkäufe derselben Struktur werden gemeldet.
+Alt: Arbeitshypothese: Die Eröffnung (Short 7895 / Long 7920, Kredit 4,5) war richtig. Die
 Profit-Target-Kombis (BUY 7895 / SELL 7920, Limit +0,50) wurden von der Paper-Simulation
 gefüllt statt zu ruhen, und der Wiederanlauf setzte nach einer lückenhaften Order-Liste ein
 zweites Profit-Target. Zwei Fills drehen die Position um (flach → Long 7895 / Short 7920).
@@ -3462,3 +3470,16 @@ Profit-Target erst nach zweiter Abfrage und nur bei intaktem Bestand, Befehl `ke
 (Station: „Geprüft — wieder aufnehmen“). Offen bleibt, ob die Paper-Simulation Call-Kombis mit
 weit entferntem Limit füllt; dann ist das Profit-Target als Kombi-Order für Calls zu ersetzen
 (zwei Einzel-Orders oder Bedingungsorder) — erst nach Vorlage der Ausführungen entscheiden.
+
+## OF-87 · Neue Strategien (14.10.2026): Annahmen
+
+Vom Nutzer: DAX D10 BPS und BCS, Breite 300, Verfall nächster Freitag; SPX D10 BPS und BCS mit 0DTE.
+Annahmen (`options-roller/roller/strategie.py`), bitte bestätigen:
+1. **SPX 0DTE: Breite 25** (nicht genannt), Profit-Target Restwert 0,50 wie bei den übrigen SPX-Strategien.
+2. **„Nächster Freitag“** = der erste Freitag nach heute (an einem Freitag der in 7 Tagen; ein Verfall
+   heute wäre 0DTE). Es werden nur Freitage als Verfall gesucht, auch beim Roll (+1 Woche).
+3. **DAX:** Profit-Target Restwert 2 Punkte, Tick 0,1, Strike-Raster 50, „kostenneutral“ bis 1,0
+   Debit, Verschiebung beim Roll höchstens 500 Punkte — wie bei den übrigen DAX-Strategien.
+4. **0DTE und Roll-Regel:** Bei 0 DTE gilt die Staffel (≤ 7 DTE: 0,38). Ein Roll geht +1 Woche
+   (bei SPX auf einen Wochentag der Folgewoche); Early Exit in den letzten 30 min bei |Delta| ≥ 0,15.
+5. Eröffnung nur innerhalb der Handelszeit laut IB (15 min Abstand zu Beginn und Ende).
