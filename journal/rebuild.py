@@ -78,6 +78,8 @@ from journal.db import STANDARD_BUSY_TIMEOUT_MS, create_db_engine
 from journal.kapitalmassnahmen import kapitalmassnahmen_befuellen
 from journal.oa_persistenz import oa_werte_schreiben
 from journal.preise import nettopraemie
+from journal.roller_verknuepfung import METHODE as ROLLER_METHODE
+from journal.roller_verknuepfung import verknuepfe_roller
 from journal.schema import (
     assignment_links,
     campaign_ablehnungen,
@@ -90,6 +92,7 @@ from journal.schema import (
     executions,
     instruments,
     legs,
+    roller_link,
     structures,
 )
 
@@ -126,6 +129,10 @@ class RebuildErgebnis:
     # Campaign-Kandidaten ohne gemeinsame Kampagne (AP-05sk). Wie oben:
     # nicht persistiert, jeder Lauf neu berechnet.
     campaign_kandidaten_offen: int = 0
+    # AP-11: Roller-Ketten, die in diesem Lauf neu mit Journal-Ketten verknüpft wurden,
+    # und Roller-Ketten ohne Journal-Kette (Ausführung noch nicht im Flex-Export).
+    roller_neu: int = 0
+    roller_ohne_kette: int = 0
     # AP-04sw: Kettensicht-Zählwerte, parallel zu den obigen (Kontosicht-)
     # Feldern, deren Bedeutung unverändert bleibt.
     structures_kette: int = 0
@@ -600,6 +607,7 @@ def _sicht_schreiben(
         if schluessel not in ketten_id_je_schluessel and chain_id not in gesicherte_ketten_ids
     ]
     if entfallene_ketten_ids:
+        _roller_links_abraeumen(verbindung, entfallene_ketten_ids)
         verbindung.execute(delete(chains).where(chains.c.chain_id.in_(entfallene_ketten_ids)))
 
     # chain_links: unverändert aus ChainGlied (Vertrag 14) — dessen Feld
@@ -636,6 +644,14 @@ def _sicht_schreiben(
         glieder_je_kette=glieder_je_kette,
         ketten_ergebnis=ketten_ergebnis,
     )
+
+
+def _roller_links_abraeumen(verbindung: Connection, chain_ids: list[int]) -> None:
+    """AP-11: Wegfallende Ketten reißen keine ``roller_link``-Zeile mit. Nur die aus der
+    ``orderReference`` abgeleiteten Zeilen werden entfernt — sie entstehen nach dem Rebuild
+    wieder; Zeilen anderer Herkunft blockieren das Löschen (Regel 4, kein Überschreiben)."""
+    verbindung.execute(delete(roller_link).where(
+        roller_link.c.journal_chain_id.in_(chain_ids), roller_link.c.methode == ROLLER_METHODE))
 
 
 def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
@@ -820,7 +836,11 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         abgelehnt={(z["chain_id_a"], z["chain_id_b"], z["typ"]) for z in ablehnungen},
     )
 
+    roller = verknuepfe_roller(verbindung, datetime.now())
+
     return RebuildErgebnis(
+        roller_neu=roller.neu,
+        roller_ohne_kette=len(roller.ohne_kette),
         legs=_anzahl_je_sicht(verbindung, legs, "konto"),
         structures=_anzahl_je_sicht(verbindung, structures, "konto"),
         chains=_anzahl_je_sicht(verbindung, chains, "konto"),
@@ -991,6 +1011,7 @@ def _overrides_anwenden(
             # Vertrag 19: eine durch den Override leer gewordene Kette wird
             # gelöscht — außer ein Override verweist auf sie (Regel 4).
             if chain_id not in gesicherte_ketten_ids:
+                _roller_links_abraeumen(verbindung, [chain_id])
                 verbindung.execute(delete(chains).where(chains.c.chain_id == chain_id))
             continue
 

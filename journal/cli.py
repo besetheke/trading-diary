@@ -459,7 +459,9 @@ def main(argv: list[str] | None = None) -> int:
                 f"{lauf.kandidaten_offen} offene Rollkandidaten; "
                 f"OA-Abgleich: {lauf.oa_zugeordnet} zugeordnet, "
                 f"{lauf.oa_fehler} ohne eindeutige Kette; "
-                f"{lauf.campaign_kandidaten_offen} offene Campaign-Kandidaten"
+                f"{lauf.campaign_kandidaten_offen} offene Campaign-Kandidaten; "
+                f"Roller: {lauf.roller_neu} neu verknüpft, "
+                f"{lauf.roller_ohne_kette} ohne Journal-Kette"
             )
             if lauf.overrides_verwaist > 0:
                 # Vertrag 20 (AP-04v): Verwaistes wird nie übergangen.
@@ -486,7 +488,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{ergebnis.kandidaten_offen} offene Rollkandidaten; "
             f"OA-Abgleich: {ergebnis.oa_zugeordnet} zugeordnet, "
             f"{ergebnis.oa_fehler} ohne eindeutige Kette; "
-            f"{ergebnis.campaign_kandidaten_offen} offene Campaign-Kandidaten"
+            f"{ergebnis.campaign_kandidaten_offen} offene Campaign-Kandidaten; "
+            f"Roller: {ergebnis.roller_neu} neu verknüpft, "
+            f"{ergebnis.roller_ohne_kette} ohne Journal-Kette"
         )
         if ergebnis.overrides_verwaist > 0:
             # Vertrag 20: Verwaistes wird niemals übergangen — der Aufruf
