@@ -16,3 +16,6 @@ files.zip
 node_modules/
 ui/dist/
 bericht_*.csv
+
+# Editor
+.vscode/

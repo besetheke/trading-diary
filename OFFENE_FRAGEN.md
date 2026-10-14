@@ -3438,3 +3438,27 @@ Annahmen im Code (`options-roller/roller/strategie.py`), bitte bestätigen oder 
 Rolls („wenn man früh genug rollt, kann man einiges reparieren“); die Kette begrenzt der
 kumulierte Roll-Debit (Punkt 2). Punkte 2–7 bestätigt. Umgesetzt in options-roller
 (`max_rolls = None`).
+
+## OF-86 · K003: Bestand verkehrt herum, Ursache offen (14.10.2026, Befund Server)
+
+Befund (Server, lesend, clientId 9): Im Konto liegt Short SPX 7920 Call / Long SPX 7895 Call
+(Debit-Spread, ca. 0,5 Debit; avg_cost 106 und 53), `ketten.json` führt K003 als Short 7895 /
+Long 7920 mit Erstkredit 4,5. Profit-Target Orders 8 und 10 waren innerhalb von Minuten weg;
+der Roller meldete „Bestand passt nicht zur Kette“. Gleichzeitig lieferte IB um 13:40 nur 6
+statt 8 Positionen (Verbindungsabbrüche zwischen 13:31 und 14:25).
+
+Arbeitshypothese: Die Eröffnung (Short 7895 / Long 7920, Kredit 4,5) war richtig. Die
+Profit-Target-Kombis (BUY 7895 / SELL 7920, Limit +0,50) wurden von der Paper-Simulation
+gefüllt statt zu ruhen, und der Wiederanlauf setzte nach einer lückenhaften Order-Liste ein
+zweites Profit-Target. Zwei Fills drehen die Position um (flach → Long 7895 / Short 7920).
+Die leg-weisen Fillpreise 1,06 und 0,53 sprechen für eine künstliche Aufteilung des Limits.
+**Nicht belegt** — nötig sind die Ausführungen (Zeit, Seite, Preis, Order-ID, orderRef) der
+beiden K003-Kontrakte (conId 932185013 = 7895 C, 927415210 = 7920 C) und der Orderverlauf.
+
+Gegenmaßnahmen (options-roller, Commit `2066401`), unabhängig von der Ursache:
+Kette bei unpassendem Bestand anhalten (`status pruefen`, keine weiteren Orders), Profit-Target
+nur bei intaktem Bestand und mit Gegenprobe nach dem Setzen, Wiederanlauf setzt ein fehlendes
+Profit-Target erst nach zweiter Abfrage und nur bei intaktem Bestand, Befehl `kette-aufnehmen`
+(Station: „Geprüft — wieder aufnehmen“). Offen bleibt, ob die Paper-Simulation Call-Kombis mit
+weit entferntem Limit füllt; dann ist das Profit-Target als Kombi-Order für Calls zu ersetzen
+(zwei Einzel-Orders oder Bedingungsorder) — erst nach Vorlage der Ausführungen entscheiden.

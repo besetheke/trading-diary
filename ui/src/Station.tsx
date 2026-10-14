@@ -137,7 +137,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
   const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
   const tu = (
-    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen",
+    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen" | "kette-aufnehmen",
     parameter: { kette?: string; strategie?: string } = {},
   ) => {
     setzeLaeuft(name + (parameter.kette ?? ""));
@@ -153,6 +153,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
       <h3>Strategien (Paper)</h3>
       <p className="sicht">
         {s.paper ? "Paper-Konto verbunden" : "kein Paper-Konto — Orders gesperrt"} · {s.grund}
+        {s.daten ? ` · Kurse: ${s.daten.art === "live" ? "live" : s.daten.art === "verzoegert" ? "VERZÖGERT (Balken)" : "unbekannt"}` : ""}
         {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
         <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
@@ -189,7 +190,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
             </thead>
             <tbody>
               {s.ketten.map((k) => (
-                <tr key={k.kette_id} className={k.alarm ? "warnung" : undefined}>
+                <tr key={k.kette_id} className={k.alarm || k.status === "pruefen" ? "warnung" : undefined}>
                   <td>{k.kette_id}</td>
                   <td>{k.strategie}</td>
                   <td>{verfall(k.aktiv.verfall)}</td>
@@ -201,6 +202,16 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
                   <td className="zahl">{k.rolls}</td>
                   <td className="zahl">{zahl(k.pt_limit)}</td>
                   <td>
+                    {k.status === "pruefen" && (
+                      <div>
+                        <strong>ANGEHALTEN</strong> — {k.warnung}{" "}
+                        <button disabled={laeuft !== null || !s.paper}
+                          title="Erst den Bestand in der TWS prüfen; der Roller nimmt die Kette nur auf, wenn der Bestand passt"
+                          onClick={() => tu("kette-aufnehmen", { kette: k.kette_id })}>
+                          Geprüft — wieder aufnehmen
+                        </button>
+                      </div>
+                    )}
                     {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
                     {k.grund ?? "—"}
                     {k.vorschlag && (

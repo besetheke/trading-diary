@@ -550,6 +550,8 @@ export interface RollerRollPlan {
 
 export interface RollerKetteStand {
   kette_id: string
+  status?: string
+  warnung?: string | null
   strategie: string
   aktiv: { verfall: string; short: number; long: number; menge: number }
   erstkredit: number | null
@@ -572,13 +574,14 @@ export interface RollerStrategie {
   paper: boolean
   letzte_pruefung: string | null
   grund: string
+  daten?: { art: string; seit: string | null }
   vorgaben: { name: string; text: string }[]
   ketten: RollerKetteStand[]
   meldungen: string[]
 }
 
 export function sendeRollerBefehl(
-  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen',
+  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen',
   parameter: { kette?: string; strategie?: string } = {},
 ): Promise<unknown> {
   const q = new URLSearchParams(parameter as Record<string, string>).toString()

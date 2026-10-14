@@ -590,7 +590,7 @@ def _hole_roller_status(port: int) -> dict | None:
         return None
 
 
-ROLLER_BEFEHLE = ("roll-freigabe", "strategie-pruefen", "oeffnen")
+ROLLER_BEFEHLE = ("roll-freigabe", "strategie-pruefen", "oeffnen", "kette-aufnehmen")
 
 
 def _sende_roller_befehl(port: int, name: str) -> tuple[int, dict]:
@@ -3390,7 +3390,8 @@ def erzeuge_app(
                           strategie: str | None = None) -> dict:
             """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` (``kette``)
             führt den vorbereiteten Roll aus, ``oeffnen`` (``strategie``) eröffnet
-            eine Strategie, ``strategie-pruefen`` rechnet neu. Nur diese Namen;
+            eine Strategie, ``kette-aufnehmen`` (``kette``) nimmt eine angehaltene Kette
+            wieder auf, ``strategie-pruefen`` rechnet neu. Nur diese Namen;
             Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst."""
             if name not in ROLLER_BEFEHLE:
                 raise HTTPException(status_code=404, detail="unbekannter Befehl")

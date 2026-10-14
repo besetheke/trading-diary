@@ -5,6 +5,7 @@ der Stand kommt per Git (GitHub, Branch master), dieses Skript holt ihn und star
   .\werkzeuge\server\Deploy.ps1 -Trocken            # nur zeigen, was passieren wuerde
   .\werkzeuge\server\Deploy.ps1                     # aktualisieren, migrieren, neu starten, pruefen
   .\werkzeuge\server\Deploy.ps1 -Erstinstallation   # Repos klonen und einrichten (leerer Server)
+  .\werkzeuge\server\Deploy.ps1 -VolleTests         # statt Rauchtest die ganze Journal-Suite (ca. 12 min)
 
 Ablauf je Lauf:
   1. Vorbedingungen: git, python 3.12, (npm fuer die Oberflaeche), saubere Arbeitsbaeume.
@@ -12,13 +13,17 @@ Ablauf je Lauf:
      Wiederanlauf-Abgleich des Rollers raeumt nach dem Start auf).
   3. git pull --ff-only je Repo (nie Merge, nie lokale Aenderungen).
   4. Abhaengigkeiten, Sicherung journal.db, alembic upgrade head, Oberflaeche bauen.
-  5. Dienste starten, python -m roller.pruefung, Ergebnis ausgeben.
-Bricht bei jedem Fehler ab; nichts wird geloescht.
+  5. Roller-Tests (Sekunden) und Journal-Rauchtest laufen VOR dem Start der Dienste; scheitern
+     sie, bleiben die Dienste aus und das Skript meldet es (kein halb fertiger Stand mit
+     laufendem Dienst). Danach Dienste starten und python -m roller.pruefung (ohne Tests).
+Bricht bei jedem Fehler ab; nichts wird geloescht. Unversionierte Dateien (z. B. .vscode/)
+blockieren nicht, nur Aenderungen an versionierten Dateien.
 #>
 param(
     [string]$Basis = "C:\10_Coding",
     [switch]$Erstinstallation,
-    [switch]$Trocken
+    [switch]$Trocken,
+    [switch]$VolleTests
 )
 $ErrorActionPreference = "Stop"
 
@@ -55,7 +60,7 @@ foreach ($r in $repos) {
         Tu "git clone $($r.Url)" { git clone $r.Url $ordner }
         continue
     }
-    $schmutz = git -C $ordner status --porcelain
+    $schmutz = git -C $ordner status --porcelain --untracked-files=no
     if ($schmutz) {
         $text = "$ordner hat lokale Aenderungen - auf dem Server wird nicht entwickelt:`n$($schmutz -join "`n")"
         if ($Trocken) { Write-Warning $text } else { throw $text }
@@ -121,7 +126,18 @@ if ((Test-Path $lab) -and (Test-Path "$lab\pyproject.toml")) {
     Tu "pip install -e ." { Push-Location $lab; try { if (-not (Test-Path ".venv")) { python -m venv .venv }; & ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -e . } finally { Pop-Location } }
 }
 
-# ------------------------------------------------------------------ 5. Starten, pruefen
+# ------------------------------------------------------------------ 5. Tests, dann Starten
+Schritt "Tests (vor dem Start der Dienste)"
+Tu "Roller-Tests" { Push-Location $roller; try { & ".venv\Scripts\python.exe" -m pytest -q } finally { Pop-Location } }
+if ($VolleTests) {
+    Tu "Journal-Tests (voll)" { & cmd /c "$journal	est.cmd" -q }
+} else {
+    # Rauchtest: Schnittstellen zum Roller, Journal-API, Oberflaechen-Routen, Rebuild-Kern, Import
+    Tu "Journal-Rauchtest" {
+        & cmd /c "$journal	est.cmd" -q -x tests/test_api_roller.py tests/test_api_roller_befehl.py tests/test_api_roller_befehl_aufnehmen.py tests/test_api_roller_historie.py tests/test_api_system.py tests/test_api_journal.py tests/test_ui_routen.py tests/test_roller_verknuepfung.py
+    }
+}
+
 Schritt "Starten und pruefen"
 if (Test-Path "$roller\config.json") {
     Tu "Roller-Dienst starten" { & "$roller\Start-Dienst.ps1" }
@@ -135,8 +151,7 @@ Tu "Journal-Server starten" {
         -RedirectStandardOutput "$log\server.log" -RedirectStandardError "$log\server-fehler.log"
     Start-Sleep -Seconds 5
 }
-Tu "Journal-Tests (test.cmd)" { & cmd /c "$journal\test.cmd" }
-Tu "Roller-Pruefung" { Push-Location $roller; try { & ".venv\Scripts\python.exe" -m roller.pruefung --tests } finally { Pop-Location } }
+Tu "Roller-Pruefung" { Push-Location $roller; try { & ".venv\Scripts\python.exe" -m roller.pruefung } finally { Pop-Location } }
 
 Schritt "Fertig"
 Write-Host "  Station: http://127.0.0.1:8000/start"
