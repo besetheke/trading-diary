@@ -23,7 +23,8 @@ param(
     [string]$Basis = "C:\10_Coding",
     [switch]$Erstinstallation,
     [switch]$Trocken,
-    [switch]$VolleTests
+    [switch]$VolleTests,
+    [switch]$Neustart   # intern: Selbstaufruf, nachdem sich dieses Skript durch den Pull geaendert hat
 )
 $ErrorActionPreference = "Stop"
 
@@ -89,11 +90,23 @@ Tu "Journal-Server beenden" {
 
 # ------------------------------------------------------------------ 3. Code holen
 Schritt "Code holen (fast-forward)"
+$hashVorher = (Get-FileHash $PSCommandPath).Hash
 foreach ($r in $repos) {
     $ordner = Join-Path $Basis $r.Name
     if (-not (Test-Path $ordner)) { continue }
     Tu "$($r.Name): git pull --ff-only" { git -C $ordner pull --ff-only }
     if (-not $Trocken) { Write-Host "    Stand: $(git -C $ordner log --oneline -1)" }
+    # Hat der Pull dieses Skript veraendert, laeuft der Rest noch mit der alten Fassung (14.10.2026:
+    # ein Fehler im Skript blieb deshalb einen Lauf lang bestehen). Dann mit der neuen neu starten.
+    if ($r.Name -eq "trading-diary" -and -not $Trocken -and -not $Neustart `
+            -and (Get-FileHash $PSCommandPath).Hash -ne $hashVorher) {
+        Write-Host "  Deploy.ps1 wurde aktualisiert - Neustart mit der neuen Fassung" -ForegroundColor Yellow
+        $neu = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath, "-Basis", $Basis, "-Neustart")
+        if ($Erstinstallation) { $neu += "-Erstinstallation" }
+        if ($VolleTests) { $neu += "-VolleTests" }
+        & powershell @neu
+        exit $LASTEXITCODE
+    }
 }
 
 # ------------------------------------------------------------------ 4. Einrichten
