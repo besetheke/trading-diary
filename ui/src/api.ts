@@ -575,13 +575,14 @@ export interface RollerStrategie {
   letzte_pruefung: string | null
   grund: string
   daten?: { art: string; seit: string | null }
+  auto?: { an: boolean; max_pro_tag: number; heute: number; nur_live: boolean }
   vorgaben: { name: string; text: string }[]
   ketten: RollerKetteStand[]
   meldungen: string[]
 }
 
 export function sendeRollerBefehl(
-  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen',
+  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen' | 'auto-an' | 'auto-aus',
   parameter: { kette?: string; strategie?: string } = {},
 ): Promise<unknown> {
   const q = new URLSearchParams(parameter as Record<string, string>).toString()

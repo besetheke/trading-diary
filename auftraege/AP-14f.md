@@ -85,3 +85,15 @@ Die Paper-Simulation füllt Kombis meist erst nahe am natürlichen Preis.
 
 **Roller, Stufe:** „R3 Vorschlag + Freigabe per Klick (Paper-Konto) — läuft“; Order-Sperre
 seit R3 nur für die Dauer einer Bestellung gesetzt und nur gegen Paper (Port 7497, Konto `DU…`).
+
+## Automatik (R5 auf Paper) — 14.10.2026
+
+Nutzerwunsch: im Paper-Konto direkt automatisieren, um besser zu testen. Umgesetzt im Roller
+(`StrategieWaechter`, Standard **aus**, Schalter in der Station, „Not-Aus“ wirkt sofort):
+zulässige Rolls und Early Exits führt der Roller selbst aus. Leitplanken: nur Paper (Port 7497,
+Konto `DU…`), nur Handelszeit laut IB, nur Vorschläge innerhalb der Regeln, höchstens 10 Aktionen
+am Tag über alle Ketten (`auto_max_pro_tag`), nach einem nicht gefüllten Versuch keine weitere
+Automatik für diese Kette am selben Tag, angehaltene Ketten nie, optional nur mit Live-Daten
+(`auto_nur_live`), jede Aktion als Mail. Eröffnungen bleiben Handarbeit (Wiedereinstieg
+zurückgestellt). Zustand in `%LOCALAPPDATA%\OptionsRoller\auto.json` (überlebt Neustarts).
+Für das Live-Konto ist die Automatik gesperrt — dafür braucht es R4 (Schattenmodus) und ein eigenes Paket.

@@ -137,7 +137,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
   const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
   const tu = (
-    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen" | "kette-aufnehmen",
+    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen" | "kette-aufnehmen" | "auto-an" | "auto-aus",
     parameter: { kette?: string; strategie?: string } = {},
   ) => {
     setzeLaeuft(name + (parameter.kette ?? ""));
@@ -157,6 +157,22 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
         {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
         <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
+      {s.auto && (
+        <p className={s.auto.an ? "warnung" : "sicht"}>
+          <strong>Automatik: {s.auto.an ? "AN" : "AUS"}</strong> — {s.auto.an
+            ? "Der Roller führt zulässige Rolls und Early Exits selbst aus."
+            : "Rolls und Early Exits warten auf deine Freigabe."}{" "}
+          ({s.auto.heute} von höchstens {s.auto.max_pro_tag} Aktionen heute{s.auto.nur_live ? ", nur mit Live-Daten" : ""}){" "}
+          {s.auto.an ? (
+            <button onClick={() => tu("auto-aus")} disabled={laeuft !== null}>Not-Aus: Automatik aus</button>
+          ) : (
+            <button onClick={() => tu("auto-an")} disabled={laeuft !== null || !s.paper}
+              title={s.paper ? "Automatik einschalten (nur Paper)" : "Nur gegen das Paper-Konto"}>
+              Automatik einschalten
+            </button>
+          )}
+        </p>
+      )}
       <p>
         <select value={wahl} onChange={(e) => setzeWahl(e.target.value)}>
           {s.vorgaben.map((v) => (
