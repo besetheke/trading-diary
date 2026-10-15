@@ -575,6 +575,8 @@ export interface RollerStrategie {
   letzte_pruefung: string | null
   grund: string
   daten?: { art: string; seit: string | null }
+  profil?: string
+  aktion?: { name: string; laeuft: boolean; seit: string; ende?: string; ergebnis: unknown; params?: unknown } | null
   auto?: { an: boolean; max_pro_tag: number; heute: number; nur_live: boolean }
   vorgaben: { name: string; text: string }[]
   ketten: RollerKetteStand[]

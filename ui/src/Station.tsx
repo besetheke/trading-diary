@@ -143,7 +143,12 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
     setzeLaeuft(name + (parameter.kette ?? ""));
     setzeMeldung(name === "strategie-pruefen" ? "Prüfe …" : "Order läuft — der Limit wird nachgezogen, das kann Minuten dauern …");
     sendeRollerBefehl(name, parameter)
-      .then((a) => setzeMeldung(name === "strategie-pruefen" ? "Neu geprüft." : `Ergebnis: ${JSON.stringify(a)}`))
+      .then((a) => {
+        const r = a as { gestartet?: boolean };
+        setzeMeldung(name === "strategie-pruefen" ? "Neu geprüft."
+          : r && r.gestartet ? "Gestartet — läuft im Hintergrund (das Limit wird nachgezogen, das kann Minuten dauern). Das Ergebnis steht unten bei „Aktion“ und in den Meldungen."
+          : `Ergebnis: ${JSON.stringify(a)}`);
+      })
       .catch((e) => setzeMeldung(fehlerText(e)))
       .finally(() => setzeLaeuft(null));
   };
@@ -157,6 +162,13 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
         {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
         <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
+      {s.profil && <p className="sicht">Betriebsprofil: <strong>{s.profil}</strong>{s.profil === "test" ? " — niedrigere Roll-Schwellen, größerer Debit-Rahmen (mehr Rolls zum Testen)" : ""}</p>}
+      {s.aktion && (
+        <p className={s.aktion.laeuft ? "warnung" : "sicht"}>
+          Aktion „{s.aktion.name}“ {s.aktion.laeuft ? `läuft seit ${zeitDe(s.aktion.seit)} …` : `beendet ${s.aktion.ende ? zeitDe(s.aktion.ende) : ""}`}
+          {!s.aktion.laeuft && s.aktion.ergebnis ? `: ${JSON.stringify(s.aktion.ergebnis)}` : ""}
+        </p>
+      )}
       {s.auto && (
         <p className={s.auto.an ? "warnung" : "sicht"}>
           <strong>Automatik: {s.auto.an ? "AN" : "AUS"}</strong> — {s.auto.an
