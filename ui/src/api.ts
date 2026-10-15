@@ -570,12 +570,25 @@ export interface RollerKetteStand {
   geprueft?: string
 }
 
+export interface RollerStatistikZeile {
+  n: number; offen: number; gewinner: number; quote: number | null
+  punkte: number; geld: number; rolls_summe: number; rolls_schnitt: number | null; waehrung: string
+}
+
+export interface RollerAbgeschlossen {
+  kette_id: string; strategie: string; angelegt: string | null; geschlossen: string | null
+  erstkredit: number | null; rolls: number; punkte: number; geld: number; waehrung: string; schluss: string | null
+}
+
 export interface RollerStrategie {
   paper: boolean
   letzte_pruefung: string | null
   grund: string
   daten?: { art: string; seit: string | null }
   profil?: string
+  statistik?: Record<string, RollerStatistikZeile>
+  abgeschlossen?: RollerAbgeschlossen[]
+  tagesprogramm?: { strategien: string[]; ab_min: number; heute_eroeffnet: string[]; aktiv: boolean }
   aktion?: { name: string; laeuft: boolean; seit: string; ende?: string; ergebnis: unknown; params?: unknown } | null
   auto?: { an: boolean; max_pro_tag: number; heute: number; nur_live: boolean }
   vorgaben: { name: string; text: string }[]

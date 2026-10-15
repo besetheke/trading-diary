@@ -242,7 +242,17 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
                     )}
                     {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
                     {k.grund ?? "—"}
-                    {k.vorschlag && (
+                    {k.vorschlag && (k.vorschlag as { art?: string }).art === "schliessen" && (
+                      <div>
+                        Vorschlag: Kette schließen{(k.vorschlag as { tagesende?: boolean }).tagesende ? " (Tagesende)" : " (Early Exit)"},
+                        Rückkauf ca. {zahl((k.vorschlag as { debit?: number }).debit)}{" "}
+                        <button disabled={laeuft !== null || !s.paper}
+                          onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                          Schließen freigeben
+                        </button>
+                      </div>
+                    )}
+                    {k.vorschlag && (k.vorschlag as { art?: string }).art !== "schliessen" && (
                       <div>
                         Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
                         (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
@@ -262,6 +272,67 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
         </div>
       )}
       {meldung && <p className="hinweis">{meldung}</p>}
+      {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
+        <p className="sicht">
+          Tagesprogramm ({s.tagesprogramm.aktiv ? "aktiv, solange die Automatik AN ist" : "wartet auf die Automatik"}):{" "}
+          je Börsentag {s.tagesprogramm.ab_min} min nach Handelsbeginn {s.tagesprogramm.strategien.join(", ")};
+          Schließen kurz vor Handelsende. Heute eröffnet: {s.tagesprogramm.heute_eroeffnet.length} von{" "}
+          {s.tagesprogramm.strategien.length}.
+        </p>
+      )}
+      {s.statistik && Object.keys(s.statistik).length > 0 && (
+        <>
+          <h3>Auswertung je Strategie</h3>
+          <div className="tabelle-rahmen">
+            <table className="strategie-tabelle">
+              <thead>
+                <tr>
+                  <th>Strategie</th><th className="zahl">Ketten</th><th className="zahl">offen</th>
+                  <th className="zahl">Treffer</th><th className="zahl">Punkte</th><th className="zahl">Ergebnis</th>
+                  <th className="zahl">Ø Rolls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(s.statistik).map(([name, z]) => (
+                  <tr key={name}>
+                    <td>{name}</td><td className="zahl">{z.n}</td><td className="zahl">{z.offen}</td>
+                    <td className="zahl">{z.quote === null ? "—" : `${(z.quote * 100).toFixed(0)} %`}</td>
+                    <td className="zahl">{z.punkte.toFixed(2)}</td>
+                    <td className="zahl">{z.geld.toFixed(2)} {z.waehrung}</td>
+                    <td className="zahl">{z.rolls_schnitt === null ? "—" : z.rolls_schnitt.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      {s.abgeschlossen && s.abgeschlossen.length > 0 && (
+        <details>
+          <summary>Abgeschlossene Ketten ({s.abgeschlossen.length} zuletzt)</summary>
+          <div className="tabelle-rahmen">
+            <table className="strategie-tabelle">
+              <thead>
+                <tr>
+                  <th>Kette</th><th>Strategie</th><th>Eröffnet</th><th>Geschlossen</th><th className="zahl">Kredit</th>
+                  <th className="zahl">Rolls</th><th>Schluss</th><th className="zahl">Ergebnis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.abgeschlossen.map((a) => (
+                  <tr key={a.kette_id}>
+                    <td>{a.kette_id}</td><td>{a.strategie}</td>
+                    <td>{a.angelegt ? zeitDe(a.angelegt) : "—"}</td><td>{a.geschlossen ? zeitDe(a.geschlossen) : "—"}</td>
+                    <td className="zahl">{a.erstkredit === null ? "—" : a.erstkredit.toFixed(2)}</td>
+                    <td className="zahl">{a.rolls}</td><td>{a.schluss ?? "—"}</td>
+                    <td className="zahl">{a.punkte.toFixed(2)} Pkt = {a.geld.toFixed(2)} {a.waehrung}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
       {s.meldungen.length > 0 && (
         <details>
           <summary>Meldungen ({s.meldungen.length})</summary>

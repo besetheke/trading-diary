@@ -3483,3 +3483,20 @@ Annahmen (`options-roller/roller/strategie.py`), bitte bestätigen:
 4. **0DTE und Roll-Regel:** Bei 0 DTE gilt die Staffel (≤ 7 DTE: 0,38). Ein Roll geht +1 Woche
    (bei SPX auf einen Wochentag der Folgewoche); Early Exit in den letzten 30 min bei |Delta| ≥ 0,15.
 5. Eröffnung nur innerhalb der Handelszeit laut IB (15 min Abstand zu Beginn und Ende).
+
+## OF-88 · Tagesprogramm 0DTE (15.10.2026): Annahmen
+
+Vom Nutzer: Jeden Morgen ein Satz 0DTE BPS und BCS auf RUT und SPX eröffnen, die Kette am Ende des
+Tages wieder schließen. Umgesetzt im Roller (`taeglich`, `tagesende_schliessen`). Annahmen, bitte bestätigen:
+1. **„Morgens“** = 20 Minuten nach Handelsbeginn (SPX/RUT 9:50 Uhr New Yorker Zeit), damit die ersten unruhigen
+   Minuten und die 15-Minuten-Sperre der Order-Logik vorbei sind. Spätester Beginn 90 Minuten vor Handelsende.
+2. **RUT-Strategien:** Delta 0,10, **Breite 10**, Profit-Target 0,20, Debit-Grenze 0,05 (wie die RUT-Teststrategie);
+   SPX wie bisher Breite 25, Profit-Target 0,50. Die Breite von RUT hast du nicht genannt.
+3. **Schließen** 20 Minuten vor Handelsende, am Eröffnungstag, **unabhängig vom Delta** und auch nach einem
+   Roll (es zählt der Eröffnungstag). Ausgenommen von Tageslimit, Pause und Live-Pflicht — Risiko verringern geht immer.
+4. **Automatik als Schalter:** Das Tagesprogramm läuft nur, solange die Automatik AN ist (Not-Aus stoppt es).
+   Höchstens zwei Eröffnungsversuche je Strategie und Tag; was nicht gefüllt wird, bleibt für diesen Tag aus.
+5. **Rolls** gelten für Tagesketten weiter nach der Regel (Staffel; ein Roll geht auf den nächsten Verfall) — soll
+   eine Tageskette gar nicht rollen, sondern bei Gefahr nur schließen? (Dann: Roll für Tagesstrategien aus.)
+6. **Tagesbericht** per Mail 5 Minuten nach Handelsschluss, einmal je Tag (Ketten des Tages, Ergebnis je Kette,
+   Summe, Gesamtstand je Strategie).
