@@ -1148,6 +1148,7 @@ export interface TitelZeile {
   je_klasse: TitelKlasse[]
   kurs_fehlt: number
   offene_ohne_kurs: number
+  abgeschlossen_im_zeitraum: number
   waehrungen: string[]
 }
 
@@ -1157,8 +1158,12 @@ export interface TitelAntwort {
   summen: TitelZeile
 }
 
-export function holeTitel(): Promise<TitelAntwort> {
-  return hole('/titel-auswertung') as Promise<TitelAntwort>
+export function holeTitel(von: string | null, bis: string | null): Promise<TitelAntwort> {
+  const q = new URLSearchParams()
+  if (von) q.set('von', von)
+  if (bis) q.set('bis', bis)
+  const text = q.toString()
+  return hole(`/titel-auswertung${text ? `?${text}` : ''}`) as Promise<TitelAntwort>
 }
 
 export interface DepotKlasse {

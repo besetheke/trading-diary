@@ -26,6 +26,7 @@ Rein: keine Uhr, kein Netzwerk, keine Schreibzugriffe. Alle Beträge ``Decimal``
 import json
 import pathlib
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
@@ -52,7 +53,8 @@ class TitelZeile:
     basiswert: str
     ketten: int = 0
     ketten_offen: int = 0
-    strukturen_geschlossen: int = 0
+    strukturen_geschlossen: int = 0  # im Zeitraum gezählte geschlossene Strukturen
+    lose_beine: int = 0  # im Zeitraum gezählte geschlossene lose Beine
     realisiert_eur: Decimal = _NULL
     realisiert_je_klasse: dict = field(default_factory=dict)
     nicht_aufgeteilt_eur: Decimal = _NULL
@@ -80,12 +82,23 @@ def titel_auswertung(
     instrumenten_zeilen: list[dict],
     bestand_je_conid: dict[int, dict],
     stichtag,
+    von: date | None = None,
+    bis: date | None = None,
 ) -> list[TitelZeile]:
     """Je Basiswert eine ``TitelZeile`` (Kontosicht).
 
     ``bestand_je_conid``: conid → ``menge``, ``wert``, ``kurs`` wie bei
     ``unrealisiert_auswertung``.
+
+    ``von``/``bis`` (beide Enden einschließlich, wie überall): Realisiert zählt am Schließungstag
+    der Struktur oder des losen Beins — dieselbe Regel wie die Equity. Das Unrealisierte gilt zum
+    Stichtag des Bestands und entfällt, wenn ``bis`` davor liegt (kein passender Bestand).
     """
+
+    def im_zeitraum(tag: date) -> bool:
+        return (von is None or tag >= von) and (bis is None or tag <= bis)
+
+    bestand_gilt = bis is None or stichtag is None or bis >= stichtag
     grundlage = kennzahlen_auswertung(
         ketten_zeilen,
         struktur_zeilen,
@@ -130,6 +143,8 @@ def titel_auswertung(
     for struktur in grundlage.strukturen:
         if geschlossen_am.get(struktur.structure_id) is None:
             continue
+        if not im_zeitraum(geschlossen_am[struktur.structure_id].date()):
+            continue
         kette = kette_je_id.get(kette_je_struktur.get(struktur.structure_id))
         if kette is None:
             continue
@@ -154,7 +169,10 @@ def titel_auswertung(
     for leg in leg_zeilen:
         if leg["structure_id"] is not None or leg["close_exec_id"] is None:
             continue
+        if not im_zeitraum(exec_je_id[leg["close_exec_id"]]["handelszeit"].date()):
+            continue
         z = zeile(basiswert_des_beins(leg))
+        z.lose_beine += 1
         betrag = _wirtschaftlich([leg], exec_je_id, mult_je_conid)
         if betrag is None:
             z.kurs_fehlt += 1
@@ -168,7 +186,7 @@ def titel_auswertung(
     # --- Unrealisiert: offene Beine je Titel und Klasse
     offene_je_gruppe: dict[tuple[str, str], list[dict]] = {}
     for leg in leg_zeilen:
-        if leg["close_exec_id"] is not None:
+        if leg["close_exec_id"] is not None or not bestand_gilt:
             continue
         if leg["structure_id"] is not None:
             kette = kette_je_id.get(kette_je_struktur.get(leg["structure_id"]))
@@ -186,7 +204,9 @@ def titel_auswertung(
     return sorted(zeilen.values(), key=lambda t: t.basiswert)
 
 
-def titel_bericht(db_pfad: str | pathlib.Path) -> tuple[list[TitelZeile], object]:
+def titel_bericht(
+    db_pfad: str | pathlib.Path, von: date | None = None, bis: date | None = None
+) -> tuple[list[TitelZeile], object]:
     """Liest die Kontosicht und wertet aus (Hülle, nur lesend): Zeilen und Stichtag."""
     engine = create_db_engine(db_pfad)
     with engine.begin() as v:
@@ -302,13 +322,18 @@ def titel_bericht(db_pfad: str | pathlib.Path) -> tuple[list[TitelZeile], object
                     "wert": Decimal(str(wert)),
                     "kurs": Decimal(str(kurs)),
                 }
-    return titel_auswertung(
-        ketten_zeilen,
-        struktur_zeilen,
-        glieder_zeilen,
-        leg_zeilen,
-        ausfuehrungs_zeilen,
-        instrumenten_zeilen,
-        bestand,
+    return (
+        titel_auswertung(
+            ketten_zeilen,
+            struktur_zeilen,
+            glieder_zeilen,
+            leg_zeilen,
+            ausfuehrungs_zeilen,
+            instrumenten_zeilen,
+            bestand,
+            stichtag,
+            von,
+            bis,
+        ),
         stichtag,
-    ), stichtag
+    )

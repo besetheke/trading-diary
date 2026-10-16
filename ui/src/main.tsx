@@ -33,7 +33,7 @@ function heuteDatum(): string {
 // Wähler trotzdem (Z1: ein Zeitraum für alles) und sagen ehrlich, dass er
 // dort noch nichts filtert. AP-08g2: /kosten wirkt ebenfalls; AP-08z: die
 // Positionsliste (/) ebenso.
-const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten', '/strategie', '/abgleich', '/backtest']
+const ZEITRAUM_SEITEN = ['/', '/dashboard', '/kosten', '/strategie', '/abgleich', '/backtest', '/titel']
 
 // AP-14a: Bereiche der Station. Jede Seite gehört zu genau einem Bereich; die
 // erste Zeile wählt den Bereich, die zweite die Seiten darin.

@@ -900,6 +900,7 @@ class TitelZeileAntwort(BaseModel):
     je_klasse: list[TitelKlasseAntwort]
     kurs_fehlt: int
     offene_ohne_kurs: int
+    abgeschlossen_im_zeitraum: int
     waehrungen: list[str]
 
 
@@ -2181,9 +2182,9 @@ def _aktien_einkauf_aufbauen(verbindung: Connection) -> AktienEinkaufListeAntwor
     return AktienEinkaufListeAntwort(stichtag=stichtag, aktien=aktien)
 
 
-def _titel_aufbauen(db_pfad) -> TitelAntwort:
+def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -> TitelAntwort:
     """Ergebnis je Basiswert über alle Instrumente (AP-16); Grundlage ``analytics/titel.py``."""
-    zeilen, stichtag = titel_bericht(db_pfad)
+    zeilen, stichtag = titel_bericht(db_pfad, von, bis)
 
     def antwort(z, basiswert: str) -> TitelZeileAntwort:
         klassen = sorted(set(z.realisiert_je_klasse) | set(z.unrealisiert_je_klasse))
@@ -2202,6 +2203,7 @@ def _titel_aufbauen(db_pfad) -> TitelAntwort:
                 for k in klassen
             ],
             kurs_fehlt=z.kurs_fehlt, offene_ohne_kurs=z.offene_ohne_kurs,
+            abgeschlossen_im_zeitraum=z.strukturen_geschlossen + z.lose_beine,
             waehrungen=sorted(z.waehrungen),
         )
 
@@ -2213,6 +2215,8 @@ def _titel_aufbauen(db_pfad) -> TitelAntwort:
         summe.unrealisiert_eur += z.unrealisiert_eur
         summe.nicht_aufgeteilt_eur += z.nicht_aufgeteilt_eur
         summe.kurs_fehlt += z.kurs_fehlt
+        summe.strukturen_geschlossen += z.strukturen_geschlossen
+        summe.lose_beine += z.lose_beine
         summe.offene_ohne_kurs += z.offene_ohne_kurs
         summe.waehrungen |= z.waehrungen
         for k, w in z.realisiert_je_klasse.items():
@@ -3238,11 +3242,14 @@ def erzeuge_app(
             return _depot_aufbauen(verbindung)
 
     @applikation.get("/titel-auswertung", response_model=TitelAntwort)
-    def titel_auswertung() -> TitelAntwort:
+    def titel_auswertung(von: date | None = None, bis: date | None = None) -> TitelAntwort:
         """Ergebnis je Titel über alle Instrumente (AP-16): realisiert und unrealisiert,
         nach Anlageklasse aufgeteilt, in EUR. Dieselbe Rechengrundlage wie die Auswertung der
-        Positionsliste. Nur lesend."""
-        return _titel_aufbauen(db_pfad)
+        Positionsliste. ``von``/``bis`` (beide Enden einschließlich): Realisiert zählt am
+        Schließungstag; das Unrealisierte gilt zum Stichtag und entfällt, wenn ``bis`` davor liegt.
+        Nur lesend."""
+        _datumspaar_pruefen(von, bis, "von", "bis")
+        return _titel_aufbauen(db_pfad, von, bis)
 
     @applikation.get("/depot/einkauf", response_model=AktienEinkaufListeAntwort)
     def depot_einkauf() -> AktienEinkaufListeAntwort:

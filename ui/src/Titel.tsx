@@ -4,6 +4,7 @@ import { fehlerText, holeTitel } from './api'
 import type { TitelAntwort, TitelZeile } from './api'
 import Betrag from './Betrag'
 import { datumDe } from './format'
+import { useZeitraum } from './zeitraum'
 
 // AP-16: Ergebnis je Titel über alle Instrumente. Eine Zeile je Basiswert — Optionen, Aktien und Futures
 // zusammen —, im Unterschied zur Positionsliste (eine Zeile je Trade). Alles Werte der Quelle
@@ -62,6 +63,7 @@ function Summenzeile({ z }: { z: TitelZeile }): JSX.Element {
 }
 
 export default function Titel(): JSX.Element {
+  const [zeitraum] = useZeitraum()
   const [daten, setzeDaten] = useState<TitelAntwort | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
   const [suche, setzeSuche] = useState('')
@@ -70,18 +72,33 @@ export default function Titel(): JSX.Element {
   const [absteigend, setzeAbsteigend] = useState(false)   // Vorgabe: größter Verlust zuerst
 
   useEffect(() => {
-    holeTitel()
-      .then(setzeDaten)
-      .catch((ursache: unknown) => setzeFehler(fehlerText(ursache)))
-  }, [])
+    let abgebrochen = false
+    setzeFehler(null)
+    holeTitel(zeitraum.von, zeitraum.bis)
+      .then((d) => {
+        if (!abgebrochen) setzeDaten(d)
+      })
+      .catch((ursache: unknown) => {
+        if (!abgebrochen) setzeFehler(fehlerText(ursache))
+      })
+    return () => {
+      abgebrochen = true
+    }
+  }, [zeitraum.von, zeitraum.bis])
 
+  const zeitraumGesetzt = zeitraum.von !== null || zeitraum.bis !== null
   const zeilen = useMemo(() => {
     if (daten === null) return []
     const text = suche.trim().toUpperCase()
     const liste = daten.titel.filter(
       (z) =>
         (text === '' || z.basiswert.toUpperCase().includes(text)) &&
-        (!nurOffen || z.ketten_offen > 0 || Number(z.unrealisiert_eur) !== 0),
+        (!nurOffen || z.ketten_offen > 0 || Number(z.unrealisiert_eur) !== 0) &&
+        // Mit Zeitraum nur Titel, die darin etwas zählen (Schließung, Kursmangel) oder offen bewertet sind.
+        (!zeitraumGesetzt ||
+          z.abgeschlossen_im_zeitraum > 0 ||
+          z.kurs_fehlt > 0 ||
+          Number(z.unrealisiert_eur) !== 0),
     )
     liste.sort((a, b) => {
       const x = wert(a, spalte)
@@ -90,7 +107,7 @@ export default function Titel(): JSX.Element {
       return absteigend ? -c : c
     })
     return liste
-  }, [daten, suche, nurOffen, spalte, absteigend])
+  }, [daten, suche, nurOffen, spalte, absteigend, zeitraumGesetzt])
 
   function sortiere(neu: Spalte): void {
     if (neu === spalte) setzeAbsteigend(!absteigend)
@@ -110,7 +127,11 @@ export default function Titel(): JSX.Element {
       <h2>Titel — Ergebnis über alle Instrumente</h2>
       <p className="sicht">
         Eine Zeile je Basiswert (Optionen, Aktien, Futures zusammen); die Positionsliste zeigt dagegen einen Trade je
-        Zeile. Bestand zum Stichtag {daten.stichtag ? datumDe(daten.stichtag) : '—'}. Dividenden, Zinsen und
+        Zeile. Bestand zum Stichtag {daten.stichtag ? datumDe(daten.stichtag) : '—'}.
+        {zeitraumGesetzt
+          ? ' Der gewählte Zeitraum gilt für das Realisierte (Schließungstag); das Unrealisierte gilt zum Stichtag und entfällt, wenn der Zeitraum davor endet.'
+          : ''}{' '}
+        Dividenden, Zinsen und
         Gebühren außerhalb der Ausführungen sind nicht enthalten. Optionsprämien stehen bei den Optionen, das
         Kursergebnis einer zugeteilten Aktie bei den Aktien — IB dagegen schiebt die Prämie in den Einstand der Aktie.
       </p>

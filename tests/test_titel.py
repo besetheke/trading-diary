@@ -78,7 +78,7 @@ def _instr(conid, klasse, underlying, mult="1"):
     }
 
 
-def _welt():
+def _welt(von=None, bis=None):
     ausf = [
         _ex("P1", 1, "SELL", 1, "5.00"),
         _ex("P2", 1, "BUY", 1, "0"),  # Put WHL
@@ -170,7 +170,7 @@ def _welt():
     ]
     bestand = {5: {"menge": D(100), "wert": D("4800"), "kurs": D("0.9")}}
     return titel_auswertung(
-        ketten, strukturen, glieder, beine, ausf, instrumente, bestand, date(2026, 10, 12)
+        ketten, strukturen, glieder, beine, ausf, instrumente, bestand, date(2026, 10, 12), von, bis
     )
 
 
@@ -240,3 +240,50 @@ def test_api_leere_datenbank(migrated_db):
     assert d["stichtag"] is None and d["titel"] == []
     assert d["summen"]["basiswert"] == "Summe"
     assert d["summen"]["realisiert_eur"] in ("0", "0.00")
+
+
+# Zeitraum (von/bis, beide Enden einschließlich): Realisiert zählt am Schließungstag, das
+# Unrealisierte gilt zum Stichtag (2026-10-12) und entfällt, wenn ``bis`` davor liegt.
+# Alle Schließungen der Testwelt: 2026-09-10.
+
+
+def _welt_mit_zeitraum(von, bis):
+    return {z.basiswert: z for z in _welt(von, bis)}
+
+
+def test_zeitraum_beide_enden_einschliesslich():
+    z = _welt_mit_zeitraum(date(2026, 9, 10), date(2026, 9, 10))  # genau der Schließungstag
+    assert z["WHL"].realisiert_eur == D("1500")
+    assert z["EKT"].realisiert_eur == D("20")
+    assert z["ZZZ"].realisiert_eur == D("-5.00")
+    assert z["WHL"].strukturen_geschlossen == 2 and z["ZZZ"].lose_beine == 1
+
+
+def test_zeitraum_nach_der_schliessung_zaehlt_nichts_realisiert_aber_unrealisiert_bleibt():
+    z = _welt_mit_zeitraum(date(2026, 9, 11), None)
+    assert z["WHL"].realisiert_eur == 0 and z["EKT"].realisiert_eur == 0
+    assert "ZZZ" not in z       # nur ein loses Bein, außerhalb des Zeitraums: keine Zeile
+    assert z["WHL"].strukturen_geschlossen == 0
+    assert z["OFF"].unrealisiert_eur == D("-180.00")  # bis offen: Stichtag gilt
+
+
+def test_bis_vor_dem_stichtag_entfaellt_das_unrealisierte():
+    z = _welt_mit_zeitraum(None, date(2026, 10, 11))  # Stichtag ist 2026-10-12
+    assert z["OFF"].unrealisiert_eur == 0
+    assert z["OFF"].offene_ohne_kurs == 0  # nicht "ohne Kurs", sondern gar nicht gerechnet
+    assert z["WHL"].realisiert_eur == D("1500")  # Schließung 09-10 liegt im Zeitraum
+    z = _welt_mit_zeitraum(None, date(2026, 10, 12))  # bis = Stichtag: gilt noch
+    assert z["OFF"].unrealisiert_eur == D("-180.00")
+
+
+def test_api_zeitraum_wird_durchgereicht_und_geprueft(migrated_db):
+    import pytest
+
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from api.app import erzeuge_app
+
+    klient = TestClient(erzeuge_app(migrated_db))
+    assert klient.get("/titel-auswertung?von=2026-01-01&bis=2026-01-31").status_code == 200
+    assert klient.get("/titel-auswertung?von=2026-02-01&bis=2026-01-31").status_code == 422
