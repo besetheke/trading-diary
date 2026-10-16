@@ -1113,6 +1113,24 @@ export interface DepotPosition {
   unrealisiert_eur: string | null
 }
 
+export interface AktieEinkauf {
+  conid: number
+  symbol: string
+  waehrung: string
+  menge_journal: string
+  menge_ib: string | null
+  einkaufskurs: string
+  ib_einstand: string | null
+  praemien_je_aktie: string | null
+  anteil_zuteilung: string
+  kurs: string | null
+  unrealisiert_einkauf: string | null
+}
+
+export function holeAktienEinkauf(): Promise<{ stichtag: string | null; aktien: AktieEinkauf[] }> {
+  return hole('/depot/einkauf') as Promise<{ stichtag: string | null; aktien: AktieEinkauf[] }>
+}
+
 export interface DepotKlasse {
   anlageklasse: string
   anzahl: number

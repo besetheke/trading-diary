@@ -664,6 +664,37 @@ table.positionen td {
   line-height: 1.3;
 }
 
+/* Dichte der Positionslisten (Nutzerwunsch 16.10.2026): möglichst viele Zeilen auf einen Blick.
+   „normal“ ist der bisherige Stand; „kompakt“ und „sehr“ verkleinern Schrift und Abstände und
+   verhindern den Umbruch in den Zellen; die Spaltenköpfe dürfen weiter umbrechen. */
+table.positionen.dichte-kompakt {
+  font-size: 0.8rem;
+}
+
+table.positionen.dichte-kompakt th,
+table.positionen.dichte-kompakt td {
+  padding: 0 0.4rem;
+  line-height: 1.15;
+}
+
+table.positionen.dichte-kompakt td {
+  white-space: nowrap;
+}
+
+table.positionen.dichte-sehr {
+  font-size: 0.72rem;
+}
+
+table.positionen.dichte-sehr th,
+table.positionen.dichte-sehr td {
+  padding: 0 0.3rem;
+  line-height: 1.05;
+}
+
+table.positionen.dichte-sehr td {
+  white-space: nowrap;
+}
+
 /* Datum und Uhrzeit in einer Zeile — ohne Sekunden, ohne Umbruch. Die
    Zahlenspalten laufen über .zahl bereits ohne Umbruch. */
 table.positionen td.zeit {

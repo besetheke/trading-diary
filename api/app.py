@@ -853,6 +853,35 @@ class DepotSummenAntwort(BaseModel):
     je_klasse: list[DepotKlasseAntwort]
 
 
+class AktieEinkaufAntwort(BaseModel):
+    """Einkaufskurs einer gehaltenen Aktie laut Journal neben IBs Einstand.
+
+    ``menge_journal``: offene Aktien-Legs des Journals; ``menge_ib``: Bestand laut IB.
+    ``einkaufskurs``: gewichteter Durchschnitt der Kauf- und Zuteilungspreise der offenen Legs.
+    ``ib_einstand``: IBs Kostenbasis, schon um Optionsprämien gekürzt. ``praemien_je_aktie``:
+    Einkauf minus IB-Einstand. ``anteil_zuteilung``: Anteil der Stücke aus einer
+    Optionszuteilung (0 bis 1).
+    ``unrealisiert_einkauf``: (Kurs minus Einkaufskurs) mal Menge in Positionswährung.
+    """
+
+    conid: int
+    symbol: str
+    waehrung: str
+    menge_journal: str
+    menge_ib: str | None
+    einkaufskurs: str
+    ib_einstand: str | None
+    praemien_je_aktie: str | None
+    anteil_zuteilung: str
+    kurs: str | None
+    unrealisiert_einkauf: str | None
+
+
+class AktienEinkaufListeAntwort(BaseModel):
+    stichtag: date | None
+    aktien: list[AktieEinkaufAntwort]
+
+
 class DepotAntwort(BaseModel):
     stichtag: date | None
     positionen: list[DepotPositionAntwort]
@@ -2050,6 +2079,79 @@ def _dezimal_oder_none(wert: object) -> Decimal | None:
     return Decimal(str(wert))
 
 
+def _aktien_einkauf_aufbauen(verbindung: Connection) -> AktienEinkaufListeAntwort:
+    """Einkaufskurs der gehaltenen Aktien aus den offenen Aktien-Legs des Journals.
+
+    Das ist der Preis, den die Ausführung trug (bei Zuteilung der Strike), neben IBs Einstand,
+    der um Optionsprämien gekürzt ist. IB bucht eine zugeteilte Option mit 0 und schiebt die
+    Prämie in den Einstand der Aktie (siehe ``analytics/ib_abgleich.py``); das Journal führt
+    die Prämie im realisierten Ergebnis der Option."""
+    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    ib: dict[int, dict] = {}
+    if stichtag is not None:
+        for z in verbindung.execute(
+            select(flex_open_positions).where(flex_open_positions.c.stichtag == stichtag,
+                                              flex_open_positions.c.asset_class == "STK")
+        ).mappings():
+            roh = json.loads(z["roh_json"])
+            if roh.get("levelOfDetail") not in (None, "SUMMARY"):
+                continue
+            ib[z["conid"]] = {
+                "menge": _dezimal_oder_none(roh.get("position") or z["menge"]),
+                "einstand": _dezimal_oder_none(roh.get("costBasisPrice")),
+                "kurs": _dezimal_oder_none(roh.get("markPrice")),
+                "symbol": z["symbol"],
+                "waehrung": z["waehrung"],
+            }
+    zeilen = verbindung.execute(
+        select(
+            legs.c.conid, legs.c.menge, legs.c.open_faktor, executions.c.preis,
+            executions.c.symbol, executions.c.waehrung, executions.c.ereignistyp,
+        )
+        .join(executions, executions.c.exec_id == legs.c.open_exec_id)
+        .where(
+            legs.c.sicht == "konto", legs.c.offen_ja_nein.is_(True),
+            executions.c.sec_type == "STK",
+        )
+    ).mappings().all()
+    je_conid: dict[int, dict] = {}
+    for z in zeilen:
+        menge = abs(Decimal(str(z["menge"])))
+        faktor = Decimal(str(z["open_faktor"] or 1))
+        preis = Decimal(str(z["preis"])) / faktor
+        g = je_conid.setdefault(z["conid"], {
+            "menge": Decimal(0), "wert": Decimal(0), "zuteilung": Decimal(0),
+            "symbol": z["symbol"], "waehrung": z["waehrung"],
+        })
+        g["menge"] += menge
+        g["wert"] += preis * menge
+        if z["ereignistyp"] == "assignment":
+            g["zuteilung"] += menge
+    aktien = []
+    for conid, g in sorted(je_conid.items(), key=lambda kv: kv[1]["symbol"]):
+        if g["menge"] == 0:
+            continue
+        einkauf = g["wert"] / g["menge"]
+        b = ib.get(conid, {})
+        einstand, kurs = b.get("einstand"), b.get("kurs")
+        aktien.append(AktieEinkaufAntwort(
+            conid=conid,
+            symbol=g["symbol"],
+            waehrung=g["waehrung"],
+            menge_journal=_als_text(g["menge"]),
+            menge_ib=_als_text(b["menge"]) if b.get("menge") is not None else None,
+            einkaufskurs=_als_text(einkauf),
+            ib_einstand=_als_text(einstand) if einstand is not None else None,
+            praemien_je_aktie=_als_text(einkauf - einstand) if einstand is not None else None,
+            anteil_zuteilung=_als_text(g["zuteilung"] / g["menge"]),
+            kurs=_als_text(kurs) if kurs is not None else None,
+            unrealisiert_einkauf=(
+                _als_text(kurs * g["menge"] - g["wert"]) if kurs is not None else None
+            ),
+        ))
+    return AktienEinkaufListeAntwort(stichtag=stichtag, aktien=aktien)
+
+
 def _depot_aufbauen(verbindung: Connection) -> DepotAntwort:
     """Bestand des jüngsten Stichtags aus ``flex_open_positions`` (AP-08d)."""
     stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
@@ -3063,6 +3165,13 @@ def erzeuge_app(
         unrealisiertes Ergebnis — in Positionswährung und in EUR. Nur lesend."""
         with engine.connect() as verbindung:
             return _depot_aufbauen(verbindung)
+
+    @applikation.get("/depot/einkauf", response_model=AktienEinkaufListeAntwort)
+    def depot_einkauf() -> AktienEinkaufListeAntwort:
+        """Einkaufskurs der gehaltenen Aktien laut Journal (Kauf- oder Zuteilungspreis)
+        neben IBs Einstand, der um Optionsprämien gekürzt ist. Nur lesend."""
+        with engine.connect() as verbindung:
+            return _aktien_einkauf_aufbauen(verbindung)
 
     @applikation.get("/ueberleitung", response_model=UeberleitungAntwort)
     def ueberleitung() -> UeberleitungAntwort:

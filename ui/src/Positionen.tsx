@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { fehlerText, holeAuswertung, holeDepot, holeFilterwerte, holeKetten, holeOaStand } from './api'
+import { fehlerText, holeAktienEinkauf, holeAuswertung, holeDepot, holeFilterwerte, holeKetten, holeOaStand } from './api'
 import type {
+  AktieEinkauf,
   Auswertung,
   Depot,
   Filterwerte,
@@ -471,17 +472,39 @@ function Auswahl({
   )
 }
 
+// Dichte der Tabellen (Nutzerwunsch 16.10.2026: alle Trades möglichst nah beieinander, ohne zu scrollen).
+type Dichte = 'normal' | 'kompakt' | 'sehr'
+const DICHTEN: [Dichte, string, string][] = [
+  ['normal', 'Normal', 'Wie bisher'],
+  ['kompakt', 'Kompakt', 'Kleinere Schrift, engere Zeilen, kein Umbruch'],
+  ['sehr', 'Sehr kompakt', 'Kleinste Schrift, Zeilen ohne Abstand'],
+]
+const DICHTE_SCHLUESSEL = 'positionen-dichte'
+
+function leseDichte(): Dichte {
+  try {
+    const wert = window.localStorage.getItem(DICHTE_SCHLUESSEL)
+    return wert === 'normal' || wert === 'sehr' || wert === 'kompakt' ? wert : 'kompakt'
+  } catch {
+    return 'kompakt'
+  }
+}
+
 // Aktien im Depot (Nutzerwunsch 16.10.2026): Die Positionsliste zeigt Ketten von Geschäften. Aktien stehen dort
 // nur, soweit sie aus Zuteilungen stammen (Teil einer Options-Kette, Seite „n.a.“) oder als eigene Aktienkette.
 // Dieser Block zeigt deshalb den Aktienbestand laut IB (Flex-Bestand, letzter Stichtag, wie die Seite „Depot“),
 // gefiltert nach Basiswert, Währung und Anlageklasse der Leiste. Gefiltert nach Endzustand/Datum wird nicht:
 // der Bestand ist immer „offen“ zum Stichtag.
-function AktienImDepot({ filter }: { filter: Entwurf }): JSX.Element | null {
+function AktienImDepot({ filter, dichte }: { filter: Entwurf; dichte: Dichte }): JSX.Element | null {
   const [depot, setzeDepot] = useState<Depot | null>(null)
+  const [einkauf, setzeEinkauf] = useState<Record<number, AktieEinkauf>>({})
   useEffect(() => {
     holeDepot()
       .then(setzeDepot)
       .catch(() => setzeDepot(null))
+    holeAktienEinkauf()
+      .then((e) => setzeEinkauf(Object.fromEntries(e.aktien.map((a) => [a.conid, a]))))
+      .catch(() => setzeEinkauf({}))
   }, [])
   if (depot === null) return null
   const basiswerte = werteListe(filter.basiswert).map((x) => x.toUpperCase())
@@ -502,17 +525,23 @@ function AktienImDepot({ filter }: { filter: Entwurf }): JSX.Element | null {
       </summary>
       <p className="hinweis">
         Aktien aus Zuteilungen gehören im Journal zur Options-Kette (Zeile mit Seite „n.a.“); hier steht der
-        tatsächliche Bestand. Mehr auf der Seite <Link to="/bestand">Depot</Link>.
+        tatsächliche Bestand. <strong>Einkauf</strong> = Preis der Kauf- oder Zuteilungsausführung (bei Zuteilung der
+        Strike). <strong>IB-Einstand</strong> = IBs Kostenbasis, schon um die Optionsprämien gekürzt (IB bucht eine
+        zugeteilte Option mit 0 und schiebt die Prämie in den Einstand der Aktie). Die Summen der Ketten-Liste
+        enthalten diese Tabelle nicht. Mehr auf der Seite <Link to="/bestand">Depot</Link>.
       </p>
-      <table className="positionen">
+      <table className={`positionen dichte-${dichte}`}>
         <thead>
           <tr>
             <th>Basiswert</th>
             <th className="zahl">Menge</th>
-            <th className="zahl">Einstand</th>
+            <th className="zahl" title="Gewichteter Durchschnitt der Kauf- und Zuteilungspreise der offenen Aktien-Legs im Journal">Einkauf Ø</th>
+            <th className="zahl" title="IBs Kostenbasis: schon um Optionsprämien gekürzt">IB-Einstand</th>
+            <th className="zahl" title="Einkauf minus IB-Einstand: die Prämien je Aktie, die IB in den Einstand schiebt">Prämien/Aktie</th>
             <th className="zahl">Kurs</th>
             <th className="zahl">Marktwert</th>
-            <th className="zahl">Unrealisiert</th>
+            <th className="zahl" title="Kurs gegen IB-Einstand (IBs Zahl)">Unrealisiert (IB)</th>
+            <th className="zahl" title="Kurs gegen den tatsächlichen Einkaufspreis, ohne Prämien">Unrealisiert (Einkauf)</th>
             <th>Währung</th>
           </tr>
         </thead>
@@ -525,11 +554,18 @@ function AktienImDepot({ filter }: { filter: Entwurf }): JSX.Element | null {
                 </Link>
               </td>
               <td className="zahl">{mengeDe(p.menge)}</td>
+              <td className="zahl" title={einkauf[p.conid] ? `Journal: ${einkauf[p.conid].menge_journal} Stück, davon ${(Number(einkauf[p.conid].anteil_zuteilung) * 100).toFixed(0)} % aus Zuteilung` : "Kein offener Aktien-Leg im Journal"}>
+                {einkauf[p.conid] ? betrag(einkauf[p.conid].einkaufskurs) : '—'}
+              </td>
               <td className="zahl">{betrag(p.einstandskurs)}</td>
+              <td className="zahl">{einkauf[p.conid] ? betrag(einkauf[p.conid].praemien_je_aktie) : '—'}</td>
               <td className="zahl">{betrag(p.kurs)}</td>
               <td className="zahl">{betrag(p.marktwert)}</td>
               <td className="zahl">
                 <Betrag wert={p.unrealisiert} waehrung={p.waehrung} />
+              </td>
+              <td className="zahl">
+                {einkauf[p.conid] ? <Betrag wert={einkauf[p.conid].unrealisiert_einkauf} waehrung={p.waehrung} /> : '—'}
               </td>
               <td>{p.waehrung}</td>
             </tr>
@@ -568,6 +604,15 @@ export default function Positionen(): JSX.Element {
   const ansicht: 'ketten' | 'schritte' =
     suche.get('ansicht') === 'schritte' ? 'schritte' : 'ketten'
 
+  const [dichte, setzeDichteZustand] = useState<Dichte>(() => leseDichte())
+  function setzeDichte(wert: Dichte): void {
+    setzeDichteZustand(wert)
+    try {
+      window.localStorage.setItem(DICHTE_SCHLUESSEL, wert)
+    } catch {
+      /* Speicher fehlt — die Wahl gilt dann nur für diese Sitzung. */
+    }
+  }
   const [entwurf, setzeEntwurf] = useState<Entwurf>(() => entwurfAusAdresse(suche))
   const [liste, setzeListe] = useState<KettenListe | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
@@ -973,7 +1018,20 @@ export default function Positionen(): JSX.Element {
         </section>
       ) : (
         <>
-          <AktienImDepot filter={entwurfAusAdresse(suche)} />
+          <AktienImDepot filter={entwurfAusAdresse(suche)} dichte={dichte} />
+          <div className="diagramm-wahl" role="group" aria-label="Dichte der Tabellen">
+            {DICHTEN.map(([wert, name, hinweis]) => (
+              <button
+                key={wert}
+                type="button"
+                aria-pressed={dichte === wert}
+                title={hinweis}
+                onClick={() => setzeDichte(wert)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
           <div className="diagramm-wahl" role="group" aria-label="Ansicht der Liste">
             <button
               type="button"
@@ -992,7 +1050,7 @@ export default function Positionen(): JSX.Element {
               Schritte einzeln (wie OA)
             </button>
           </div>
-          <table className="positionen">
+          <table className={`positionen dichte-${dichte}`}>
             <thead>
               <tr>
                 {sichtbare.map((id) => {
