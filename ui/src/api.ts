@@ -1131,6 +1131,36 @@ export function holeAktienEinkauf(): Promise<{ stichtag: string | null; aktien: 
   return hole('/depot/einkauf') as Promise<{ stichtag: string | null; aktien: AktieEinkauf[] }>
 }
 
+export interface TitelKlasse {
+  anlageklasse: string
+  realisiert_eur: string
+  unrealisiert_eur: string
+}
+
+export interface TitelZeile {
+  basiswert: string
+  ketten: number
+  ketten_offen: number
+  realisiert_eur: string
+  unrealisiert_eur: string
+  gesamt_eur: string
+  nicht_aufgeteilt_eur: string
+  je_klasse: TitelKlasse[]
+  kurs_fehlt: number
+  offene_ohne_kurs: number
+  waehrungen: string[]
+}
+
+export interface TitelAntwort {
+  stichtag: string | null
+  titel: TitelZeile[]
+  summen: TitelZeile
+}
+
+export function holeTitel(): Promise<TitelAntwort> {
+  return hole('/titel-auswertung') as Promise<TitelAntwort>
+}
+
 export interface DepotKlasse {
   anlageklasse: string
   anzahl: number

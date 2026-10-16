@@ -3500,3 +3500,21 @@ Tages wieder schließen. Umgesetzt im Roller (`taeglich`, `tagesende_schliessen`
    eine Tageskette gar nicht rollen, sondern bei Gefahr nur schließen? (Dann: Roll für Tagesstrategien aus.)
 6. **Tagesbericht** per Mail 5 Minuten nach Handelsschluss, einmal je Tag (Ketten des Tages, Ergebnis je Kette,
    Summe, Gesamtstand je Strategie).
+
+## OF-89 · Seite „Titel“: offene Punkte (AP-16, 16.10.2026)
+
+1. **Dividenden, Zinsen, Gebühren** (außerhalb der Ausführungen) sind **nicht** im Ergebnis je Titel. Sie liegen
+   in den Cashflows (`analytics/cashflows.py`, Seite „Kosten & Erträge“). Offen: lassen sie sich eindeutig einem
+   Basiswert zuordnen (Dividende je ISIN/Symbol), und soll die Seite eine eigene Spalte zeigen?
+2. **Zeitraum:** Die Seite zeigt alle Zeiten; der Zeitraumwähler im Kopf wirkt nicht. Gewünscht: Jahr/Zeitraum je
+   Titel? (Realisiert nach Schließungstag ist machbar, unrealisiert gilt immer zum Stichtag.)
+3. **Zeitpunkt:** Wie die Equity zählt die Seite ein Bein erst, wenn seine Struktur geschlossen ist. Geschlossene
+   Beine in noch offenen Strukturen (z. B. Teilverkauf einer Aktien-Struktur) fehlen im Realisierten bis zur
+   Schließung; im Unrealisierten stehen nur die offenen Beine. Soll die Seite sie getrennt ausweisen?
+4. **30 offene Beine ohne Bestandszeile bei IB** (u. a. angepasste Optionen nach Splits, OF-80) zählen nicht im
+   Unrealisierten; die Seite nennt die Zahl.
+5. **Eine Währung:** Alle Beträge in EUR (Tageskurs je Seite). Ein Titel mit mehreren Währungen trägt einen Hinweis.
+6. **Sonstige Klassen** (Futures, Futures-Optionen, Devisen) stehen gesammelt in „davon Futures u. a.“.
+7. **Aufteilung bei Zuteilung:** Der Optionsanteil einer zugeteilten Position enthält die Prämie, der Aktienanteil
+   den Kursgewinn gegen den Zuteilungspreis. Wer den IB-Einstand (Prämie in der Aktie) bevorzugt, sieht die
+   Summe unverändert, aber eine andere Aufteilung — zu entscheiden, welche Aufteilung die Standardansicht sein soll.

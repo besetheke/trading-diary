@@ -59,6 +59,7 @@ from analytics.nav import nav_bericht
 from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
 from analytics.strategien import strategie_bericht
+from analytics.titel import TitelZeile, titel_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
 from journal.durchsicht import _gruppen_bilden, _urteile_schreiben
@@ -880,6 +881,34 @@ class AktieEinkaufAntwort(BaseModel):
 class AktienEinkaufListeAntwort(BaseModel):
     stichtag: date | None
     aktien: list[AktieEinkaufAntwort]
+
+
+class TitelKlasseAntwort(BaseModel):
+    anlageklasse: str
+    realisiert_eur: str
+    unrealisiert_eur: str
+
+
+class TitelZeileAntwort(BaseModel):
+    basiswert: str
+    ketten: int
+    ketten_offen: int
+    realisiert_eur: str
+    unrealisiert_eur: str
+    gesamt_eur: str
+    nicht_aufgeteilt_eur: str
+    je_klasse: list[TitelKlasseAntwort]
+    kurs_fehlt: int
+    offene_ohne_kurs: int
+    waehrungen: list[str]
+
+
+class TitelAntwort(BaseModel):
+    """Ergebnis je Titel über alle Instrumente (AP-16); ``summen`` über alle Titel."""
+
+    stichtag: date | None
+    titel: list[TitelZeileAntwort]
+    summen: TitelZeileAntwort
 
 
 class DepotAntwort(BaseModel):
@@ -2152,6 +2181,48 @@ def _aktien_einkauf_aufbauen(verbindung: Connection) -> AktienEinkaufListeAntwor
     return AktienEinkaufListeAntwort(stichtag=stichtag, aktien=aktien)
 
 
+def _titel_aufbauen(db_pfad) -> TitelAntwort:
+    """Ergebnis je Basiswert über alle Instrumente (AP-16); Grundlage ``analytics/titel.py``."""
+    zeilen, stichtag = titel_bericht(db_pfad)
+
+    def antwort(z, basiswert: str) -> TitelZeileAntwort:
+        klassen = sorted(set(z.realisiert_je_klasse) | set(z.unrealisiert_je_klasse))
+        return TitelZeileAntwort(
+            basiswert=basiswert, ketten=z.ketten, ketten_offen=z.ketten_offen,
+            realisiert_eur=_als_text(z.realisiert_eur),
+            unrealisiert_eur=_als_text(z.unrealisiert_eur),
+            gesamt_eur=_als_text(z.gesamt_eur),
+            nicht_aufgeteilt_eur=_als_text(z.nicht_aufgeteilt_eur),
+            je_klasse=[
+                TitelKlasseAntwort(
+                    anlageklasse=k,
+                    realisiert_eur=_als_text(z.realisiert_je_klasse.get(k, Decimal(0))),
+                    unrealisiert_eur=_als_text(z.unrealisiert_je_klasse.get(k, Decimal(0))),
+                )
+                for k in klassen
+            ],
+            kurs_fehlt=z.kurs_fehlt, offene_ohne_kurs=z.offene_ohne_kurs,
+            waehrungen=sorted(z.waehrungen),
+        )
+
+    summe = TitelZeile(basiswert="Summe")
+    for z in zeilen:
+        summe.ketten += z.ketten
+        summe.ketten_offen += z.ketten_offen
+        summe.realisiert_eur += z.realisiert_eur
+        summe.unrealisiert_eur += z.unrealisiert_eur
+        summe.nicht_aufgeteilt_eur += z.nicht_aufgeteilt_eur
+        summe.kurs_fehlt += z.kurs_fehlt
+        summe.offene_ohne_kurs += z.offene_ohne_kurs
+        summe.waehrungen |= z.waehrungen
+        for k, w in z.realisiert_je_klasse.items():
+            summe.realisiert_je_klasse[k] = summe.realisiert_je_klasse.get(k, Decimal(0)) + w
+        for k, w in z.unrealisiert_je_klasse.items():
+            summe.unrealisiert_je_klasse[k] = summe.unrealisiert_je_klasse.get(k, Decimal(0)) + w
+    return TitelAntwort(stichtag=stichtag, titel=[antwort(z, z.basiswert) for z in zeilen],
+                        summen=antwort(summe, "Summe"))
+
+
 def _depot_aufbauen(verbindung: Connection) -> DepotAntwort:
     """Bestand des jüngsten Stichtags aus ``flex_open_positions`` (AP-08d)."""
     stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
@@ -3165,6 +3236,13 @@ def erzeuge_app(
         unrealisiertes Ergebnis — in Positionswährung und in EUR. Nur lesend."""
         with engine.connect() as verbindung:
             return _depot_aufbauen(verbindung)
+
+    @applikation.get("/titel-auswertung", response_model=TitelAntwort)
+    def titel_auswertung() -> TitelAntwort:
+        """Ergebnis je Titel über alle Instrumente (AP-16): realisiert und unrealisiert,
+        nach Anlageklasse aufgeteilt, in EUR. Dieselbe Rechengrundlage wie die Auswertung der
+        Positionsliste. Nur lesend."""
+        return _titel_aufbauen(db_pfad)
 
     @applikation.get("/depot/einkauf", response_model=AktienEinkaufListeAntwort)
     def depot_einkauf() -> AktienEinkaufListeAntwort:
