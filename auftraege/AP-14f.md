@@ -97,3 +97,15 @@ Automatik für diese Kette am selben Tag, angehaltene Ketten nie, optional nur m
 (`auto_nur_live`), jede Aktion als Mail. Eröffnungen bleiben Handarbeit (Wiedereinstieg
 zurückgestellt). Zustand in `%LOCALAPPDATA%\OptionsRoller\auto.json` (überlebt Neustarts).
 Für das Live-Konto ist die Automatik gesperrt — dafür braucht es R4 (Schattenmodus) und ein eigenes Paket.
+
+## Ausführung am Paper-Konto (16.10.2026)
+
+Befund: Rolls blieben ungefüllt, weil die Paper-Simulation erst am natürlichen Preis füllt, der Debit-Rahmen
+aber darunter lag (K002: natürlich 2,40, Rahmen 1,6; K004: 0,80 gegen 0,25), und weil der Delta-Puffer nach dem
+Roll fast jeden Kandidaten verwarf. Nutzerwunsch: auf Paper garantiert und schnell rollen, keine zu engen Grenzen.
+Profil „test“ (Standard bei Paper-Orders): Order startet am natürlichen Preis, zieht bis natürlich + 25 % (mindestens
+zwei Tick, höchstens halbe Spreadbreite) nach; der Debit-Rahmen (20-fach, bei Gap 300 % des Erstkredits) bestimmt nur
+noch die **Wahl** des Rolls; Roll-Fallback: ohne Puffer, dann der Kandidat mit dem niedrigsten Delta, wenn er das
+Delta verbessert. Eröffnung nie als Debit. Profil „normal“ bleibt streng und startet keinen Roll mehr, dessen Rahmen
+unter dem natürlichen Preis liegt (Meldung statt aussichtslosem Versuch). **Nicht für ein Live-Konto gedacht** — dort
+bezahlt man den Zuschlag wirklich.
