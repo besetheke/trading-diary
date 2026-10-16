@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { fehlerText, holeAuswertung, holeFilterwerte, holeKetten, holeOaStand } from './api'
+import { fehlerText, holeAuswertung, holeDepot, holeFilterwerte, holeKetten, holeOaStand } from './api'
 import type {
   Auswertung,
+  Depot,
   Filterwerte,
   Kette,
   KettenFilter,
@@ -470,6 +471,75 @@ function Auswahl({
   )
 }
 
+// Aktien im Depot (Nutzerwunsch 16.10.2026): Die Positionsliste zeigt Ketten von Geschäften. Aktien stehen dort
+// nur, soweit sie aus Zuteilungen stammen (Teil einer Options-Kette, Seite „n.a.“) oder als eigene Aktienkette.
+// Dieser Block zeigt deshalb den Aktienbestand laut IB (Flex-Bestand, letzter Stichtag, wie die Seite „Depot“),
+// gefiltert nach Basiswert, Währung und Anlageklasse der Leiste. Gefiltert nach Endzustand/Datum wird nicht:
+// der Bestand ist immer „offen“ zum Stichtag.
+function AktienImDepot({ filter }: { filter: Entwurf }): JSX.Element | null {
+  const [depot, setzeDepot] = useState<Depot | null>(null)
+  useEffect(() => {
+    holeDepot()
+      .then(setzeDepot)
+      .catch(() => setzeDepot(null))
+  }, [])
+  if (depot === null) return null
+  const basiswerte = werteListe(filter.basiswert).map((x) => x.toUpperCase())
+  const waehrungen = werteListe(filter.waehrung).map((x) => x.toUpperCase())
+  const klassen = werteListe(filter.anlageklasse).map((x) => x.toUpperCase())
+  if (klassen.length > 0 && !klassen.includes('STK')) return null
+  const aktien = depot.positionen.filter(
+    (p) =>
+      p.anlageklasse === 'STK' &&
+      (basiswerte.length === 0 || basiswerte.includes(p.basiswert.toUpperCase())) &&
+      (waehrungen.length === 0 || waehrungen.includes(p.waehrung.toUpperCase())),
+  )
+  if (aktien.length === 0) return null
+  return (
+    <details className="aktien-im-depot" open>
+      <summary>
+        <strong>Aktien im Depot ({aktien.length})</strong> — Bestand laut IB, Stand {datumDe(depot.stichtag)}
+      </summary>
+      <p className="hinweis">
+        Aktien aus Zuteilungen gehören im Journal zur Options-Kette (Zeile mit Seite „n.a.“); hier steht der
+        tatsächliche Bestand. Mehr auf der Seite <Link to="/bestand">Depot</Link>.
+      </p>
+      <table className="positionen">
+        <thead>
+          <tr>
+            <th>Basiswert</th>
+            <th className="zahl">Menge</th>
+            <th className="zahl">Einstand</th>
+            <th className="zahl">Kurs</th>
+            <th className="zahl">Marktwert</th>
+            <th className="zahl">Unrealisiert</th>
+            <th>Währung</th>
+          </tr>
+        </thead>
+        <tbody>
+          {aktien.map((p) => (
+            <tr key={p.conid}>
+              <td>
+                <Link to={`/?anlageklasse=OPT&basiswert=${encodeURIComponent(p.basiswert)}`} title="Optionen und Ketten dieses Basiswerts">
+                  {p.basiswert}
+                </Link>
+              </td>
+              <td className="zahl">{mengeDe(p.menge)}</td>
+              <td className="zahl">{betrag(p.einstandskurs)}</td>
+              <td className="zahl">{betrag(p.kurs)}</td>
+              <td className="zahl">{betrag(p.marktwert)}</td>
+              <td className="zahl">
+                <Betrag wert={p.unrealisiert} waehrung={p.waehrung} />
+              </td>
+              <td>{p.waehrung}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  )
+}
+
 export default function Positionen(): JSX.Element {
   const [suche, setzeSuche] = useSearchParams()
   // AP-08z: Der globale Zeitraum aus dem Wähler im Kopf (AP-08f2) steuert
@@ -903,6 +973,7 @@ export default function Positionen(): JSX.Element {
         </section>
       ) : (
         <>
+          <AktienImDepot filter={entwurfAusAdresse(suche)} />
           <div className="diagramm-wahl" role="group" aria-label="Ansicht der Liste">
             <button
               type="button"
