@@ -69,6 +69,10 @@ class Konfig:
     kursquelle: str = KURSQUELLE_IB
     kursdatum_feld: str = KURSDATUM_FELD_IB
     pruefstatus: str = "ungeprueft"
+    # Behandlung gezahlter Rückkaufprämien in Zeile 22: ``False`` = nur im Saldo der Stillhalter (Antwort des
+    # Steuerberaters, „negative Einnahme“), ``True`` = zusätzlich als enthaltener Verlust (mögliche Verwaltungsauffassung,
+    # Frage an den Steuerberater). Die Vorschau zeigt immer beide Werte.
+    rueckkauf_als_verlust: bool = False
 
     def mit_regel(self, vorgang: str, *, steuerdatum: str | None = None, fx: str | None = None) -> "Konfig":
         """Kopie mit geänderter Regel für eine Vorgangsart (Tests, spätere Entscheidung des Steuerberaters)."""

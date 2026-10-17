@@ -175,6 +175,20 @@ export default function Steuer(): JSX.Element {
             automatisch in die Anrechnung.
           </p>
 
+          <div className={gewaehlt.deklarationsstatus.status === 'nicht_deklarationsfaehig' ? 'fehler' : 'hinweis'}>
+            <strong>
+              {gewaehlt.jahr}:{' '}
+              {gewaehlt.deklarationsstatus.status === 'nicht_deklarationsfaehig'
+                ? 'nicht deklarationsfähig'
+                : 'zur Prüfung durch den Steuerberater'}
+            </strong>{' '}
+            — die Beträge unten sind Arbeitsstand. Gründe:
+            <ul>
+              {gewaehlt.deklarationsstatus.gruende.map((g) => (
+                <li key={g}>{g}</li>
+              ))}
+            </ul>
+          </div>
           <h3>
             {gewaehlt.jahr}: Vorschau Anlage KAP in zwei Varianten (vorläufig, nicht verrechnet) — Zeilen{' '}
             {gewaehlt.kap_varianten[0].formularjahr}:{' '}
@@ -209,6 +223,16 @@ export default function Steuer(): JSX.Element {
                     ))}
                   </tr>
                 ))}
+                {gewaehlt.kap_varianten.flatMap((k) =>
+                  k.alternativen.map((a) => (
+                    <tr key={`${k.variante}-${a.posten}-alt`} className="hinweis">
+                      <td className="zahl">{a.zeile}</td>
+                      <td colSpan={gewaehlt.kap_varianten.length}>
+                        {k.name}: {a.name} → <Betrag wert={a.betrag} />
+                      </td>
+                    </tr>
+                  )),
+                )}
               </tbody>
             </table>
           </div>

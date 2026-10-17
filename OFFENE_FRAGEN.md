@@ -3756,3 +3756,26 @@ des Steuerberaters, 2026 ungeprüft):
 
 Zeile 22 sind **Bruttoverluste einzelner Optionsgeschäfte** (hoher Umschlag, SPX-0DTE) — die Größe ist kein Fehler; der
 Saldo steht in Zeile 19. ETFs stehen in Variante A nicht im Aktien-Topf (offene Regeln), in Variante B zählen sie als Aktien.
+
+## OF-98 · Härtung nach der Prüfung durch Codex (17.10.2026, Stand c28b058)
+
+Aus der Rückmeldung übernommen und umgesetzt (Tests in `tests/test_steuer_haertung.py`, von Hand gerechnet):
+
+1. **Fehlende Schließung:** Die zugeflossene Stillhalterprämie bleibt, die Lücke steht in den Datenlücken.
+2. **Fehlendes Abrechnungsdatum:** kein stilles Ersetzen mehr — Datenlücke und Status `abrechnungsdatum_fehlt`
+   (Ausführungen und Cash). Cash-Buchungen tragen nicht mehr immer „ok“, sondern `kursdatum_abweichend`, wenn das
+   Abrechnungsdatum vom Buchungsdatum des Kurses abweicht.
+3. **Unbekannte Abwicklungsart:** Zuteilung/Ausübung ohne bekannte Abwicklungsart ist eine Datenlücke, nicht „Lieferung“.
+4. **Optionskosten bei Lieferung:** zuerst über `assignment_links` (409 Verknüpfungen für 648 Zuteilungen/Ausübungen);
+   ohne Link über Basiswert und Zeitstempel, als Warnung gezählt (aktuell 16 Fälle).
+5. **ETF-Kategorie je Instrument** aus jeder Ausführung des Instruments; Aktien ganz ohne IB-Kategorie werden als Aktie
+   behandelt, aber als Warnung genannt.
+6. **Deklarationsstatus je Jahr:** „nicht deklarationsfähig“ mit Gründen (Regeln ungeprüft, Zeilen ungeprüft,
+   Datenlücken, offene Regeln, Kursdatum ≠ Regeldatum mit Summe, Verlustverrechnung nicht enthalten).
+7. **Zeile 22 und Rückkäufe:** Frage an den Steuerberater. Die Vorschau zeigt beide Werte (Konfigurationswert
+   `rueckkauf_als_verlust`, Vorgabe aus), Zeile 19 bleibt der Saldo.
+8. **Deutsche Emittenten:** Hinweis (ISIN-Präfix DE, nur Aktien) mit Betrag; ob Zeile 18 oder 19 gilt (auszahlende Stelle
+   oder Emittent), klärt der Steuerberater.
+
+**Nicht übernommen:** Beträge mit abweichendem Kursdatum bleiben in der Vorschau (der Unterschied liegt bei ein bis zwei
+Tagen Kursverschiebung); sie sind im Status mit Anzahl und Summe genannt. Die Deklarationsfreigabe fehlt weiterhin.

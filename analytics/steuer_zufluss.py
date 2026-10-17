@@ -87,6 +87,7 @@ class Strom:
     leg_id: int | None
     exec_id: str | None
     jahr_alternativ: int
+    land: str | None = None  # Emittentenland (ISIN-Präfix) bei Aktien und Dividenden
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,9 @@ class SteuerZuflussErgebnis:
                     "toepfe": {},
                     "quellensteuer": {v: _NULL for v in _QUELLENSTEUER_SCHLUESSEL.values()},
                     "betroffen": 0,
+                    "rueckkaeufe": _NULL,
+                    "de_saldo": _NULL,
+                    "kurs_abweichend": [0, _NULL],
                 },
             )
 
@@ -133,6 +137,13 @@ class SteuerZuflussErgebnis:
             b = block(s.jahr)
             if s.jahr_alternativ != s.jahr:
                 b["betroffen"] += 1
+            if s.pruefstatus != "ok":
+                b["kurs_abweichend"][0] += 1
+                b["kurs_abweichend"][1] += abs(s.betrag_eur)
+            if s.topf == TOPF_STILLHALTER and s.vorgang == "glattstellung" and s.betrag_eur < _NULL:
+                b["rueckkaeufe"] += -s.betrag_eur
+            if s.land == "DE" and s.topf != TOPF_QUELLENSTEUER:
+                b["de_saldo"] += s.betrag_eur
             if s.topf == TOPF_QUELLENSTEUER:
                 b["quellensteuer"][_QUELLENSTEUER_SCHLUESSEL[s.vorgang]] += s.betrag_eur
                 continue
@@ -146,8 +157,30 @@ class SteuerZuflussErgebnis:
             t["saldo"] += s.betrag_eur
             t["anzahl"] += 1
         for j, b in jahre.items():
-            b["kap"] = _kap_vorschau(j, b)
+            b["kap"] = _kap_vorschau(j, b, self.konfig)
+            b["deklarationsstatus"] = self._deklarationsstatus(j, b)
         return dict(sorted(jahre.items()))
+
+    def _deklarationsstatus(self, jahr: int, b: dict) -> dict:
+        """Je Jahr: ob die Zahlen als Grundlage der Steuererklärung taugen — und wenn nicht, warum. Solange auch nur
+        ein Grund besteht, ist das Jahr „nicht deklarationsfähig“; die Beträge bleiben sichtbar (Arbeitsstand)."""
+        gruende = []
+        if self.konfig.pruefstatus != "bestaetigt":
+            gruende.append("Regeln des Steuerberaters noch nicht bestätigt (Prüfstatus „ungeprüft“).")
+        if b["kap"]["status"] == "ungeprueft":
+            gruende.append(f"KAP-Zeilen {b['kap']['formularjahr']} ungeprüft (amtlicher Vordruck liegt nicht vor).")
+        if self.datenluecken:
+            gruende.append(f"{len(self.datenluecken)} Datenlücken (fehlender Kurs, Datum oder Ausführung).")
+        for r in self.regeln_offen:
+            gruende.append(f"Offene Regel „{r.art}“: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) nicht zugeordnet.")
+        n, summe = b["kurs_abweichend"]
+        if n:
+            gruende.append(
+                f"{n} Zahlungsströme mit Kursdatum ≠ Regeldatum (Summe der Beträge {_geld(summe)} EUR; der IB-Kurs "
+                "gehört zum Handelstag, die Regel verlangt teils den Abrechnungstag)."
+            )
+        gruende.append("Verlustvorträge und Verlustverrechnung nicht berücksichtigt (Sache des Steuerberaters).")
+        return {"status": "nicht_deklarationsfaehig", "gruende": gruende}
 
 
 KAP_POSTEN = (
@@ -169,6 +202,8 @@ def kap_block(
     verluste_ohne_aktien: Decimal,
     aktienverluste: Decimal,
     quellensteuer: Decimal,
+    alternativen: list[dict] | None = None,
+    hinweise: list[str] | None = None,
 ) -> dict:
     """Eine KAP-Vorschau (**vorläufig, nicht verrechnet**). ``teile`` sind die Bestandteile des Saldos der
     ausländischen Kapitalerträge (Zeile 19); ``verluste_ohne_aktien`` und ``aktienverluste`` sind positive
@@ -190,10 +225,12 @@ def kap_block(
         "vorlaeufig": True,
         "posten": {n: {"zeile": z["zeilen"][n], "betrag": werte[n]} for n in KAP_POSTEN},
         "zusammensetzung": dict(teile),
+        "alternativen": alternativen or [],
+        "hinweise": hinweise or [],
     }
 
 
-def _kap_vorschau(formularjahr: int, block: dict) -> dict:
+def _kap_vorschau(formularjahr: int, block: dict, konfig: Konfig = STANDARD_KONFIG) -> dict:
     """Variante A: Zufluss je Zahlungsstrom, Stillhalterprämie separat (Arbeitsstand des Steuerberaters).
 
     Stillhalterprämien und Rückkäufe sind **Einnahmen und negative Einnahmen derselben Art** und werden zu einem
@@ -206,7 +243,21 @@ def _kap_vorschau(formularjahr: int, block: dict) -> dict:
         return t.get(topf, {}).get(name, _NULL)
 
     still = feld(TOPF_STILLHALTER, "saldo")
-    verluste_ohne_aktien = -feld(TOPF_TERMIN, "verluste") + (-still if still < _NULL else _NULL)
+    termin_verluste = -feld(TOPF_TERMIN, "verluste")
+    nur_saldo = termin_verluste + (-still if still < _NULL else _NULL)
+    mit_rueckkaeufen = termin_verluste + block["rueckkaeufe"]
+    if konfig.rueckkauf_als_verlust:
+        verluste_ohne_aktien, andere, andere_text = (
+            mit_rueckkaeufen, nur_saldo, "Zeile 22 ohne die Rückkäufe (nur im Saldo der Stillhalter)")
+    else:
+        verluste_ohne_aktien, andere, andere_text = (
+            nur_saldo, mit_rueckkaeufen,
+            "Zeile 22, wenn gezahlte Rückkaufprämien als enthaltener Verlust gelten (Frage an den Steuerberater)")
+    hinweise = []
+    if block["de_saldo"]:
+        hinweise.append(
+            f"Darunter {_geld(block['de_saldo'])} EUR aus Aktien deutscher Emittenten (ISIN DE): Zeile 18 oder 19 "
+            "klärt der Steuerberater (auszahlende Stelle, nicht Emittent, ist maßgeblich?).")
     return kap_block(
         formularjahr, "zufluss", "Zufluss, Prämie separat",
         "Arbeitsstand des Steuerberaters: Stillhalterprämie im Zuflussjahr, Rückkauf im Zahlungsjahr, Aktie zum "
@@ -220,6 +271,9 @@ def _kap_vorschau(formularjahr: int, block: dict) -> dict:
         },
         feld(TOPF_AKTIEN, "gewinne"), verluste_ohne_aktien, -feld(TOPF_AKTIEN, "verluste"),
         block["quellensteuer"]["vorlaeufig_anrechenbar"],
+        alternativen=[{"posten": "verluste_ohne_aktien", "zeile": kap_zeilen(formularjahr)["zeilen"]["verluste_ohne_aktien"],
+                       "name": andere_text, "betrag": andere}],
+        hinweise=hinweise,
     )
 
 
@@ -278,6 +332,8 @@ class _Sammler:
         self.stroeme: list[Strom] = []
         self.luecken: dict[tuple[str, str], Datenluecke] = {}
         self.offen: dict[str, list] = {}  # art -> [text, anzahl, betrag, details]
+        self.heuristisch = 0  # Optionskosten ohne assignment_links über Basiswert und Zeitstempel zugeordnet
+        self.ohne_kategorie: set[str] = set()  # Aktien ohne IB-Kategorie (ETF oder Aktie nicht unterscheidbar)
 
     def luecke(self, schluessel: str, grund: str, text: str) -> None:
         self.luecken.setdefault((schluessel, grund), Datenluecke(schluessel, grund, text))
@@ -289,19 +345,26 @@ class _Sammler:
         if detail is not None:
             eintrag[3].append(detail)
 
-    def strom(self, *, vorgang, regel, topf, e, brutto, komm, optionskosten=_NULL, waehrung, symbol, leg_id=None):
+    def strom(self, *, vorgang, regel, topf, e, brutto, komm, optionskosten=_NULL, waehrung, symbol, leg_id=None,
+              land=None):
         r = self.konfig.regeln[regel]
         datum = _datum(e, r["steuerdatum"])
         kursdatum = _datum(e, self.konfig.kursdatum_feld)
         gewuenscht = _datum(e, r["fx"])
         alternativ = _datum(e, self.konfig.alternative(regel))
+        status = "ok" if kursdatum == gewuenscht else "kursdatum_abweichend"
+        if FELD_ABRECHNUNG in (r["steuerdatum"], r["fx"], self.konfig.alternative(regel)) and not e.get("settle_date"):
+            # Kein stilles Ersetzen: ohne Abrechnungsdatum steht der Handelstag, und die Lücke wird gemeldet.
+            self.luecke(str(e["exec_id"]), "abrechnungsdatum_fehlt",
+                        f"Ausführung {e['exec_id']}: kein Abrechnungsdatum, Handelstag ersatzweise verwendet")
+            status = "abrechnungsdatum_fehlt"
         self.stroeme.append(
             Strom(
                 vorgang=vorgang, regel=regel, topf=topf, jahr=datum.year, steuerdatum=datum,
-                fx_datum=kursdatum, pruefstatus="ok" if kursdatum == gewuenscht else "kursdatum_abweichend",
+                fx_datum=kursdatum, pruefstatus=status,
                 brutto_eur=brutto, kommission_eur=komm, optionskosten_eur=optionskosten,
                 betrag_eur=brutto + komm + optionskosten, waehrung=waehrung, symbol=symbol,
-                leg_id=leg_id, exec_id=e["exec_id"], jahr_alternativ=alternativ.year,
+                leg_id=leg_id, exec_id=e["exec_id"], jahr_alternativ=alternativ.year, land=land,
             )
         )
 
@@ -317,8 +380,12 @@ def steuer_zufluss(
     *,
     konfig: Konfig = STANDARD_KONFIG,
     anfangsbestaende=(),
+    assignment_links=(),
 ) -> SteuerZuflussErgebnis:
     ex = {e["exec_id"]: e for e in ausfuehrungen}
+    link_je_option: dict[str, set[str]] = {}
+    for opt_id, aktien_id in assignment_links:
+        link_je_option.setdefault(opt_id, set()).add(aktien_id)
     inst = {i["conid"]: i for i in instrumente}
     ab = {a.conid: a for a in anfangsbestaende}
     s = _Sammler(konfig)
@@ -342,13 +409,15 @@ def steuer_zufluss(
             continue
         if leg["close_exec_id"] and c is None:
             s.luecke(leg["close_exec_id"], "ausfuehrung_fehlt", "Schließungsausführung fehlt")
+            if klasse in ("OPT", "FOP") and o is not None and o["side"] == "SELL":
+                _option(s, leg, i, o, None, menge, mult, lieferungskosten)  # die zugeflossene Prämie bleibt
             continue
         if klasse in ("OPT", "FOP"):
             _option(s, leg, i, o, c, menge, mult, lieferungskosten)
         else:
             _ergebnisbein(s, leg, i, o, c, menge, mult, klasse, ab, ergebnis_legs)
 
-    _optionskosten_verteilen(s, lieferungskosten, ergebnis_legs, inst)
+    _optionskosten_verteilen(s, lieferungskosten, ergebnis_legs, link_je_option)
     for r in ergebnis_legs:
         _ergebnis_buchen(s, r)
     _cash(s, cash_zeilen)
@@ -356,8 +425,18 @@ def steuer_zufluss(
     warnungen = []
     if not anfangsbestaende:
         warnungen.append(
-            "Anfangsbestand fehlt: steuerliche Anschaffungskosten und -daten der übernommenen Bestände sind nicht "
-            "erfasst, das Jahresergebnis kann unvollständig sein. Verlustvorträge sind nicht berücksichtigt."
+            "Anfangsbestand: Es wird angenommen, dass das Depot seit dem 01.04.2022 besteht und keine Vorbestände "
+            "hatte (Bestätigung des Nutzers); Verlustvorträge sind nicht berücksichtigt."
+        )
+    if s.heuristisch:
+        warnungen.append(
+            f"{s.heuristisch} ausgeübte gekaufte Optionen ohne assignment_links: die Kosten wurden über Basiswert und "
+            "Zeitstempel der Lieferung zugeordnet (heuristisch, bei mehreren Ausübungen zum selben Zeitpunkt prüfen)."
+        )
+    if s.ohne_kategorie:
+        warnungen.append(
+            f"{len(s.ohne_kategorie)} Aktien ohne IB-Kategorie (ETF oder Aktie nicht unterscheidbar) wurden als Aktie "
+            "behandelt: " + ", ".join(sorted(s.ohne_kategorie)[:10]) + (" …" if len(s.ohne_kategorie) > 10 else "")
         )
     return SteuerZuflussErgebnis(
         stroeme=sorted(s.stroeme, key=lambda x: (x.steuerdatum, x.exec_id or "", x.vorgang)),
@@ -373,6 +452,17 @@ def steuer_zufluss(
         },
         konfig=konfig,
     )
+
+
+def _art(s: _Sammler, i: dict, c: dict) -> str | None:
+    """Abwicklungsart einer ausgeübten oder zugeteilten Option: ``lieferung`` oder ``barausgleich``; unbekannt
+    ist eine Datenlücke (keine stille Annahme „Lieferung“)."""
+    art = i.get("abwicklungsart")
+    if art not in ("lieferung", "barausgleich"):
+        s.luecke(c["exec_id"], "abwicklungsart_unbekannt",
+                 f"Instrument {i.get('symbol')}: Abwicklungsart {art!r} unbekannt — Zuteilung/Ausübung nicht bewertet")
+        return None
+    return art
 
 
 def _kurs(s: _Sammler, e: dict) -> Decimal | None:
@@ -402,10 +492,14 @@ def _option(s: _Sammler, leg, i, o, c, menge, mult, lieferungskosten) -> None:
     ko = _kurs(s, o)
     ereignis = c["ereignistyp"]
     art = i.get("abwicklungsart")
-    if ereignis in _LIEFERUNG_EREIGNISSE and art != "barausgleich":
+    if ereignis in _LIEFERUNG_EREIGNISSE:
+        art = _art(s, i, c)
+        if art is None:
+            return
+    if ereignis in _LIEFERUNG_EREIGNISSE and art == "lieferung":
         if ko is not None:
             kosten = _wert(o, fo, menge, mult) * ko - _komm_eur(s, o, fo, menge, ko)
-            lieferungskosten.append({"underlying": _basiswert(i), "zeit": c["handelszeit"],
+            lieferungskosten.append({"underlying": _basiswert(i), "zeit": c["handelszeit"], "exec_id": c["exec_id"],
                                      "right": i.get("right"), "kosten": kosten, "symbol": symbol})
         return
     kc = None
@@ -442,11 +536,15 @@ def _stillhalter_schluss(s: _Sammler, leg, i, c, menge, mult, fc, symbol) -> Non
     art = i.get("abwicklungsart")
     if ereignis == "expiry":
         return  # Prämie ist längst zugeflossen
+    if ereignis in _LIEFERUNG_EREIGNISSE:
+        art = _art(s, i, c)
+        if art is None:
+            return
     kc = _kurs(s, c)
     if kc is None:
         return
     komm = _komm_eur(s, c, fc, menge, kc)
-    if ereignis in _LIEFERUNG_EREIGNISSE and art != "barausgleich":
+    if ereignis in _LIEFERUNG_EREIGNISSE and art == "lieferung":
         if komm != _NULL:  # Lieferung: keine Zahlung, nur eine eventuelle Kommission
             s.strom(vorgang="glattstellung", regel="glattstellung", topf=TOPF_STILLHALTER, e=c, brutto=_NULL,
                     komm=komm, waehrung=c["waehrung"], symbol=symbol, leg_id=leg.get("leg_id"))
@@ -496,24 +594,36 @@ def _ergebnisbein(s: _Sammler, leg, i, o, c, menge, mult, klasse, ab, ergebnis_l
         komm += _komm_eur(s, e, f, menge, k)
     if not kurse_ok:
         return
-    etf = klasse == "STK" and any(
-        str((e or {}).get("unterkategorie") or "").upper() in _ETF_KATEGORIEN for e in (o, c)
-    )
+    kategorien = {str(x).upper() for x in (i.get("unterkategorie"), (o or {}).get("unterkategorie"),
+                                           (c or {}).get("unterkategorie")) if x}
+    etf = klasse == "STK" and bool(kategorien & _ETF_KATEGORIEN)
+    if klasse == "STK" and not kategorien:
+        s.ohne_kategorie.add(i.get("symbol") or str(leg["conid"]))
     ergebnis_legs.append({"leg": leg, "i": i, "o": o, "c": c, "brutto": brutto, "komm": komm,
                           "optionskosten": _NULL, "menge": menge, "klasse": klasse, "etf": etf})
 
 
-def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, inst) -> None:
+def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, link_je_option) -> None:
+    """Verteilt die Kosten ausgeübter gekaufter Optionen auf die gelieferten Aktienbeine. Zuerst über die
+    ``assignment_links`` (Option → Aktienausführung); ohne Verknüpfung über Basiswert und Zeitstempel (heuristisch,
+    wird als Warnung gezählt)."""
     for k in kosten_liste:
+        stock_ids = link_je_option.get(k.get("exec_id"))
         treffer = []
-        for r in ergebnis_legs:
-            if r["klasse"] != "STK" or _basiswert(r["i"]) != k["underlying"]:
-                continue
-            if any(
-                e is not None and e.get("ereignistyp") in _LIEFERUNG_EREIGNISSE and e["handelszeit"] == k["zeit"]
-                for e in (r["o"], r["c"])
-            ):
-                treffer.append(r)
+        if stock_ids:
+            treffer = [r for r in ergebnis_legs if r["klasse"] == "STK"
+                       and any(e is not None and e["exec_id"] in stock_ids for e in (r["o"], r["c"]))]
+        if not treffer:
+            for r in ergebnis_legs:
+                if r["klasse"] != "STK" or _basiswert(r["i"]) != k["underlying"]:
+                    continue
+                if any(
+                    e is not None and e.get("ereignistyp") in _LIEFERUNG_EREIGNISSE and e["handelszeit"] == k["zeit"]
+                    for e in (r["o"], r["c"])
+                ):
+                    treffer.append(r)
+            if treffer:
+                s.heuristisch += 1
         gesamt = sum((r["menge"] for r in treffer), _NULL)
         if not treffer or gesamt == _NULL:
             s.regel_offen("optionskosten_ohne_lieferung",
@@ -542,7 +652,8 @@ def _ergebnis_buchen(s: _Sammler, r: dict) -> None:
     regel = "wertpapierverkauf" if stk else "termingeschaeft"
     s.strom(vorgang="aktien_ergebnis" if stk else "termingeschaeft", regel=regel,
             topf=TOPF_AKTIEN if stk else TOPF_TERMIN, e=c, brutto=r["brutto"], komm=r["komm"],
-            optionskosten=r["optionskosten"], waehrung=c["waehrung"], symbol=symbol, leg_id=leg.get("leg_id"))
+            optionskosten=r["optionskosten"], waehrung=c["waehrung"], symbol=symbol, leg_id=leg.get("leg_id"),
+            land=i.get("land") if stk else None)
 
 
 # ------------------------------------------------------------------------------------------- Cash
@@ -632,14 +743,19 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
 def _cash_strom(s: _Sammler, c: dict, vorgang: str, regel: str, topf: str, eur: Decimal) -> None:
     r = s.konfig.regeln[regel]
     e = {"exec_id": None, "handelszeit": c["datum"], "trade_date": c["datum"].date(),
-         "settle_date": c.get("settle_date") or c["datum"].date()}
+         "settle_date": c.get("settle_date")}
     datum = _datum(e, r["steuerdatum"])
     alt = _datum(e, s.konfig.alternative(regel))
+    status = "ok" if _datum(e, r["fx"]) == c["datum"].date() else "kursdatum_abweichend"
+    if not c.get("settle_date") and FELD_ABRECHNUNG in (r["steuerdatum"], r["fx"], s.konfig.alternative(regel)):
+        s.luecke(f"cash:{c.get('symbol') or ''}:{c['datum'].date()}", "abrechnungsdatum_fehlt",
+                 f"Cash-Buchung {c['typ']}: kein Abrechnungsdatum, Buchungsdatum ersatzweise verwendet")
+        status = "abrechnungsdatum_fehlt"
     s.stroeme.append(
         Strom(vorgang=vorgang, regel=regel, topf=topf, jahr=datum.year, steuerdatum=datum, fx_datum=c["datum"].date(),
-              pruefstatus="ok", brutto_eur=eur, kommission_eur=_NULL, optionskosten_eur=_NULL, betrag_eur=eur,
+              pruefstatus=status, brutto_eur=eur, kommission_eur=_NULL, optionskosten_eur=_NULL, betrag_eur=eur,
               waehrung=c.get("waehrung") or "", symbol=c.get("symbol") or "", leg_id=None, exec_id=None,
-              jahr_alternativ=alt.year)
+              jahr_alternativ=alt.year, land=c.get("land"))
     )
 
 

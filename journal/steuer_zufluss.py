@@ -15,7 +15,7 @@ from sqlalchemy import select
 from analytics.steuer_konfig import STANDARD_KONFIG, Konfig
 from analytics.steuer_zufluss import Anfangsbestand, SteuerZuflussErgebnis, steuer_zufluss
 from journal.db import create_db_engine
-from journal.schema import executions, flex_cash_transactions, instruments, legs
+from journal.schema import assignment_links, executions, flex_cash_transactions, instruments, legs
 
 
 def _flex_datum(wert) -> date | None:
@@ -49,6 +49,8 @@ def steuer_zufluss_bericht(
             ).mappings()
         ]
         ausfuehrungen = []
+        kategorie_je_conid: dict[int, str] = {}  # IB-Unterkategorie je Instrument aus irgendeiner Ausführung
+        land_je_conid: dict[int, str] = {}  # Emittentenland (ISIN-Präfix) je Instrument
         for z in v.execute(
             select(
                 executions.c.exec_id, executions.c.conid, executions.c.side, executions.c.menge,
@@ -62,6 +64,10 @@ def steuer_zufluss_bericht(
             e["trade_date"] = _flex_datum(roh.get("tradeDate"))
             e["settle_date"] = _flex_datum(roh.get("settleDateTarget"))
             e["unterkategorie"] = roh.get("subCategory")
+            if roh.get("subCategory"):
+                kategorie_je_conid.setdefault(z["conid"], roh["subCategory"])
+            if roh.get("isin"):
+                land_je_conid.setdefault(z["conid"], str(roh["isin"])[:2].upper())
             ausfuehrungen.append(e)
         instrument_zeilen = [
             dict(z)
@@ -73,6 +79,12 @@ def steuer_zufluss_bericht(
                 )
             ).mappings()
         ]
+        for i in instrument_zeilen:
+            i["unterkategorie"] = kategorie_je_conid.get(i["conid"])
+            # Emittentenland nur für Aktien: bei Optionen und Indizes ist die ISIN des Basiswerts kein Emittent
+            i["land"] = land_je_conid.get(i["conid"]) if i["asset_class"] == "STK" else None
+        links = [(z[0], z[1]) for z in v.execute(
+            select(assignment_links.c.option_exec_id, assignment_links.c.stock_exec_id))]
         cash = []
         for z in v.execute(
             select(
@@ -91,11 +103,12 @@ def steuer_zufluss_bericht(
                     "beschreibung": z["beschreibung"], "symbol": roh.get("symbol") or None,
                     "kurs": Decimal(str(kurs)) if kurs not in (None, "") else None,
                     "settle_date": _flex_datum(roh.get("settleDate")),
-                    "land": roh.get("issuerCountryCode") or None,
+                    "land": roh.get("issuerCountryCode") or (str(roh["isin"])[:2].upper() if roh.get("isin") else None),
                 }
             )
     return steuer_zufluss(
-        leg_zeilen, ausfuehrungen, instrument_zeilen, cash, konfig=konfig, anfangsbestaende=anfangsbestaende
+        leg_zeilen, ausfuehrungen, instrument_zeilen, cash, konfig=konfig, anfangsbestaende=anfangsbestaende,
+        assignment_links=links,
     )
 
 

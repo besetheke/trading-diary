@@ -1312,6 +1312,7 @@ export interface SteuerKap {
   vorlaeufig: boolean
   posten: { posten: string; zeile: number; betrag: string }[]
   zusammensetzung: { name: string; betrag: string }[]
+  alternativen: { posten: string; zeile: number; name: string; betrag: string }[]
   hinweise: string[]
 }
 
@@ -1320,6 +1321,7 @@ export interface SteuerJahr {
   toepfe: SteuerTopf[]
   quellensteuer: Record<string, string>
   betroffen: number
+  deklarationsstatus: { status: string; gruende: string[] }
   kap_varianten: SteuerKap[]
 }
 

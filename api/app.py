@@ -1108,6 +1108,18 @@ class SteuerKapTeilAntwort(BaseModel):
     betrag: str
 
 
+class SteuerKapAlternativeAntwort(BaseModel):
+    posten: str
+    zeile: int
+    name: str
+    betrag: str
+
+
+class SteuerDeklarationAntwort(BaseModel):
+    status: str
+    gruende: list[str]
+
+
 class SteuerKapAntwort(BaseModel):
     variante: str
     name: str
@@ -1117,6 +1129,7 @@ class SteuerKapAntwort(BaseModel):
     vorlaeufig: bool
     posten: list[SteuerKapPostenAntwort]
     zusammensetzung: list[SteuerKapTeilAntwort]
+    alternativen: list[SteuerKapAlternativeAntwort] = []
     hinweise: list[str] = []
 
 
@@ -1125,6 +1138,7 @@ class SteuerJahrAntwort(BaseModel):
     toepfe: list[SteuerTopfAntwort]
     quellensteuer: dict[str, str]
     betroffen: int
+    deklarationsstatus: SteuerDeklarationAntwort
     kap_varianten: list[SteuerKapAntwort]
 
 
@@ -3756,7 +3770,13 @@ def erzeuge_app(
                     SteuerKapTeilAntwort(name=n, betrag=_als_text(b))
                     for n, b in k["zusammensetzung"].items()
                 ],
-                hinweise=hinweise,
+                alternativen=[
+                    SteuerKapAlternativeAntwort(
+                        posten=a["posten"], zeile=a["zeile"], name=a["name"],
+                        betrag=_als_text(a["betrag"]))
+                    for a in k["alternativen"]
+                ],
+                hinweise=k["hinweise"] + hinweise,
             )
 
         def kap_varianten(jahr: int, b: dict) -> list[SteuerKapAntwort]:
@@ -3805,6 +3825,7 @@ def erzeuge_app(
                     ],
                     quellensteuer={k: _als_text(v) for k, v in b["quellensteuer"].items()},
                     betroffen=b["betroffen"],
+                    deklarationsstatus=SteuerDeklarationAntwort(**b["deklarationsstatus"]),
                     kap_varianten=kap_varianten(j, b),
                 )
                 for j, b in ergebnis.jahre().items()
