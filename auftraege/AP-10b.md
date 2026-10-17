@@ -1,7 +1,7 @@
 ---
 titel: Steuer nach Zufluss je Zahlungsstrom — Vorbereitung (Regeln, Tests, Fixtures)
 modell: stark
-status: offen
+status: fertig
 abhaengig_von: AP-10, AP-10v, AP-16
 aendert_tests: ja
 ---

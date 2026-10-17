@@ -1,5 +1,7 @@
-"""Steuer-Seite: Endpunkte auf leerer Datenbank und CSV-Export."""
+"""Steuer-Seite (AP-10b/10c): Endpunkte auf leerer Datenbank, CSV, Altverfahren-Kennzeichnung."""
 import pytest
+
+pytest.importorskip("analytics.steuer_zufluss")
 
 
 @pytest.fixture
@@ -12,9 +14,12 @@ def klient(migrated_db):
     return TestClient(erzeuge_app(migrated_db))
 
 
-def test_steuer_auswertung_leer(klient):
+def test_steuer_auswertung_leer_hat_methode_und_warnung(klient):
     d = klient.get("/steuer-auswertung").json()
-    assert d == {"jahre": [], "toepfe": [], "fehler": []}
+    assert d["jahre"] == [] and d["datenluecken"] == [] and d["regeln_offen"] == []
+    assert d["methode"]["kursquelle"] == "IB fxRateToBase je Ausführung"
+    assert d["methode"]["pruefstatus"] == "ungeprueft"
+    assert any("Anfangsbestand" in w for w in d["warnungen"])
 
 
 def test_steuer_csv_ist_ein_download(klient):
@@ -23,3 +28,10 @@ def test_steuer_csv_ist_ein_download(klient):
     assert r.headers["content-type"].startswith("text/csv")
     assert 'filename="steuer-2025.csv"' in r.headers["content-disposition"]
     assert klient.get("/steuer-csv").headers["content-disposition"].endswith('"steuer.csv"')
+
+
+def test_altverfahren_ist_gekennzeichnet(klient):
+    r = klient.get("/steuer-csv?methode=alt&jahr=2025")
+    assert r.status_code == 200
+    assert "ALTVERFAHREN" in r.text.splitlines()[0]
+    assert 'filename="steuer-alt-2025.csv"' in r.headers["content-disposition"]
