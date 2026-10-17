@@ -82,6 +82,8 @@ class TitelZeile:
     lose_beine: int = 0  # im Zeitraum gezählte geschlossene lose Beine
     realisiert_eur: Decimal = _NULL
     realisiert_je_klasse: dict = field(default_factory=dict)
+    # schon geschlossene Beine in noch offenen Strukturen (nicht im Realisierten)
+    teilrealisiert_eur: Decimal = _NULL
     kommission_eur: Decimal = _NULL  # im Realisierten enthaltene Kommission (negativ), EUR
     kommission_je_klasse: dict = field(default_factory=dict)
     nativ: dict = field(default_factory=dict)  # Währung -> NativZeile
@@ -264,6 +266,21 @@ def titel_auswertung(
         teile = _geldteile([leg], exec_je_id, mult_je_conid)
         if teile is not None:
             _buche_geldteile(z, klasse, teile)
+
+    # --- Teilrealisiert: geschlossene Beine in noch offenen Strukturen. Sie zählen im Realisierten erst,
+    # wenn ihre Struktur geschlossen ist (wie die Equity); hier stehen sie getrennt (OF-89, Punkt 3).
+    for leg in leg_zeilen:
+        sid = leg["structure_id"]
+        if sid is None or leg["close_exec_id"] is None or geschlossen_am.get(sid) is not None:
+            continue
+        if not im_zeitraum(exec_je_id[leg["close_exec_id"]]["handelszeit"].date()):
+            continue
+        betrag = _wirtschaftlich([leg], exec_je_id, mult_je_conid)
+        if betrag is None:
+            continue
+        kette = kette_je_id.get(kette_je_struktur.get(sid))
+        titel = kette["underlying"] if kette else basiswert_des_beins(leg)
+        zeile(titel).teilrealisiert_eur += betrag
 
     # --- Unrealisiert: offene Beine je Titel und Klasse
     offene_je_gruppe: dict[tuple[str, str], list[dict]] = {}

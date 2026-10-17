@@ -929,6 +929,7 @@ class TitelZeileAntwort(BaseModel):
     unrealisiert_eur: str
     gesamt_eur: str
     nicht_aufgeteilt_eur: str
+    teilrealisiert_eur: str = "0"
     dividenden_eur: str
     quellensteuer_eur: str
     ertraege_eur: str
@@ -2355,6 +2356,7 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
             unrealisiert_eur=_als_text(z.unrealisiert_eur),
             gesamt_eur=_als_text(z.gesamt_eur),
             nicht_aufgeteilt_eur=_als_text(z.nicht_aufgeteilt_eur),
+            teilrealisiert_eur=_als_text(z.teilrealisiert_eur),
             dividenden_eur=_als_text(z.dividenden_eur),
             quellensteuer_eur=_als_text(z.quellensteuer_eur),
             ertraege_eur=_als_text(z.ertraege_eur),
@@ -2398,6 +2400,7 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
         summe.nicht_aufgeteilt_eur += z.nicht_aufgeteilt_eur
         summe.kurs_fehlt += z.kurs_fehlt
         summe.dividenden_eur += z.dividenden_eur
+        summe.teilrealisiert_eur += z.teilrealisiert_eur
         summe.kommission_eur += z.kommission_eur
         for k, w in z.kommission_je_klasse.items():
             summe.kommission_je_klasse[k] = summe.kommission_je_klasse.get(k, Decimal(0)) + w

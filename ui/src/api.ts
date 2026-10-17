@@ -1162,6 +1162,7 @@ export interface TitelZeile {
   unrealisiert_eur: string
   gesamt_eur: string
   nicht_aufgeteilt_eur: string
+  teilrealisiert_eur: string
   dividenden_eur: string
   quellensteuer_eur: string
   ertraege_eur: string

@@ -480,6 +480,15 @@ const DICHTEN: [Dichte, string, string][] = [
   ['sehr', 'Sehr kompakt', 'Kleinste Schrift, Zeilen ohne Abstand'],
 ]
 const DICHTE_SCHLUESSEL = 'positionen-dichte'
+const FILTER_SCHLUESSEL = 'positionen-filter-offen'
+
+function leseFilterOffen(): boolean {
+  try {
+    return window.localStorage.getItem(FILTER_SCHLUESSEL) !== 'zu'
+  } catch {
+    return true
+  }
+}
 
 function leseDichte(): Dichte {
   try {
@@ -604,6 +613,15 @@ export default function Positionen(): JSX.Element {
   const ansicht: 'ketten' | 'schritte' =
     suche.get('ansicht') === 'schritte' ? 'schritte' : 'ketten'
 
+  const [filterOffen, setzeFilterOffen] = useState<boolean>(() => leseFilterOffen())
+  function filterUmschalten(offen: boolean): void {
+    setzeFilterOffen(offen)
+    try {
+      window.localStorage.setItem(FILTER_SCHLUESSEL, offen ? 'offen' : 'zu')
+    } catch {
+      /* Speicher fehlt — die Wahl gilt dann nur für diese Sitzung. */
+    }
+  }
   const [dichte, setzeDichteZustand] = useState<Dichte>(() => leseDichte())
   function setzeDichte(wert: Dichte): void {
     setzeDichteZustand(wert)
@@ -823,6 +841,18 @@ export default function Positionen(): JSX.Element {
   return (
     <section>
       <h2>Positionen</h2>
+      <details
+        className="filterbereich"
+        open={filterOffen}
+        onToggle={(e) => filterUmschalten((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary>
+          Filter
+          {(() => {
+            const aktiv = Object.values(entwurfAusAdresse(suche)).filter((w) => typeof w === 'string' && w !== '').length
+            return aktiv > 0 ? ` (${aktiv} aktiv)` : ' (keine aktiv)'
+          })()}
+        </summary>
       <form className="filter" onSubmit={anwenden}>
         <label>
           Basiswert
@@ -924,6 +954,7 @@ export default function Positionen(): JSX.Element {
           Zurücksetzen
         </button>
       </form>
+      </details>
       {oaStand !== null && oaStand.ohne_export > 0 ? (
         <p className="sicht">
           Strategien stammen aus dem OptionApp-Export

@@ -1355,3 +1355,10 @@ table.verlaufsliste button.klein {
   padding: 0 0.45rem;
   line-height: 1.2;
 }
+
+/* Einklappbare Filterleiste der Positionsliste (Nutzerwunsch 17.10.2026): zugeklappt bleibt nur die Überschrift. */
+details.filterbereich > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}

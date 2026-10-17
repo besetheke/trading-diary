@@ -11,7 +11,7 @@ import { useZeitraum } from './zeitraum'
 // (GET /titel-auswertung, dieselbe Rechengrundlage wie die Auswertung der Positionsliste); im Browser
 // wird nur sortiert und gefiltert.
 
-type Spalte = 'basiswert' | 'ketten' | 'realisiert' | 'opt' | 'stk' | 'sonst' | 'unrealisiert' | 'gesamt' | 'ertraege' | 'gesamt_ertraege'
+type Spalte = 'basiswert' | 'ketten' | 'realisiert' | 'opt' | 'stk' | 'sonst' | 'unrealisiert' | 'gesamt' | 'ertraege' | 'gesamt_ertraege' | 'teil'
 
 // Anzeige: 'EUR' (jede Seite zum Kurs ihres Tages, wie die Auswertung) oder die Währung der Geschäfte
 // (z. B. 'USD', ohne Umrechnung — vergleichbar mit Broker-Auszügen). „Ohne Kommission“ rechnet die im
@@ -66,6 +66,7 @@ function wert(z: TitelZeile, spalte: Spalte, anzeige: string, ohneKomm: boolean)
     case 'opt': return n.opt
     case 'stk': return n.stk
     case 'sonst': return n.sonst
+    case 'teil': return anzeige === 'EUR' ? Number(z.teilrealisiert_eur) : 0
     case 'unrealisiert': return n.unrealisiert
     case 'gesamt': return n.gesamt
     case 'ertraege': return n.ertraege
@@ -80,6 +81,7 @@ const KOEPFE: [Spalte, string, string][] = [
   ['opt', 'davon Optionen', 'Prämien und Optionsergebnisse (auch der Optionsanteil zugeteilter Positionen)'],
   ['stk', 'davon Aktien', 'Kursergebnis der Aktien; Einstand ist der Zuteilungs- oder Kaufpreis (Prämien stehen bei den Optionen)'],
   ['sonst', 'davon Futures u. a.', 'Futures, Futures-Optionen und übrige Klassen'],
+  ['teil', 'Teil-realisiert', 'Beine, die schon geschlossen sind, deren Struktur aber noch offen ist (z. B. ein Roll-Bein). Sie zählen erst mit der Struktur im Realisierten — hier nur zur Information, nicht in den Summen; nur in EUR'],
   ['unrealisiert', 'Unrealisiert', 'Offene Beine gegen IBs Bestand des letzten Stichtags, EUR'],
   ['gesamt', 'Handel gesamt', 'Realisiert plus unrealisiert (ohne Dividenden)'],
   ['ertraege', 'Dividenden netto', 'Dividenden und Ersatzzahlungen abzüglich Quellensteuer, EUR (Buchungsdatum im Zeitraum)'],
@@ -95,6 +97,9 @@ function Zellen({ z, anzeige, ohneKomm }: { z: TitelZeile; anzeige: string; ohne
       <td className="zahl">{b(n.opt)}</td>
       <td className="zahl">{b(n.stk)}</td>
       <td className="zahl">{b(n.sonst)}</td>
+      <td className="zahl" title="Schon geschlossene Beine in offenen Strukturen — nicht in den Summen">
+        {anzeige === 'EUR' ? <Betrag wert={z.teilrealisiert_eur} /> : '—'}
+      </td>
       <td className="zahl">{b(n.unrealisiert)}</td>
       <td className="zahl">{b(n.gesamt)}</td>
       <td className="zahl" title={`Dividenden ${z.dividenden_eur} EUR, Quellensteuer ${z.quellensteuer_eur} EUR`}>
