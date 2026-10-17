@@ -58,6 +58,8 @@ from analytics.kapital import kapital_bericht
 from analytics.nav import nav_bericht
 from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
+from analytics.steuer import als_csv as steuer_als_csv
+from analytics.steuer_jahre import jahres_uebersicht
 from analytics.strategien import strategie_bericht
 from analytics.titel import NativZeile, TitelZeile, titel_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
@@ -82,6 +84,7 @@ from journal.schema import (
     structures,
     tags,
 )
+from journal.steuer import lieferungs_schliessungen, steuer_bericht
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
@@ -1076,6 +1079,42 @@ class CashflowMonatAntwort(BaseModel):
 class CashflowAntwort(BaseModel):
     kategorien: list[CashflowKategorieAntwort]
     monate: list[CashflowMonatAntwort]
+
+
+# Steuer (AP-10): Aufbereitung für den Steuerberater, keine Verlustverrechnung.
+class SteuerToepfeAntwort(BaseModel):
+    jahr: int
+    topf: str
+    waehrung: str
+    brutto: str
+    kommission: str
+    netto: str
+    netto_eur_ib: str
+    anzahl_legs: int
+    eur_kurs_fehlt: int
+
+
+class SteuerJahrAntwort(BaseModel):
+    jahr: int
+    aktien_eur: str
+    termin_eur: str
+    aktien_legs: int
+    termin_legs: int
+    eur_kurs_fehlt: int
+    ungeklaert: int
+    praemie_lieferung_eur: str
+    ertraege: dict[str, str]
+
+
+class SteuerFehlerAntwort(BaseModel):
+    schluessel: str
+    grund: str
+
+
+class SteuerAntwort(BaseModel):
+    jahre: list[SteuerJahrAntwort]
+    toepfe: list[SteuerToepfeAntwort]
+    fehler: list[SteuerFehlerAntwort]
 
 
 # AP-06g: Kapitalentwicklung, realisiert (analytics.kapital), in EUR.
@@ -3632,6 +3671,47 @@ def erzeuge_app(
             cash_im_zeitraum=_als_text(e.cash_im_zeitraum),
             anzahl_kurs_fehlt=e.anzahl_kurs_fehlt,
         )
+
+    @applikation.get("/steuer-auswertung", response_model=SteuerAntwort)
+    def steuer_auswertung_seite() -> SteuerAntwort:
+        """Töpfe je Zuflussjahr (Aktien, Termingeschäfte) in EUR über den Buchungskurs der
+        Schließung, dazu Erträge aus den Cash-Buchungen (AP-10). Aufbereitung, keine Beratung."""
+        ergebnis = steuer_bericht(db_pfad)
+        monate = [(m.monat, m.kategorie, m.summe_eur) for m in cashflow_bericht(db_pfad).monate]
+        jahre = jahres_uebersicht(ergebnis, monate, lieferungs_schliessungen(db_pfad))
+        return SteuerAntwort(
+            jahre=[
+                SteuerJahrAntwort(
+                    jahr=j, aktien_eur=_als_text(z["aktien_eur"]),
+                    termin_eur=_als_text(z["termin_eur"]),
+                    aktien_legs=z["aktien_legs"], termin_legs=z["termin_legs"],
+                    eur_kurs_fehlt=z["eur_kurs_fehlt"], ungeklaert=z["ungeklaert"],
+                    praemie_lieferung_eur=_als_text(z["praemie_lieferung_eur"]),
+                    ertraege={k: _als_text(v) for k, v in z["ertraege"].items()},
+                )
+                for j, z in jahre.items()
+            ],
+            toepfe=[
+                SteuerToepfeAntwort(
+                    jahr=t.jahr, topf=t.topf, waehrung=t.waehrung, brutto=_als_text(t.brutto),
+                    kommission=_als_text(t.kommission), netto=_als_text(t.netto),
+                    netto_eur_ib=_als_text(t.netto_eur_ib), anzahl_legs=t.anzahl_legs,
+                    eur_kurs_fehlt=t.eur_kurs_fehlt,
+                )
+                for t in ergebnis.toepfe
+            ],
+            fehler=[SteuerFehlerAntwort(schluessel=f.schluessel, grund=f.grund)
+                    for f in ergebnis.fehler],
+        )
+
+    @applikation.get("/steuer-csv")
+    def steuer_csv(jahr: int | None = None):
+        """CSV-Export von AP-10 (Töpfe, Details, Erträge, Fehler), wahlweise für ein Zuflussjahr."""
+        from fastapi.responses import Response
+        text = steuer_als_csv(steuer_bericht(db_pfad), jahr)
+        name = f"steuer-{jahr}.csv" if jahr else "steuer.csv"
+        return Response(content=text, media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     @applikation.get("/cashflows", response_model=CashflowAntwort)
     def cashflows(von: date | None = None, bis: date | None = None) -> CashflowAntwort:

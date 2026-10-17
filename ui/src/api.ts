@@ -1292,3 +1292,38 @@ export interface Performance {
 export function holePerformance(von?: string | null, bis?: string | null): Promise<Performance> {
   return hole(`/performance${zeitraumQuery(von, bis)}`) as Promise<Performance>
 }
+
+// Steuer (AP-10): Aufbereitung für den Steuerberater — keine Beratung, keine Verlustverrechnung.
+export interface SteuerJahr {
+  jahr: number
+  aktien_eur: string
+  termin_eur: string
+  aktien_legs: number
+  termin_legs: number
+  eur_kurs_fehlt: number
+  ungeklaert: number
+  praemie_lieferung_eur: string
+  ertraege: Record<string, string>
+}
+
+export interface SteuerTopf {
+  jahr: number
+  topf: string
+  waehrung: string
+  brutto: string
+  kommission: string
+  netto: string
+  netto_eur_ib: string
+  anzahl_legs: number
+  eur_kurs_fehlt: number
+}
+
+export interface SteuerAntwort {
+  jahre: SteuerJahr[]
+  toepfe: SteuerTopf[]
+  fehler: { schluessel: string; grund: string }[]
+}
+
+export function holeSteuer(): Promise<SteuerAntwort> {
+  return hole('/steuer-auswertung') as Promise<SteuerAntwort>
+}

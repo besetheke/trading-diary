@@ -3542,3 +3542,20 @@ Fills kalibriert; sie werden nach den ersten Läufen mit den neuen Ereignisdaten
    ergänzt) erscheinen nur als Sammelzeile alle 10 Minuten plus Ereignis `ib_laerm`. Fehler zu einer Order bleiben
    einzeln. Risiko: ein echter Fehler hinter Code 200 (falscher Strike/Verfall) fällt nur am Zähler auf — ein
    plötzlich hoher Zähler ist das Signal.
+
+## OF-91 · Steuer: Seite „Steuer“ und Prämie bei Lieferung (17.10.2026)
+
+Die Seite `/steuer` (API `/steuer-auswertung`, `/steuer-csv`) bereitet die Zahlen von AP-10 je Zuflussjahr auf:
+Töpfe Aktien/Termingeschäfte in EUR (Buchungskurs der Schließung, OF-59), daneben Dividenden, Quellensteuer, Zinsen,
+Gebühren aus den Cash-Buchungen. Sie verrechnet nichts und ist keine Steuerberatung.
+
+1. **Prämie bei Zuteilung (Frage an den Steuerberater).** AP-10v bucht die Prämie einer mit Lieferung beendeten
+   Option (Zuteilung/Ausübung) in den Topf der Termingeschäfte, die gelieferte Aktie führt den Verlust gegen den
+   Strike im Aktien-Topf (Echtbestand: Prämien bei Lieferung 2022 37.069 EUR, 2023 59.689, 2024 29.006, 2025 41.124,
+   2026 141.225). Möglicherweise gehört die Prämie steuerlich in die Anschaffungskosten der Aktie (so bucht auch
+   IB, vgl. OF-24-Auflage). Das verschöbe Beträge zwischen den Töpfen — und Aktienverluste sind nur mit
+   Aktiengewinnen verrechenbar. **Nicht geraten, nicht umgebucht:** die Seite zeigt die Prämie je Jahr getrennt aus
+   (Spalte „davon Prämie bei Lieferung“), die Töpfe bleiben nach AP-10v. Entscheidung nach Rücksprache.
+2. **Weiter offen:** OF-58 (Jahresgrenze ohne Zeitzone), OF-59 (EUR je Zahlungsstrom statt Buchungskurs),
+   Verlustverrechnung und Anlage KAP (Umfang mit dem Nutzer, OF-82.1).
+3. **Mitgebaut:** Dividenden je Titel auf der Titel-Seite (OF-89), Anzeige in Originalwährung und ohne Kommission.

@@ -77,3 +77,21 @@ def steuer_bericht(db_pfad: str | pathlib.Path) -> SteuerErgebnis:
         instrument_je_conid,
         cash_transaktionen=cash_zeilen,
     )
+
+
+def lieferungs_schliessungen(db_pfad: str | pathlib.Path) -> frozenset[str]:
+    """``exec_id`` der Schließungen von Optionen mit Lieferung (Zuteilung oder Ausübung, nicht
+    Barausgleich): Die Prämie liegt im Topf der Termingeschäfte, die Aktie im Aktien-Topf."""
+    engine = create_db_engine(db_pfad)
+    with engine.begin() as verbindung:
+        return frozenset(
+            z[0]
+            for z in verbindung.execute(
+                select(executions.c.exec_id)
+                .join(instruments, instruments.c.conid == executions.c.conid)
+                .where(
+                    executions.c.ereignistyp.in_(("assignment", "exercise")),
+                    instruments.c.abwicklungsart == "lieferung",
+                )
+            )
+        )

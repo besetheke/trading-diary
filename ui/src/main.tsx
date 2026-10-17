@@ -9,6 +9,7 @@ import { useZeitraum, zeitraumSuche } from './zeitraum'
 import Kalender from './Kalender'
 import Kampagnen from './Kampagnen'
 import KostenErtraege from './KostenErtraege'
+import Steuer from './Steuer'
 import PositionDetail from './PositionDetail'
 import Positionen from './Positionen'
 import Rollkandidaten from './Rollkandidaten'
@@ -80,6 +81,7 @@ function Kopf(): JSX.Element {
           <Link to={`/strategie${mit}`}>Strategien</Link>
           <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
           <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
+          <Link to="/steuer">Steuer</Link>
           <Link to={`/monat${mit}`}>Kalender</Link>
           <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
         </nav>
@@ -143,6 +145,8 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             {/* AP-08g2: Kosten & Erträge; /kosten ist kein API-Pfad —
                 /cashflows bleibt der Endpunkt. */}
             <Route path="/kosten" element={<KostenErtraege />} />
+            {/* AP-10: /steuer-auswertung ist der API-Endpunkt, die Seite heißt /steuer. */}
+            <Route path="/steuer" element={<Steuer />} />
             <Route path="/positionen/:chainId" element={<PositionDetail />} />
             <Route path="/tag/:datum" element={<Tag />} />
             {/* AP-08r: /rollkandidaten ist der API-Endpunkt, die Seite /rolls. */}
