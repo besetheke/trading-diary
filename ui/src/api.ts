@@ -1325,7 +1325,10 @@ export interface SteuerAntwort {
     kursdatum_feld: string
     pruefstatus: string
     datumsregeln: Record<string, { steuerdatum: string; fx: string }>
+    kursdatum_abweichend: number
+    stroeme: number
   }
+  fremdwaehrung_salden: { waehrung: string; von: string; bis: string; anfangsbestand: string; endbestand: string }[]
   jahre: SteuerJahr[]
   datenluecken: { schluessel: string; grund: string; text: string }[]
   regeln_offen: { art: string; text: string; anzahl: number; betrag_eur: string }[]

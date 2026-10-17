@@ -291,6 +291,15 @@ def main(argv: list[str] | None = None) -> int:
         "--db", default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
     )
+    steuer_l = unterbefehle.add_parser(
+        "steuer-listen",
+        help="Einzelfall-Listen für den Steuerberater (CSV mit Kontodaten, außerhalb des Repos)",
+    )
+    steuer_l.add_argument("ordner", type=pathlib.Path, help="Zielordner für die CSV-Dateien")
+    steuer_l.add_argument(
+        "--db", default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
     steuer = unterbefehle.add_parser(
         "steuer",
         help="ALTVERFAHREN (AP-10, Schließungsjahr): Töpfe je Jahr, Details, Erträge, Fehler — "
@@ -670,6 +679,13 @@ def main(argv: list[str] | None = None) -> int:
             f"{len(ergebnis.datenluecken)} Datenlücken, {len(ergebnis.regeln_offen)} offene Regeln "
             "(Arbeitsstand, ungeprüft — keine Steuerberatung)"
         )
+    elif argumente.befehl == "steuer-listen":
+        from journal.steuer_zufluss import listen_schreiben, steuer_zufluss_bericht
+
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        anzahl = listen_schreiben(steuer_zufluss_bericht(db_pfad), argumente.ordner)
+        for name, n in anzahl.items():
+            print(f"{argumente.ordner / name}: {n} Zeilen")
     elif argumente.befehl == "steuer":
         print(
             "ALTVERFAHREN — Schließungsjahr, nicht zur Übernahme in die Steuererklärung; "

@@ -85,7 +85,7 @@ from journal.schema import (
     tags,
 )
 from journal.steuer import steuer_bericht
-from journal.steuer_zufluss import steuer_zufluss_bericht
+from journal.steuer_zufluss import fremdwaehrung_salden, steuer_zufluss_bericht
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
@@ -1125,8 +1125,17 @@ class SteuerRegelOffenAntwort(BaseModel):
     betrag_eur: str
 
 
+class SteuerSaldoAntwort(BaseModel):
+    waehrung: str
+    von: date
+    bis: date
+    anfangsbestand: str
+    endbestand: str
+
+
 class SteuerAntwort(BaseModel):
     methode: dict
+    fremdwaehrung_salden: list[SteuerSaldoAntwort] = []
     jahre: list[SteuerJahrAntwort]
     datenluecken: list[SteuerDatenlueckeAntwort]
     regeln_offen: list[SteuerRegelOffenAntwort]
@@ -3694,8 +3703,21 @@ def erzeuge_app(
         getrennt, Quellensteuer in vier Zuständen, Datenlücken und offene Regeln getrennt.
         Aufbereitung, keine Steuerberatung, keine Verlustverrechnung; Arbeitsstand, ungeprüft."""
         ergebnis = steuer_zufluss_bericht(db_pfad)
+        methode = {
+            **ergebnis.methode,
+            "kursdatum_abweichend": sum(1 for s in ergebnis.stroeme if s.pruefstatus != "ok"),
+            "stroeme": len(ergebnis.stroeme),
+        }
         return SteuerAntwort(
-            methode=ergebnis.methode,
+            methode=methode,
+            fremdwaehrung_salden=[
+                SteuerSaldoAntwort(
+                    waehrung=z["waehrung"], von=z["von"], bis=z["bis"],
+                    anfangsbestand=_als_text(z["anfangsbestand"]),
+                    endbestand=_als_text(z["endbestand"]),
+                )
+                for z in fremdwaehrung_salden(db_pfad)
+            ],
             jahre=[
                 SteuerJahrAntwort(
                     jahr=j,

@@ -3658,3 +3658,23 @@ Abrechnungs- auf Handelstag in ein anderes Jahr fallen.
 Lieferung 6 (−1.612 EUR), Cash ausgeschlossen 29, sonstige Cash-Buchungen 6. **Noch nicht geprüft:** der Abgleich
 gegen IBs Berichtswerte (nur gegen das Altverfahren); 6 ausgeübte gekaufte Optionen ohne passende Lieferung bleiben
 zu klären; 17.832 von 26.422 Strömen tragen „kursdatum_abweichend“ (Regel Abrechnungstag, IB-Kurs vom Handelstag).
+
+## OF-95 · Steuer: Befunde zur Datenlage und benötigte Daten (17.10.2026, AP-10d)
+
+**Befunde (aus der Datenbank, nur Zählwerte und Summen)**
+1. **Keine Anfangsbestände nötig:** Konto seit 01.04.2022, keine Wertpapierüberträge, `basis_ungeklaert` = 0 —
+   alle Bestände zum 01.01.2025 stammen aus den Ausführungen seit 2022. (Bestätigung: kein weiteres Depot.)
+2. **USD ist ein Sollsaldo**, kein Guthaben: Endbestand −165.338 (2022), −192.486 (2023), −135.701 (2024),
+   −105.109 (2025), −46.774 USD (09.10.2026). Der Kurseffekt auf diesen Kredit ist nicht gerechnet (Einordnung offen).
+3. **Quellensteuer nach Land (Buchungen, EUR):** US 387 (−1.478), BR 7 (−59), CA 6 (−55), NL 4 (−77), IL 4 (−2), CH 1
+   (−34), IE 1 (−35), DK 1 (−25), Zinsen 13 (−9). Nur für die USA steht ein Satz (15 %) in der Konfiguration; die
+   übrigen Länder (rund 290 EUR) stehen als „ungeklärt“.
+4. **Ersatzzahlungen:** 140 Buchungen bei 48 Symbolen; im Rohsatz kein Hinweis auf die Ursache (`code` leer, `dividendType`
+   „Ordinary Dividend“).
+5. **6 ausgeübte gekaufte Optionen ohne Lieferungsausführung** (u. a. SMH Call 230, 245 im Januar/Februar 2023, CWH Put
+   24,5 März 2023, MED Put 50 Juni 2024): Zur selben Zeit steht keine Aktienausführung im Journal; ihre Kosten stehen
+   bis zur Klärung in den offenen Regeln.
+
+**Neu gebaut:** `journal steuer-listen ORDNER` schreibt fünf Einzelfall-Listen für den Berater (Ersatzzahlungen,
+ETF-Beine, Optionskosten ohne Lieferung, Buchungen am Jahreswechsel, Quellensteuer zu prüfen); die Seite zeigt die
+Fremdwährungssalden und die Zahl der Ströme mit abweichendem Kursdatum.

@@ -76,6 +76,11 @@ export default function Steuer(): JSX.Element {
           .join(', ')}
         .
       </p>
+      <p className="sicht">
+        {daten.methode.stroeme} Zahlungsströme; bei {daten.methode.kursdatum_abweichend} gehört der IB-Kurs (Handelstag)
+        nicht zum Datum, das die Regel verlangt (Abrechnungstag) — „kursdatum_abweichend“ im CSV. Einzelfall-Listen für den
+        Steuerberater: <code>journal steuer-listen ORDNER</code>.
+      </p>
       {daten.warnungen.map((w) => (
         <p className="hinweis" key={w}>{w}</p>
       ))}
@@ -196,6 +201,38 @@ export default function Steuer(): JSX.Element {
           </div>
         </>
       )}
+
+      <h3>Fremdwährungssalden laut IB (Cash Report, nur zur Anzeige)</h3>
+      <p className="sicht">
+        Ein negativer Endbestand ist ein <strong>Sollsaldo</strong> (Margin-Kredit in dieser Währung), kein Guthaben. Der
+        Kurseffekt darauf ist hier nicht gerechnet; die Einordnung (§ 20 oder § 23) klärt der Steuerberater (AP-10d).
+      </p>
+      <div className="tabelle-rahmen">
+        <table className="positionen dichte-kompakt">
+          <thead>
+            <tr>
+              <th>Währung</th>
+              <th>von</th>
+              <th>bis</th>
+              <th className="zahl">Anfangsbestand</th>
+              <th className="zahl">Endbestand</th>
+            </tr>
+          </thead>
+          <tbody>
+            {daten.fremdwaehrung_salden
+              .filter((s) => s.waehrung !== 'EUR')
+              .map((s) => (
+                <tr key={`${s.waehrung}-${s.von}`}>
+                  <td>{s.waehrung}</td>
+                  <td>{s.von}</td>
+                  <td>{s.bis}</td>
+                  <td className="zahl"><Betrag wert={s.anfangsbestand} waehrung={s.waehrung} /></td>
+                  <td className="zahl"><Betrag wert={s.endbestand} waehrung={s.waehrung} /></td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
 
       <h3>Offene Regeln — nicht in den Töpfen oder noch ungeklärt</h3>
       {daten.regeln_offen.length === 0 ? (

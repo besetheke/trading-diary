@@ -97,3 +97,73 @@ def steuer_zufluss_bericht(
     return steuer_zufluss(
         leg_zeilen, ausfuehrungen, instrument_zeilen, cash, konfig=konfig, anfangsbestaende=anfangsbestaende
     )
+
+
+def fremdwaehrung_salden(db_pfad: str | pathlib.Path) -> list[dict]:
+    """Jahres-Salden je Währung laut IB Cash Report (Perioden ab Jahresbeginn): ein negativer Endbestand heißt
+    Sollsaldo (Margin-Kredit in dieser Währung), nicht Guthaben. Nur zur Anzeige — es wird nichts daraus gerechnet."""
+    from journal.schema import flex_cash_report
+
+    engine = create_db_engine(db_pfad)
+    with engine.connect() as v:
+        zeilen = v.execute(
+            select(
+                flex_cash_report.c.waehrung, flex_cash_report.c.von, flex_cash_report.c.bis,
+                flex_cash_report.c.anfangsbestand, flex_cash_report.c.endbestand,
+            )
+            .where(flex_cash_report.c.ebene == "Currency")
+            .order_by(flex_cash_report.c.waehrung, flex_cash_report.c.von)
+        ).mappings().all()
+    return [
+        {"waehrung": z["waehrung"], "von": z["von"], "bis": z["bis"],
+         "anfangsbestand": z["anfangsbestand"], "endbestand": z["endbestand"]}
+        for z in zeilen
+        if z["von"].month == 1 and z["von"].day <= 3  # volle Jahresperioden (Rolling-Fenster ausgeschlossen)
+    ]
+
+
+def listen_schreiben(ergebnis: SteuerZuflussErgebnis, ordner: pathlib.Path) -> dict[str, int]:
+    """Schreibt die Einzelfall-Listen für den Steuerberater als CSV (UTF-8 mit BOM, Semikolon) in ``ordner``:
+    Ersatzzahlungen, ETF-Beine, Optionskosten ohne Lieferung, Buchungen am Jahreswechsel,
+    Quellensteuer zu prüfen. Sie enthalten Kontodaten — der Ordner gehört außerhalb des Repositorys."""
+    from analytics.steuer_zufluss import _geld
+
+    ordner.mkdir(parents=True, exist_ok=True)
+
+    def regeldetails(art: str) -> list[dict]:
+        return next((r.details for r in ergebnis.regeln_offen if r.art == art), [])
+
+    def schreiben(name: str, kopf: list[str], zeilen: list[list[str]]) -> int:
+        with open(ordner / name, "w", encoding="utf-8-sig", newline="\n") as f:
+            f.write(";".join(kopf) + "\n")
+            for z in zeilen:
+                f.write(";".join(str(x).replace(";", ",").replace("\n", " ") for x in z) + "\n")
+        return len(zeilen)
+
+    anzahl = {}
+    anzahl["ersatzzahlungen.csv"] = schreiben(
+        "ersatzzahlungen.csv", ["jahr", "datum", "symbol", "betrag_eur", "waehrung", "beschreibung"],
+        [[d["datum"][:4], d["datum"], d["symbol"], _geld(d["betrag_eur"]), d["waehrung"], d["beschreibung"]]
+         for d in sorted(regeldetails("ersatzzahlung"), key=lambda d: d["datum"])],
+    )
+    anzahl["etf_beine.csv"] = schreiben(
+        "etf_beine.csv", ["leg_id", "symbol", "eroeffnet", "geschlossen", "ergebnis_eur"],
+        [[d["leg_id"], d["symbol"], d["eroeffnet"], d["geschlossen"], _geld(d["ergebnis_eur"])]
+         for d in sorted(regeldetails("etf_investmentsteuer"), key=lambda d: d["geschlossen"])],
+    )
+    anzahl["optionskosten_ohne_lieferung.csv"] = schreiben(
+        "optionskosten_ohne_lieferung.csv", ["symbol", "zeit", "kosten_eur"],
+        [[d["symbol"], d["zeit"], _geld(d["kosten_eur"])] for d in sorted(regeldetails("optionskosten_ohne_lieferung"), key=lambda d: d["zeit"])],
+    )
+    anzahl["jahreswechsel.csv"] = schreiben(
+        "jahreswechsel.csv", ["jahr", "jahr_bei_anderer_regel", "steuerdatum", "vorgang", "symbol", "betrag_eur", "exec_id"],
+        [[s.jahr, s.jahr_alternativ, s.steuerdatum.isoformat(), s.vorgang, s.symbol, _geld(s.betrag_eur), s.exec_id or ""]
+         for s in ergebnis.stroeme if s.jahr != s.jahr_alternativ],
+    )
+    anzahl["quellensteuer_zu_pruefen.csv"] = schreiben(
+        "quellensteuer_zu_pruefen.csv", ["jahr", "steuerdatum", "zustand", "symbol", "betrag_eur"],
+        [[s.jahr, s.steuerdatum.isoformat(), s.vorgang, s.symbol, _geld(s.betrag_eur)]
+         for s in ergebnis.stroeme
+         if s.vorgang in ("quellensteuer_erstattungsfaehig", "quellensteuer_ungeklaert", "quellensteuer_ersatzzahlung")],
+    )
+    return anzahl

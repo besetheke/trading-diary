@@ -18,8 +18,13 @@ Jahr, ETF-Anteile und -Lieferungen (9 Symbole), Buchungen um den Jahreswechsel, 
 Optionen mit Lieferung je Jahr. Nur Zählwerte und Summen im Bericht (CLAUDE.md Regel 2); die Einzelbuchungen für
 den Berater erzeugt der Nutzer aus der Datenbank.
 
-## Teil 1 · Steuerliche Anfangsbestände zum 01.01.2025
+## Teil 1 · Steuerliche Anfangsbestände zum 01.01.2025 — **voraussichtlich entbehrlich (17.10.2026)**
 
+**Befund:** Das Depot besteht seit der ersten Einzahlung am 01.04.2022 (Cash Report, Konto U8443617), es gibt keine
+Wertpapierüberträge (nur 15 USD Cash-Transfer 2025) und **keine** Legs mit ungeklärter Basis (`basis_ungeklaert` = 0).
+Alle Bestände zum 01.01.2025 sind damit aus den Ausführungen seit 2022 ableitbar; der frühere Satz „Anfangsbestände
+fehlen“ war zu pessimistisch. **Nur zu bestätigen:** dass es kein weiteres Depot und keine Vorbestände gab.
+Benötigt wären Anfangsbestände nur, falls diese Bestätigung ausbleibt. (Ursprünglicher Text:)
 Benötigt für 2025: Anschaffungskosten und -daten der übernommenen **Aktien-, Options- und USD-Bestände**. Die
 Datenbank beginnt 2022; was davor erworben wurde, hat nur den Einstand laut IB. **Eingabe vom Nutzer/Berater:**
 Bestandsliste zum Stichtag mit Anschaffungsdatum und -kosten, dazu die festgestellten Verlustvorträge aus den
@@ -38,7 +43,10 @@ verschwinden dadurch nicht.
 
 ## Teil 3 · USD-Konto und Kurseffekte
 
-Stand: 22.678 USD Sollzinsen und 1.738 USD Habenzinsen — das USD-Konto war zeitweise im Minus, zeitweise im Plus.
+Stand: Der IB Cash Report zeigt für USD durchgehend einen **Sollsaldo** (Endbestand 2022 −165.338, 2023 −192.486,
+2024 −135.701, 2025 −105.109, 09.10.2026 −46.774 USD); die Sollzinsen (22.678 USD) bestätigen das. Die Annahme eines
+„USD-Guthabens“ in der Antwort des Steuerberaters trifft also nicht zu: Es handelt sich um einen Margin-Kredit in
+USD (finanziert mit EUR-Einzahlungen). Die Habenzinsen (1.738 USD) stammen von kurzzeitigen Guthaben.
 **Zuerst klären (Berater):** Funktion und Verzinsungsstruktur des Kontos (Zahlungsverkehrskonto-Regel, verzinslich
 oder nicht, Haltefrist/Freigrenze § 20 oder § 23). **Eingabe:** Verlauf des USD-Saldos (Cash-Report) und die
 Vertragsbedingungen. Erst danach lohnt sich die Nachverfolgung jedes Zu- und Abflusses nach FIFO. IBs Forex-Zeile

@@ -102,6 +102,7 @@ class RegelOffen:
     text: str
     anzahl: int
     betrag_eur: Decimal
+    details: list = field(default_factory=list)  # Einzelfälle (Dicts) für die Listen an den Steuerberater
 
 
 @dataclass
@@ -228,15 +229,17 @@ class _Sammler:
         self.konfig = konfig
         self.stroeme: list[Strom] = []
         self.luecken: dict[tuple[str, str], Datenluecke] = {}
-        self.offen: dict[str, list] = {}  # art -> [text, anzahl, betrag]
+        self.offen: dict[str, list] = {}  # art -> [text, anzahl, betrag, details]
 
     def luecke(self, schluessel: str, grund: str, text: str) -> None:
         self.luecken.setdefault((schluessel, grund), Datenluecke(schluessel, grund, text))
 
-    def regel_offen(self, art: str, text: str, betrag: Decimal = _NULL) -> None:
-        eintrag = self.offen.setdefault(art, [text, 0, _NULL])
+    def regel_offen(self, art: str, text: str, betrag: Decimal = _NULL, detail: dict | None = None) -> None:
+        eintrag = self.offen.setdefault(art, [text, 0, _NULL, []])
         eintrag[1] += 1
         eintrag[2] += betrag
+        if detail is not None:
+            eintrag[3].append(detail)
 
     def strom(self, *, vorgang, regel, topf, e, brutto, komm, optionskosten=_NULL, waehrung, symbol, leg_id=None):
         r = self.konfig.regeln[regel]
@@ -311,7 +314,7 @@ def steuer_zufluss(
     return SteuerZuflussErgebnis(
         stroeme=sorted(s.stroeme, key=lambda x: (x.steuerdatum, x.exec_id or "", x.vorgang)),
         datenluecken=sorted(s.luecken.values(), key=lambda d: (d.schluessel, d.grund)),
-        regeln_offen=[RegelOffen(a, t, n, b) for a, (t, n, b) in sorted(s.offen.items())],
+        regeln_offen=[RegelOffen(a, t, n, b, d) for a, (t, n, b, d) in sorted(s.offen.items())],
         warnungen=warnungen,
         methode={
             "verfahren": "Zufluss je Zahlungsstrom",
@@ -416,7 +419,8 @@ def _ergebnisbein(s: _Sammler, leg, i, o, c, menge, mult, klasse, ab, ergebnis_l
     if leg.get("basis_ungeklaert"):
         a = ab.get(leg["conid"])
         if a is None:
-            s.regel_offen("basis_ungeklaert", "Herkunft der Basis ungeklärt: ohne steuerlichen Anfangsbestand nicht gerechnet.")
+            s.regel_offen("basis_ungeklaert", "Herkunft der Basis ungeklärt: ohne steuerlichen Anfangsbestand nicht gerechnet.",
+                          detail={"leg_id": leg.get("leg_id"), "symbol": i.get("symbol")})
             return
         offen_seite = ("anfang", a)
     else:
@@ -459,7 +463,8 @@ def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, inst) -> 
         gesamt = sum((r["menge"] for r in treffer), _NULL)
         if not treffer or gesamt == _NULL:
             s.regel_offen("optionskosten_ohne_lieferung",
-                          "Kosten einer ausgeübten gekauften Option ohne zugeordnete Lieferung: nicht gerechnet.", -k["kosten"])
+                          "Kosten einer ausgeübten gekauften Option ohne zugeordnete Lieferung: nicht gerechnet.", -k["kosten"],
+                          detail={"symbol": k["symbol"], "zeit": k["zeit"].isoformat(), "kosten_eur": k["kosten"]})
             continue
         for r in treffer:
             r["optionskosten"] -= k["kosten"] * r["menge"] / gesamt
@@ -472,7 +477,10 @@ def _ergebnis_buchen(s: _Sammler, r: dict) -> None:
     if r["etf"]:
         s.regel_offen("etf_investmentsteuer",
                       "ETF/ETN/ETP-Anteile: steuerliche Behandlung (Investmentsteuergesetz, Teilfreistellung) fehlt; nicht im Aktien-Topf.",
-                      gesamt)
+                      gesamt,
+                      detail={"leg_id": leg.get("leg_id"), "symbol": symbol,
+                              "eroeffnet": r["o"]["handelszeit"].date().isoformat() if r["o"] else "",
+                              "geschlossen": c["handelszeit"].date().isoformat(), "ergebnis_eur": gesamt})
         return
     stk = r["klasse"] == "STK"
     regel = "wertpapierverkauf" if stk else "termingeschaeft"
@@ -513,7 +521,9 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
             if ersatz:
                 s.regel_offen("ersatzzahlung",
                               "Ersatzzahlungen (Wertpapierleihe/SYEP): Einordnung offen (SO-Kandidat, § 22 Nr. 3 EStG vorbehaltlich Bestätigung); "
-                              "Freigrenze nicht abschließend geprüft; Ursache je Buchung ungeklärt.", eur)
+                              "Freigrenze nicht abschließend geprüft; Ursache je Buchung ungeklärt.", eur,
+                              detail={"datum": tag.isoformat(), "symbol": c.get("symbol") or "", "betrag_eur": eur,
+                                      "waehrung": c.get("waehrung") or "", "beschreibung": c.get("beschreibung") or ""})
             key = (c.get("symbol"), _basis_beschreibung(c.get("beschreibung"), False), tag, ersatz)
             g = brutto_gruppen.setdefault(key, {"brutto": _NULL, "land": c.get("land"), "ersatz": ersatz})
             g["brutto"] += eur
