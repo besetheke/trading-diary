@@ -11,7 +11,7 @@ import { useZeitraum } from './zeitraum'
 // (GET /titel-auswertung, dieselbe Rechengrundlage wie die Auswertung der Positionsliste); im Browser
 // wird nur sortiert und gefiltert.
 
-type Spalte = 'basiswert' | 'ketten' | 'realisiert' | 'opt' | 'stk' | 'sonst' | 'unrealisiert' | 'gesamt'
+type Spalte = 'basiswert' | 'ketten' | 'realisiert' | 'opt' | 'stk' | 'sonst' | 'unrealisiert' | 'gesamt' | 'ertraege' | 'gesamt_ertraege'
 
 function betragVon(z: TitelZeile, klasse: string): string {
   return z.je_klasse.find((k) => k.anlageklasse === klasse)?.realisiert_eur ?? '0'
@@ -33,6 +33,8 @@ function wert(z: TitelZeile, spalte: Spalte): number | string {
     case 'sonst': return sonstige(z)
     case 'unrealisiert': return Number(z.unrealisiert_eur)
     case 'gesamt': return Number(z.gesamt_eur)
+    case 'ertraege': return Number(z.ertraege_eur)
+    case 'gesamt_ertraege': return Number(z.gesamt_inkl_ertraege_eur)
   }
 }
 
@@ -44,7 +46,9 @@ const KOEPFE: [Spalte, string, string][] = [
   ['stk', 'davon Aktien', 'Kursergebnis der Aktien; Einstand ist der Zuteilungs- oder Kaufpreis (Prämien stehen bei den Optionen)'],
   ['sonst', 'davon Futures u. a.', 'Futures, Futures-Optionen und übrige Klassen'],
   ['unrealisiert', 'Unrealisiert', 'Offene Beine gegen IBs Bestand des letzten Stichtags, EUR'],
-  ['gesamt', 'Gesamt', 'Realisiert plus unrealisiert'],
+  ['gesamt', 'Handel gesamt', 'Realisiert plus unrealisiert (ohne Dividenden)'],
+  ['ertraege', 'Dividenden netto', 'Dividenden und Ersatzzahlungen abzüglich Quellensteuer, EUR (Buchungsdatum im Zeitraum)'],
+  ['gesamt_ertraege', 'Gesamt inkl. Dividenden', 'Handel gesamt plus Dividenden netto — was der Titel insgesamt gebracht hat'],
 ]
 
 function Summenzeile({ z }: { z: TitelZeile }): JSX.Element {
@@ -58,6 +62,8 @@ function Summenzeile({ z }: { z: TitelZeile }): JSX.Element {
       <td className="zahl"><Betrag wert={String(sonstige(z))} /></td>
       <td className="zahl"><Betrag wert={z.unrealisiert_eur} /></td>
       <td className="zahl"><Betrag wert={z.gesamt_eur} /></td>
+      <td className="zahl" title={`Dividenden ${z.dividenden_eur}, Quellensteuer ${z.quellensteuer_eur}`}><Betrag wert={z.ertraege_eur} /></td>
+      <td className="zahl"><strong><Betrag wert={z.gesamt_inkl_ertraege_eur} /></strong></td>
     </tr>
   )
 }
@@ -98,6 +104,7 @@ export default function Titel(): JSX.Element {
         (!zeitraumGesetzt ||
           z.abgeschlossen_im_zeitraum > 0 ||
           z.kurs_fehlt > 0 ||
+          Number(z.ertraege_eur) !== 0 ||
           Number(z.unrealisiert_eur) !== 0),
     )
     liste.sort((a, b) => {
@@ -122,6 +129,7 @@ export default function Titel(): JSX.Element {
 
   const ohneKurs = daten.summen.offene_ohne_kurs
   const kursFehlt = daten.summen.kurs_fehlt
+  const ertragOhneKurs = daten.summen.ertraege_kurs_fehlt
   return (
     <section>
       <h2>Titel — Ergebnis über alle Instrumente</h2>
@@ -131,8 +139,9 @@ export default function Titel(): JSX.Element {
         {zeitraumGesetzt
           ? ' Der gewählte Zeitraum gilt für das Realisierte (Schließungstag); das Unrealisierte gilt zum Stichtag und entfällt, wenn der Zeitraum davor endet.'
           : ''}{' '}
-        Dividenden, Zinsen und
-        Gebühren außerhalb der Ausführungen sind nicht enthalten. Optionsprämien stehen bei den Optionen, das
+        „Handel gesamt“ enthält keine Dividenden; die Spalten
+        „Dividenden netto“ (nach Quellensteuer, Buchungsdatum im Zeitraum) und „Gesamt inkl. Dividenden“ ergänzen sie.
+        Zinsen und Gebühren haben keinen Titel und fehlen hier. Optionsprämien stehen bei den Optionen, das
         Kursergebnis einer zugeteilten Aktie bei den Aktien — IB dagegen schiebt die Prämie in den Einstand der Aktie.
       </p>
       <p>
@@ -149,9 +158,10 @@ export default function Titel(): JSX.Element {
         </label>{' '}
         <span className="hinweis">{zeilen.length} von {daten.titel.length} Titeln</span>
       </p>
-      {(ohneKurs > 0 || kursFehlt > 0) && (
+      {(ohneKurs > 0 || kursFehlt > 0 || ertragOhneKurs > 0) && (
         <p className="hinweis">
           {kursFehlt > 0 ? `${kursFehlt} abgeschlossene Strukturen ohne Buchungskurs zählen nicht. ` : ''}
+          {ertragOhneKurs > 0 ? `${ertragOhneKurs} Dividenden-Buchungen ohne Kurs zählen nicht. ` : ''}
           {ohneKurs > 0 ? `${ohneKurs} offene Beine ohne Bestandszeile bei IB (z. B. angepasste Optionen) zählen nicht im unrealisierten Ergebnis.` : ''}
         </p>
       )}
@@ -186,6 +196,10 @@ export default function Titel(): JSX.Element {
                 <td className="zahl"><Betrag wert={String(sonstige(z))} /></td>
                 <td className="zahl"><Betrag wert={z.unrealisiert_eur} /></td>
                 <td className="zahl"><Betrag wert={z.gesamt_eur} /></td>
+                <td className="zahl" title={`Dividenden ${z.dividenden_eur}, Quellensteuer ${z.quellensteuer_eur}`}>
+                  <Betrag wert={z.ertraege_eur} />
+                </td>
+                <td className="zahl"><strong><Betrag wert={z.gesamt_inkl_ertraege_eur} /></strong></td>
               </tr>
             ))}
           </tbody>

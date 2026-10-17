@@ -900,6 +900,11 @@ class TitelZeileAntwort(BaseModel):
     unrealisiert_eur: str
     gesamt_eur: str
     nicht_aufgeteilt_eur: str
+    dividenden_eur: str
+    quellensteuer_eur: str
+    ertraege_eur: str
+    gesamt_inkl_ertraege_eur: str
+    ertraege_kurs_fehlt: int
     je_klasse: list[TitelKlasseAntwort]
     kurs_fehlt: int
     offene_ohne_kurs: int
@@ -2220,6 +2225,11 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
             unrealisiert_eur=_als_text(z.unrealisiert_eur),
             gesamt_eur=_als_text(z.gesamt_eur),
             nicht_aufgeteilt_eur=_als_text(z.nicht_aufgeteilt_eur),
+            dividenden_eur=_als_text(z.dividenden_eur),
+            quellensteuer_eur=_als_text(z.quellensteuer_eur),
+            ertraege_eur=_als_text(z.ertraege_eur),
+            gesamt_inkl_ertraege_eur=_als_text(z.gesamt_inkl_ertraege_eur),
+            ertraege_kurs_fehlt=z.ertraege_kurs_fehlt,
             je_klasse=[
                 TitelKlasseAntwort(
                     anlageklasse=k,
@@ -2241,6 +2251,9 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
         summe.unrealisiert_eur += z.unrealisiert_eur
         summe.nicht_aufgeteilt_eur += z.nicht_aufgeteilt_eur
         summe.kurs_fehlt += z.kurs_fehlt
+        summe.dividenden_eur += z.dividenden_eur
+        summe.quellensteuer_eur += z.quellensteuer_eur
+        summe.ertraege_kurs_fehlt += z.ertraege_kurs_fehlt
         summe.strukturen_geschlossen += z.strukturen_geschlossen
         summe.lose_beine += z.lose_beine
         summe.offene_ohne_kurs += z.offene_ohne_kurs

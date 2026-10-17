@@ -3503,9 +3503,13 @@ Tages wieder schließen. Umgesetzt im Roller (`taeglich`, `tagesende_schliessen`
 
 ## OF-89 · Seite „Titel“: offene Punkte (AP-16, 16.10.2026)
 
-1. **Dividenden, Zinsen, Gebühren** (außerhalb der Ausführungen) sind **nicht** im Ergebnis je Titel. Sie liegen
-   in den Cashflows (`analytics/cashflows.py`, Seite „Kosten & Erträge“). Offen: lassen sie sich eindeutig einem
-   Basiswert zuordnen (Dividende je ISIN/Symbol), und soll die Seite eine eigene Spalte zeigen?
+1. **Dividenden: umgesetzt (17.10.2026).** Dividenden, Ersatzzahlungen (Payment in Lieu) und Quellensteuer darauf
+   stehen je Basiswert in eigenen Spalten „Dividenden netto“ und „Gesamt inkl. Dividenden“; „Handel gesamt“ bleibt
+   unverändert (Abgleich mit der Auswertung). Zuordnung über das Symbol der Buchung (alle 68 Symbole des
+   Echtbestands treffen einen Basiswert); EUR = Betrag × `fxRateToBase`, Zeitraum nach Buchungsdatum. Abgleich mit
+   „Kosten & Erträge“: Dividenden 15.164,80 EUR identisch; Quellensteuer −1.766,53 EUR + −8,84 EUR Zinssteuer
+   (ohne Symbol, keinem Titel zugeordnet) = −1.775,37 EUR. **Offen bleibt:** Zinsen und Gebühren haben kein Symbol
+   und fehlen je Titel; Rechte (z. B. `WKL.RTS`) stehen als eigener Titel neben `WKL`.
 2. **Zeitraum:** Die Seite zeigt alle Zeiten; der Zeitraumwähler im Kopf wirkt nicht. Gewünscht: Jahr/Zeitraum je
    Titel? (Realisiert nach Schließungstag ist machbar, unrealisiert gilt immer zum Stichtag.)
 3. **Zeitpunkt:** Wie die Equity zählt die Seite ein Bein erst, wenn seine Struktur geschlossen ist. Geschlossene

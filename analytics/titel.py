@@ -18,7 +18,12 @@ Rechengrundlage — keine zweite EUR-Rechnung (AP-06e, I2):
   — IBs Methode, die Prämie in den Einstand der Aktie zu schieben, gilt hier nicht.
 - **Unrealisiert**: offene Beine mit IBs Bestand des jüngsten Stichtags
   (``unrealisiert_auswertung``), je Klasse und gesamt.
-- Nicht enthalten: Dividenden, Zinsen, Gebühren außerhalb der Ausführungen (OF-89).
+- **Erträge** (Dividenden, Ersatzzahlungen, Quellensteuer darauf): aus den Cash-Buchungen
+  mit Symbol, je Basiswert, EUR = Betrag × ``fxRateToBase`` der Buchung (wie ``cashflows.py``), im
+  Zeitraum nach Buchungsdatum. Sie stehen **neben** dem Handelsergebnis (``realisiert_eur`` und
+  ``gesamt_eur`` bleiben, wie sie sind — Abgleich mit der Auswertung); ``gesamt_inkl_ertraege_eur``
+  addiert sie. Fehlt der Kurs, zählt die Buchung nur in ``ertraege_kurs_fehlt``.
+- Nicht enthalten: Zinsen und Gebühren (haben kein Symbol), Quellensteuer auf Zinsen (OF-89).
 
 Rein: keine Uhr, kein Netzwerk, keine Schreibzugriffe. Alle Beträge ``Decimal``.
 """
@@ -31,6 +36,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 
+from analytics.cashflows import _kurs_aus_rohsatz
 from analytics.kennzahlen import _wirtschaftlich, bewerte_barausgleich, kennzahlen_auswertung
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
@@ -38,12 +44,14 @@ from journal.schema import (
     chain_links,
     chains,
     executions,
+    flex_cash_transactions,
     flex_open_positions,
     instruments,
     legs,
     structures,
 )
 
+ERTRAG_TYPEN = ("Dividends", "Payment In Lieu Of Dividends", "Withholding Tax")
 _NULL = Decimal("0")
 _ZWEI = Decimal("0.01")
 
@@ -60,6 +68,9 @@ class TitelZeile:
     nicht_aufgeteilt_eur: Decimal = _NULL
     unrealisiert_eur: Decimal = _NULL
     unrealisiert_je_klasse: dict = field(default_factory=dict)
+    dividenden_eur: Decimal = _NULL  # Dividenden und Ersatzzahlungen, brutto
+    quellensteuer_eur: Decimal = _NULL  # Quellensteuer darauf (negativ)
+    ertraege_kurs_fehlt: int = 0  # Cash-Buchungen ohne Kurs (zählen nicht)
     kurs_fehlt: int = 0  # geschlossene Strukturen/lose Beine ohne Buchungskurs (zählen nicht)
     offene_ohne_kurs: int = 0  # offene Beine ohne Bestandszeile (zählen nicht)
     waehrungen: set = field(default_factory=set)
@@ -67,6 +78,14 @@ class TitelZeile:
     @property
     def gesamt_eur(self) -> Decimal:
         return self.realisiert_eur + self.unrealisiert_eur
+
+    @property
+    def ertraege_eur(self) -> Decimal:
+        return self.dividenden_eur + self.quellensteuer_eur
+
+    @property
+    def gesamt_inkl_ertraege_eur(self) -> Decimal:
+        return self.gesamt_eur + self.ertraege_eur
 
 
 def _klasse(instrument: dict | None) -> str:
@@ -84,6 +103,7 @@ def titel_auswertung(
     stichtag,
     von: date | None = None,
     bis: date | None = None,
+    cash_zeilen: list[dict] | None = None,
 ) -> list[TitelZeile]:
     """Je Basiswert eine ``TitelZeile`` (Kontosicht).
 
@@ -201,6 +221,20 @@ def titel_auswertung(
         z.unrealisiert_eur += u.eur
         z.unrealisiert_je_klasse[klasse] = z.unrealisiert_je_klasse.get(klasse, _NULL) + u.eur
         z.offene_ohne_kurs += u.ohne_kurs
+    # --- Erträge: Dividenden und Quellensteuer je Basiswert (nur Buchungen mit Symbol)
+    for c in cash_zeilen or ():
+        if c["typ"] not in ERTRAG_TYPEN or not c.get("symbol"):
+            continue
+        if not im_zeitraum(c["datum"].date()):
+            continue
+        z = zeile(c["symbol"])
+        if c["kurs"] is None:
+            z.ertraege_kurs_fehlt += 1
+            continue
+        if c["typ"] == "Withholding Tax":
+            z.quellensteuer_eur += c["betrag"] * c["kurs"]
+        else:
+            z.dividenden_eur += c["betrag"] * c["kurs"]
     return sorted(zeilen.values(), key=lambda t: t.basiswert)
 
 
@@ -297,6 +331,24 @@ def titel_bericht(
                 )
             ).mappings()
         ]
+        cash_zeilen = []
+        for z in v.execute(
+            select(
+                flex_cash_transactions.c.datum,
+                flex_cash_transactions.c.typ,
+                flex_cash_transactions.c.betrag,
+                flex_cash_transactions.c.roh_json,
+            ).where(flex_cash_transactions.c.typ.in_(ERTRAG_TYPEN))
+        ).mappings():
+            cash_zeilen.append(
+                dict(
+                    datum=z["datum"],
+                    typ=z["typ"],
+                    betrag=z["betrag"],
+                    kurs=_kurs_aus_rohsatz(z["roh_json"]),
+                    symbol=json.loads(z["roh_json"]).get("symbol") or None,
+                )
+            )
         stichtag = v.execute(
             select(flex_open_positions.c.stichtag)
             .order_by(flex_open_positions.c.stichtag.desc())
@@ -334,6 +386,7 @@ def titel_bericht(
             stichtag,
             von,
             bis,
+            cash_zeilen,
         ),
         stichtag,
     )

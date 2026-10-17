@@ -1151,6 +1151,11 @@ export interface TitelZeile {
   unrealisiert_eur: string
   gesamt_eur: string
   nicht_aufgeteilt_eur: string
+  dividenden_eur: string
+  quellensteuer_eur: string
+  ertraege_eur: string
+  gesamt_inkl_ertraege_eur: string
+  ertraege_kurs_fehlt: number
   je_klasse: TitelKlasse[]
   kurs_fehlt: number
   offene_ohne_kurs: number
