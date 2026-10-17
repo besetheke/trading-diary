@@ -37,7 +37,12 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import select
 
 from analytics.cashflows import _kurs_aus_rohsatz
-from analytics.kennzahlen import _wirtschaftlich, bewerte_barausgleich, kennzahlen_auswertung
+from analytics.kennzahlen import (
+    _wirtschaftlich,
+    bewerte_barausgleich,
+    kennzahlen_auswertung,
+    leg_seiten,
+)
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
 from journal.schema import (
@@ -57,6 +62,18 @@ _ZWEI = Decimal("0.01")
 
 
 @dataclass
+class NativZeile:
+    """Dieselben Zahlen in der Währung der Geschäfte (ohne Umrechnung), je Währung."""
+
+    realisiert: Decimal = _NULL  # netto, Kommission enthalten
+    kommission: Decimal = _NULL  # darin enthalten (negativ)
+    unrealisiert: Decimal = _NULL
+    dividenden: Decimal = _NULL
+    quellensteuer: Decimal = _NULL
+    je_klasse: dict = field(default_factory=dict)  # Klasse -> [realisiert, kommission]
+
+
+@dataclass
 class TitelZeile:
     basiswert: str
     ketten: int = 0
@@ -65,6 +82,9 @@ class TitelZeile:
     lose_beine: int = 0  # im Zeitraum gezählte geschlossene lose Beine
     realisiert_eur: Decimal = _NULL
     realisiert_je_klasse: dict = field(default_factory=dict)
+    kommission_eur: Decimal = _NULL  # im Realisierten enthaltene Kommission (negativ), EUR
+    kommission_je_klasse: dict = field(default_factory=dict)
+    nativ: dict = field(default_factory=dict)  # Währung -> NativZeile
     nicht_aufgeteilt_eur: Decimal = _NULL
     unrealisiert_eur: Decimal = _NULL
     unrealisiert_je_klasse: dict = field(default_factory=dict)
@@ -86,6 +106,42 @@ class TitelZeile:
     @property
     def gesamt_inkl_ertraege_eur(self) -> Decimal:
         return self.gesamt_eur + self.ertraege_eur
+
+
+def _geldteile(legs: list[dict], exec_je_id: dict, mult_je_conid: dict):
+    """Kommission in EUR sowie Netto und Kommission je Währung der Ausführungen (ohne Umrechnung).
+    Dieselbe Zerlegung wie ``_wirtschaftlich`` (``leg_seiten``); ``None``, wenn ein Kurs fehlt."""
+    seiten = leg_seiten(legs, exec_je_id, mult_je_conid, vertrag="AP-16")
+    if seiten is None:
+        return None
+    kommission_eur = _NULL
+    netto: dict = {}
+    kommission: dict = {}
+    for s in seiten:
+        k = s.kommissionsanteil * s.menge_vorzeichen
+        b = s.vorzeichen * s.stueckpreis * s.menge * s.multiplikator
+        w = s.ausfuehrung.get("waehrung") or "?"
+        kommission_eur += k * s.buchungskurs
+        netto[w] = netto.get(w, _NULL) + b + k
+        kommission[w] = kommission.get(w, _NULL) + k
+    return kommission_eur, netto, kommission
+
+
+def _nativ(z: "TitelZeile", waehrung: str) -> NativZeile:
+    return z.nativ.setdefault(waehrung, NativZeile())
+
+
+def _buche_geldteile(z: "TitelZeile", klasse: str, teile) -> None:
+    kommission_eur, netto, kommission = teile
+    z.kommission_eur += kommission_eur
+    z.kommission_je_klasse[klasse] = z.kommission_je_klasse.get(klasse, _NULL) + kommission_eur
+    for w, betrag in netto.items():
+        n = _nativ(z, w)
+        n.realisiert += betrag
+        n.kommission += kommission[w]
+        je = n.je_klasse.setdefault(klasse, [_NULL, _NULL])
+        je[0] += betrag
+        je[1] += kommission[w]
 
 
 def _klasse(instrument: dict | None) -> str:
@@ -182,6 +238,9 @@ def titel_auswertung(
             klasse = _klasse(instrument_je_conid.get(leg["conid"]))
             z.realisiert_je_klasse[klasse] = z.realisiert_je_klasse.get(klasse, _NULL) + betrag
             aufgeteilt += betrag
+            teile = _geldteile([leg], exec_je_id, mult_je_conid)
+            if teile is not None:
+                _buche_geldteile(z, klasse, teile)
         z.realisiert_eur += struktur.netto_eur_wirtschaftlich
         z.nicht_aufgeteilt_eur += struktur.netto_eur_wirtschaftlich - aufgeteilt
 
@@ -202,6 +261,9 @@ def titel_auswertung(
         z.realisiert_eur += betrag
         z.realisiert_je_klasse[klasse] = z.realisiert_je_klasse.get(klasse, _NULL) + betrag
         z.waehrungen.add(exec_je_id[leg["close_exec_id"]]["waehrung"])
+        teile = _geldteile([leg], exec_je_id, mult_je_conid)
+        if teile is not None:
+            _buche_geldteile(z, klasse, teile)
 
     # --- Unrealisiert: offene Beine je Titel und Klasse
     offene_je_gruppe: dict[tuple[str, str], list[dict]] = {}
@@ -221,6 +283,8 @@ def titel_auswertung(
         z.unrealisiert_eur += u.eur
         z.unrealisiert_je_klasse[klasse] = z.unrealisiert_je_klasse.get(klasse, _NULL) + u.eur
         z.offene_ohne_kurs += u.ohne_kurs
+        for w, betrag in u.nativ.items():
+            _nativ(z, w).unrealisiert += betrag
     # --- Erträge: Dividenden und Quellensteuer je Basiswert (nur Buchungen mit Symbol)
     for c in cash_zeilen or ():
         if c["typ"] not in ERTRAG_TYPEN or not c.get("symbol"):
@@ -231,10 +295,13 @@ def titel_auswertung(
         if c["kurs"] is None:
             z.ertraege_kurs_fehlt += 1
             continue
+        n = _nativ(z, c.get("waehrung") or "?")
         if c["typ"] == "Withholding Tax":
             z.quellensteuer_eur += c["betrag"] * c["kurs"]
+            n.quellensteuer += c["betrag"]
         else:
             z.dividenden_eur += c["betrag"] * c["kurs"]
+            n.dividenden += c["betrag"]
     return sorted(zeilen.values(), key=lambda t: t.basiswert)
 
 
@@ -337,6 +404,7 @@ def titel_bericht(
                 flex_cash_transactions.c.datum,
                 flex_cash_transactions.c.typ,
                 flex_cash_transactions.c.betrag,
+                flex_cash_transactions.c.waehrung,
                 flex_cash_transactions.c.roh_json,
             ).where(flex_cash_transactions.c.typ.in_(ERTRAG_TYPEN))
         ).mappings():
@@ -345,6 +413,7 @@ def titel_bericht(
                     datum=z["datum"],
                     typ=z["typ"],
                     betrag=z["betrag"],
+                    waehrung=z["waehrung"],
                     kurs=_kurs_aus_rohsatz(z["roh_json"]),
                     symbol=json.loads(z["roh_json"]).get("symbol") or None,
                 )

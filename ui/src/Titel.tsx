@@ -13,28 +13,63 @@ import { useZeitraum } from './zeitraum'
 
 type Spalte = 'basiswert' | 'ketten' | 'realisiert' | 'opt' | 'stk' | 'sonst' | 'unrealisiert' | 'gesamt' | 'ertraege' | 'gesamt_ertraege'
 
-function betragVon(z: TitelZeile, klasse: string): string {
-  return z.je_klasse.find((k) => k.anlageklasse === klasse)?.realisiert_eur ?? '0'
+// Anzeige: 'EUR' (jede Seite zum Kurs ihres Tages, wie die Auswertung) oder die Währung der Geschäfte
+// (z. B. 'USD', ohne Umrechnung — vergleichbar mit Broker-Auszügen). „Ohne Kommission“ rechnet die im
+// Realisierten enthaltene Kommission wieder heraus.
+interface Zahlen {
+  realisiert: number
+  opt: number
+  stk: number
+  sonst: number
+  unrealisiert: number
+  gesamt: number
+  ertraege: number
+  gesamtErtraege: number
 }
 
-function sonstige(z: TitelZeile): number {
-  return z.je_klasse
-    .filter((k) => k.anlageklasse !== 'OPT' && k.anlageklasse !== 'STK')
-    .reduce((summe, k) => summe + Number(k.realisiert_eur), 0)
+function zahlen(z: TitelZeile, anzeige: string, ohneKomm: boolean): Zahlen {
+  let realisiert: number
+  let unrealisiert: number
+  let ertraege: number
+  const je: Record<string, number> = {}
+  if (anzeige === 'EUR') {
+    realisiert = Number(z.realisiert_eur) - (ohneKomm ? Number(z.kommission_eur) : 0)
+    unrealisiert = Number(z.unrealisiert_eur)
+    ertraege = Number(z.ertraege_eur)
+    for (const k of z.je_klasse) {
+      je[k.anlageklasse] = Number(k.realisiert_eur) - (ohneKomm ? Number(k.kommission_eur) : 0)
+    }
+  } else {
+    const n = z.nativ.find((x) => x.waehrung === anzeige)
+    realisiert = n ? Number(n.realisiert) - (ohneKomm ? Number(n.kommission) : 0) : 0
+    unrealisiert = n ? Number(n.unrealisiert) : 0
+    ertraege = n ? Number(n.dividenden) + Number(n.quellensteuer) : 0
+    for (const k of n?.je_klasse ?? []) {
+      je[k.anlageklasse] = Number(k.realisiert) - (ohneKomm ? Number(k.kommission) : 0)
+    }
+  }
+  const opt = je['OPT'] ?? 0
+  const stk = je['STK'] ?? 0
+  const sonst = Object.entries(je)
+    .filter(([k]) => k !== 'OPT' && k !== 'STK')
+    .reduce((summe, [, v]) => summe + v, 0)
+  const gesamt = realisiert + unrealisiert
+  return { realisiert, opt, stk, sonst, unrealisiert, gesamt, ertraege, gesamtErtraege: gesamt + ertraege }
 }
 
-function wert(z: TitelZeile, spalte: Spalte): number | string {
+function wert(z: TitelZeile, spalte: Spalte, anzeige: string, ohneKomm: boolean): number | string {
+  if (spalte === 'basiswert') return z.basiswert
+  if (spalte === 'ketten') return z.ketten
+  const n = zahlen(z, anzeige, ohneKomm)
   switch (spalte) {
-    case 'basiswert': return z.basiswert
-    case 'ketten': return z.ketten
-    case 'realisiert': return Number(z.realisiert_eur)
-    case 'opt': return Number(betragVon(z, 'OPT'))
-    case 'stk': return Number(betragVon(z, 'STK'))
-    case 'sonst': return sonstige(z)
-    case 'unrealisiert': return Number(z.unrealisiert_eur)
-    case 'gesamt': return Number(z.gesamt_eur)
-    case 'ertraege': return Number(z.ertraege_eur)
-    case 'gesamt_ertraege': return Number(z.gesamt_inkl_ertraege_eur)
+    case 'realisiert': return n.realisiert
+    case 'opt': return n.opt
+    case 'stk': return n.stk
+    case 'sonst': return n.sonst
+    case 'unrealisiert': return n.unrealisiert
+    case 'gesamt': return n.gesamt
+    case 'ertraege': return n.ertraege
+    case 'gesamt_ertraege': return n.gesamtErtraege
   }
 }
 
@@ -51,19 +86,31 @@ const KOEPFE: [Spalte, string, string][] = [
   ['gesamt_ertraege', 'Gesamt inkl. Dividenden', 'Handel gesamt plus Dividenden netto — was der Titel insgesamt gebracht hat'],
 ]
 
-function Summenzeile({ z }: { z: TitelZeile }): JSX.Element {
+function Zellen({ z, anzeige, ohneKomm }: { z: TitelZeile; anzeige: string; ohneKomm: boolean }): JSX.Element {
+  const n = zahlen(z, anzeige, ohneKomm)
+  const b = (x: number): JSX.Element => <Betrag wert={String(x)} waehrung={anzeige} />
+  return (
+    <>
+      <td className="zahl">{b(n.realisiert)}</td>
+      <td className="zahl">{b(n.opt)}</td>
+      <td className="zahl">{b(n.stk)}</td>
+      <td className="zahl">{b(n.sonst)}</td>
+      <td className="zahl">{b(n.unrealisiert)}</td>
+      <td className="zahl">{b(n.gesamt)}</td>
+      <td className="zahl" title={`Dividenden ${z.dividenden_eur} EUR, Quellensteuer ${z.quellensteuer_eur} EUR`}>
+        {b(n.ertraege)}
+      </td>
+      <td className="zahl"><strong>{b(n.gesamtErtraege)}</strong></td>
+    </>
+  )
+}
+
+function Summenzeile({ z, anzeige, ohneKomm }: { z: TitelZeile; anzeige: string; ohneKomm: boolean }): JSX.Element {
   return (
     <tr className="summe">
       <td><strong>Summe aller Titel</strong></td>
       <td className="zahl">{z.ketten} ({z.ketten_offen})</td>
-      <td className="zahl"><Betrag wert={z.realisiert_eur} /></td>
-      <td className="zahl"><Betrag wert={betragVon(z, 'OPT')} /></td>
-      <td className="zahl"><Betrag wert={betragVon(z, 'STK')} /></td>
-      <td className="zahl"><Betrag wert={String(sonstige(z))} /></td>
-      <td className="zahl"><Betrag wert={z.unrealisiert_eur} /></td>
-      <td className="zahl"><Betrag wert={z.gesamt_eur} /></td>
-      <td className="zahl" title={`Dividenden ${z.dividenden_eur}, Quellensteuer ${z.quellensteuer_eur}`}><Betrag wert={z.ertraege_eur} /></td>
-      <td className="zahl"><strong><Betrag wert={z.gesamt_inkl_ertraege_eur} /></strong></td>
+      <Zellen z={z} anzeige={anzeige} ohneKomm={ohneKomm} />
     </tr>
   )
 }
@@ -76,6 +123,8 @@ export default function Titel(): JSX.Element {
   const [nurOffen, setzeNurOffen] = useState(false)
   const [spalte, setzeSpalte] = useState<Spalte>('gesamt')
   const [absteigend, setzeAbsteigend] = useState(false)   // Vorgabe: größter Verlust zuerst
+  const [anzeige, setzeAnzeige] = useState('EUR')
+  const [ohneKomm, setzeOhneKomm] = useState(false)
 
   useEffect(() => {
     let abgebrochen = false
@@ -99,6 +148,7 @@ export default function Titel(): JSX.Element {
     const liste = daten.titel.filter(
       (z) =>
         (text === '' || z.basiswert.toUpperCase().includes(text)) &&
+        (anzeige === 'EUR' || z.nativ.some((n) => n.waehrung === anzeige)) &&
         (!nurOffen || z.ketten_offen > 0 || Number(z.unrealisiert_eur) !== 0) &&
         // Mit Zeitraum nur Titel, die darin etwas zählen (Schließung, Kursmangel) oder offen bewertet sind.
         (!zeitraumGesetzt ||
@@ -108,13 +158,13 @@ export default function Titel(): JSX.Element {
           Number(z.unrealisiert_eur) !== 0),
     )
     liste.sort((a, b) => {
-      const x = wert(a, spalte)
-      const y = wert(b, spalte)
+      const x = wert(a, spalte, anzeige, ohneKomm)
+      const y = wert(b, spalte, anzeige, ohneKomm)
       const c = typeof x === 'string' ? x.localeCompare(String(y), 'de') : (x as number) - (y as number)
       return absteigend ? -c : c
     })
     return liste
-  }, [daten, suche, nurOffen, spalte, absteigend, zeitraumGesetzt])
+  }, [daten, suche, nurOffen, spalte, absteigend, zeitraumGesetzt, anzeige, ohneKomm])
 
   function sortiere(neu: Spalte): void {
     if (neu === spalte) setzeAbsteigend(!absteigend)
@@ -158,6 +208,23 @@ export default function Titel(): JSX.Element {
         </label>{' '}
         <span className="hinweis">{zeilen.length} von {daten.titel.length} Titeln</span>
       </p>
+      <div className="diagramm-wahl" role="group" aria-label="Währung der Anzeige">
+        {['EUR', ...Array.from(new Set(daten.summen.nativ.map((n) => n.waehrung))).filter((w) => w !== 'EUR')].map((w) => (
+          <button
+            key={w}
+            type="button"
+            aria-pressed={anzeige === w}
+            title={w === 'EUR' ? 'Jede Seite zum Kurs ihres Tages — wie die Auswertung' : `In ${w}, ohne Umrechnung — vergleichbar mit Broker-Auszügen`}
+            onClick={() => setzeAnzeige(w)}
+          >
+            {w === 'EUR' ? 'EUR (Tageskurse)' : `${w} (Original)`}
+          </button>
+        ))}
+        <label>
+          <input type="checkbox" checked={ohneKomm} onChange={(e) => setzeOhneKomm(e.target.checked)} /> ohne
+          Kommission
+        </label>
+      </div>
       {(ohneKurs > 0 || kursFehlt > 0 || ertragOhneKurs > 0) && (
         <p className="hinweis">
           {kursFehlt > 0 ? `${kursFehlt} abgeschlossene Strukturen ohne Buchungskurs zählen nicht. ` : ''}
@@ -180,7 +247,7 @@ export default function Titel(): JSX.Element {
             </tr>
           </thead>
           <tbody>
-            <Summenzeile z={daten.summen} />
+            <Summenzeile z={daten.summen} anzeige={anzeige} ohneKomm={ohneKomm} />
             {zeilen.map((z) => (
               <tr key={z.basiswert}>
                 <td>
@@ -190,16 +257,7 @@ export default function Titel(): JSX.Element {
                   {z.waehrungen.length > 1 ? <span className="hinweis"> ({z.waehrungen.join('/')})</span> : null}
                 </td>
                 <td className="zahl">{z.ketten} ({z.ketten_offen})</td>
-                <td className="zahl"><Betrag wert={z.realisiert_eur} /></td>
-                <td className="zahl"><Betrag wert={betragVon(z, 'OPT')} /></td>
-                <td className="zahl"><Betrag wert={betragVon(z, 'STK')} /></td>
-                <td className="zahl"><Betrag wert={String(sonstige(z))} /></td>
-                <td className="zahl"><Betrag wert={z.unrealisiert_eur} /></td>
-                <td className="zahl"><Betrag wert={z.gesamt_eur} /></td>
-                <td className="zahl" title={`Dividenden ${z.dividenden_eur}, Quellensteuer ${z.quellensteuer_eur}`}>
-                  <Betrag wert={z.ertraege_eur} />
-                </td>
-                <td className="zahl"><strong><Betrag wert={z.gesamt_inkl_ertraege_eur} /></strong></td>
+                <Zellen z={z} anzeige={anzeige} ohneKomm={ohneKomm} />
               </tr>
             ))}
           </tbody>

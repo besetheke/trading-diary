@@ -59,7 +59,7 @@ from analytics.nav import nav_bericht
 from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
 from analytics.strategien import strategie_bericht
-from analytics.titel import TitelZeile, titel_bericht
+from analytics.titel import NativZeile, TitelZeile, titel_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
 from journal.durchsicht import _gruppen_bilden, _urteile_schreiben
@@ -890,6 +890,25 @@ class TitelKlasseAntwort(BaseModel):
     anlageklasse: str
     realisiert_eur: str
     unrealisiert_eur: str
+    kommission_eur: str = "0"
+
+
+class TitelNativKlasseAntwort(BaseModel):
+    anlageklasse: str
+    realisiert: str
+    kommission: str
+
+
+class TitelNativAntwort(BaseModel):
+    """Dieselben Zahlen in der Währung der Geschäfte, ohne Umrechnung."""
+
+    waehrung: str
+    realisiert: str
+    kommission: str
+    unrealisiert: str
+    dividenden: str
+    quellensteuer: str
+    je_klasse: list[TitelNativKlasseAntwort]
 
 
 class TitelZeileAntwort(BaseModel):
@@ -905,6 +924,8 @@ class TitelZeileAntwort(BaseModel):
     ertraege_eur: str
     gesamt_inkl_ertraege_eur: str
     ertraege_kurs_fehlt: int
+    kommission_eur: str = "0"
+    nativ: list[TitelNativAntwort] = []
     je_klasse: list[TitelKlasseAntwort]
     kurs_fehlt: int
     offene_ohne_kurs: int
@@ -2230,13 +2251,29 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
             ertraege_eur=_als_text(z.ertraege_eur),
             gesamt_inkl_ertraege_eur=_als_text(z.gesamt_inkl_ertraege_eur),
             ertraege_kurs_fehlt=z.ertraege_kurs_fehlt,
+            kommission_eur=_als_text(z.kommission_eur),
+            nativ=[
+                TitelNativAntwort(
+                    waehrung=w, realisiert=_als_text(n.realisiert),
+                    kommission=_als_text(n.kommission),
+                    unrealisiert=_als_text(n.unrealisiert), dividenden=_als_text(n.dividenden),
+                    quellensteuer=_als_text(n.quellensteuer),
+                    je_klasse=[
+                        TitelNativKlasseAntwort(
+                            anlageklasse=k, realisiert=_als_text(v[0]), kommission=_als_text(v[1]))
+                        for k, v in sorted(n.je_klasse.items())
+                    ],
+                )
+                for w, n in sorted(z.nativ.items())
+            ],
             je_klasse=[
                 TitelKlasseAntwort(
                     anlageklasse=k,
                     realisiert_eur=_als_text(z.realisiert_je_klasse.get(k, Decimal(0))),
                     unrealisiert_eur=_als_text(z.unrealisiert_je_klasse.get(k, Decimal(0))),
+                    kommission_eur=_als_text(z.kommission_je_klasse.get(k, Decimal(0))),
                 )
-                for k in klassen
+                for k in sorted(set(klassen) | set(z.kommission_je_klasse))
             ],
             kurs_fehlt=z.kurs_fehlt, offene_ohne_kurs=z.offene_ohne_kurs,
             abgeschlossen_im_zeitraum=z.strukturen_geschlossen + z.lose_beine,
@@ -2252,6 +2289,20 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
         summe.nicht_aufgeteilt_eur += z.nicht_aufgeteilt_eur
         summe.kurs_fehlt += z.kurs_fehlt
         summe.dividenden_eur += z.dividenden_eur
+        summe.kommission_eur += z.kommission_eur
+        for k, w in z.kommission_je_klasse.items():
+            summe.kommission_je_klasse[k] = summe.kommission_je_klasse.get(k, Decimal(0)) + w
+        for waehrung, n in z.nativ.items():
+            s = summe.nativ.setdefault(waehrung, NativZeile())
+            s.realisiert += n.realisiert
+            s.kommission += n.kommission
+            s.unrealisiert += n.unrealisiert
+            s.dividenden += n.dividenden
+            s.quellensteuer += n.quellensteuer
+            for k, v in n.je_klasse.items():
+                je = s.je_klasse.setdefault(k, [Decimal(0), Decimal(0)])
+                je[0] += v[0]
+                je[1] += v[1]
         summe.quellensteuer_eur += z.quellensteuer_eur
         summe.ertraege_kurs_fehlt += z.ertraege_kurs_fehlt
         summe.strukturen_geschlossen += z.strukturen_geschlossen

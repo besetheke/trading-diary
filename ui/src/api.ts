@@ -1141,6 +1141,17 @@ export interface TitelKlasse {
   anlageklasse: string
   realisiert_eur: string
   unrealisiert_eur: string
+  kommission_eur: string
+}
+
+export interface TitelNativ {
+  waehrung: string
+  realisiert: string
+  kommission: string
+  unrealisiert: string
+  dividenden: string
+  quellensteuer: string
+  je_klasse: { anlageklasse: string; realisiert: string; kommission: string }[]
 }
 
 export interface TitelZeile {
@@ -1156,6 +1167,8 @@ export interface TitelZeile {
   ertraege_eur: string
   gesamt_inkl_ertraege_eur: string
   ertraege_kurs_fehlt: number
+  kommission_eur: string
+  nativ: TitelNativ[]
   je_klasse: TitelKlasse[]
   kurs_fehlt: number
   offene_ohne_kurs: number

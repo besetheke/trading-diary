@@ -17,7 +17,7 @@ Je offenem Leg, in Positionswährung:
 Ohne Bestandszeile kein Wert — gezählt, nie still 0.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
@@ -37,6 +37,8 @@ class Unrealisiert:
     # = unrealisiert.
     praemie_eur: Decimal = _NULL
     aktuell_eur: Decimal = _NULL
+    # Dasselbe Unrealisiert in der Währung der Ausführung (je Währung), ohne Umrechnung.
+    nativ: dict = field(default_factory=dict)
 
 
 def unrealisiert_auswertung(
@@ -50,6 +52,7 @@ def unrealisiert_auswertung(
     ``kommission_gesamt``, ``open_faktor``. ``bestand_je_conid``: conid →
     ``menge``, ``wert`` (positionValue), ``kurs`` (fxRateToBase)."""
     summe = praemie = aktuell = _NULL
+    nativ: dict = {}
     bewertet = ohne = 0
     for leg in offene_legs:
         b = bestand_je_conid.get(leg["conid"])
@@ -72,7 +75,9 @@ def unrealisiert_auswertung(
         )
         wert = b["wert"] * menge / abs(b["menge"])
         summe += (wert - einstand) * b["kurs"]
+        waehrung = a.get("waehrung") or "?"
+        nativ[waehrung] = nativ.get(waehrung, _NULL) + (wert - einstand)
         aktuell -= wert * b["kurs"]
         bewertet += 1
     return Unrealisiert(stichtag=stichtag, eur=summe, anzahl_legs=bewertet, ohne_kurs=ohne,
-                        praemie_eur=praemie, aktuell_eur=aktuell)
+                        praemie_eur=praemie, aktuell_eur=aktuell, nativ=nativ)
