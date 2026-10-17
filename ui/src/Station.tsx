@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
-import { fehlerText, holeBreakout, holeRoller, holeSystem, sendeRollerBefehl } from "./api";
+import { fehlerText, holeBreakout, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
 import type { BreakoutStand, RollerAntwort, RollerKette, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
@@ -24,6 +24,33 @@ function useSystem(): [System | null, string | null, () => void] {
       .catch((e) => setzeFehler(fehlerText(e)));
   }, [stand]);
   return [daten, fehler, () => setzeStand((s) => s + 1)];
+}
+
+// Schalter für Momentum Lab (eigener Dienst auf Port 8501): Start ohne Fenster, Stopp nur für Momentum Lab selbst.
+function MomentumSchalter({ an, neu }: { an: boolean | null; neu: () => void }): JSX.Element {
+  const [arbeitet, setzeArbeitet] = useState(false);
+  const [meldung, setzeMeldung] = useState<string | null>(null);
+  function schalten(): void {
+    const aktion = an ? "stop" : "start";
+    setzeArbeitet(true);
+    setzeMeldung(null);
+    sendeMomentumBefehl(aktion)
+      .then((r) => setzeMeldung(r.text))
+      .catch((e) => setzeMeldung(fehlerText(e)))
+      .finally(() => {
+        // Der Start dauert einige Sekunden: mehrmals neu prüfen, statt auf einen Klick zu warten.
+        [1500, 4000, 8000, 14000].forEach((ms) => window.setTimeout(neu, ms));
+        window.setTimeout(() => setzeArbeitet(false), 14000);
+      });
+  }
+  return (
+    <span className="momentum-schalter">
+      <button type="button" onClick={schalten} disabled={arbeitet} aria-pressed={an === true}>
+        {arbeitet ? "bitte warten …" : an ? "Ausschalten" : "Einschalten"}
+      </button>
+      {meldung && <span className="sicht"> {meldung}</span>}
+    </span>
+  );
 }
 
 function Ampel({ an }: { an: boolean | null }): JSX.Element {
@@ -63,7 +90,9 @@ export function SystemSeite(): JSX.Element {
               <td>
                 <Ampel an={d.erreichbar} />
               </td>
-              <td>{d.hinweis ?? ""}</td>
+              <td>
+                {d.name === "Momentum Lab" ? <MomentumSchalter an={d.erreichbar} neu={neu} /> : (d.hinweis ?? "")}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -492,7 +521,7 @@ export function RollerSeite(): JSX.Element {
 }
 
 export function MomentumSeite(): JSX.Element {
-  const [daten] = useSystem();
+  const [daten, , neu] = useSystem();
   const lab = daten?.dienste.find((d) => d.name === "Momentum Lab");
   if (!daten) return <p className="laedt">Prüfe Momentum Lab …</p>;
   if (!lab?.erreichbar) {
@@ -500,8 +529,10 @@ export function MomentumSeite(): JSX.Element {
       <section className="station">
         <h2>Momentum Lab</h2>
         <p className="hinweis">
-          Momentum Lab läuft gerade nicht. {lab?.hinweis ?? ""} — danach diese
-          Seite neu laden.
+          Momentum Lab läuft gerade nicht.
+        </p>
+        <p>
+          <MomentumSchalter an={false} neu={neu} />
         </p>
       </section>
     );
@@ -512,7 +543,8 @@ export function MomentumSeite(): JSX.Element {
         Momentum Lab läuft als eigener Dienst und ist hier eingebettet.{" "}
         <a href="http://127.0.0.1:8501" target="_blank" rel="noreferrer">
           In eigenem Fenster öffnen
-        </a>
+        </a>{" "}
+        <MomentumSchalter an={true} neu={neu} />
       </p>
       <iframe title="Momentum Lab" src="http://127.0.0.1:8501" className="einbettung" />
     </section>

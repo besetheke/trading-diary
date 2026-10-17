@@ -606,6 +606,10 @@ export function sendeRollerBefehl(
   return schicke('POST', `/journal/roller-befehl/${name}${q ? `?${q}` : ''}`, {})
 }
 
+export function sendeMomentumBefehl(aktion: 'start' | 'stop'): Promise<{ ok: boolean; text: string }> {
+  return schicke('POST', `/journal/momentum/${aktion}`, {}) as Promise<{ ok: boolean; text: string }>
+}
+
 export interface RollerAntwort {
   erreichbar: boolean
   status: RollerStatus | null

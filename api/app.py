@@ -3631,6 +3631,19 @@ def erzeuge_app(
                 raise HTTPException(status_code=code, detail=antwort.get("fehler", "abgelehnt"))
             return antwort
 
+        @applikation.post("/journal/momentum/{aktion}")
+        def momentum_steuern(aktion: str) -> dict:
+            """Momentum Lab ein- oder ausschalten (Schalter der Station): ``start`` oder ``stop``.
+            Beendet wird nur Momentum Lab selbst (api/momentum_steuerung.py)."""
+            from api import momentum_steuerung
+            if aktion not in ("start", "stop"):
+                raise HTTPException(status_code=404, detail="unbekannte Aktion")
+            ok, text = (momentum_steuerung.starten() if aktion == "start"
+                        else momentum_steuerung.beenden())
+            if not ok:
+                raise HTTPException(status_code=409, detail=text)
+            return {"ok": True, "text": text}
+
         @applikation.post("/journal/backtests/zuordnung")
         def backtest_zuordnung(eingabe: BacktestZuordnungEingabe) -> dict:
             """Entscheidung über eine Zuordnung OO → OA (AP-12a); ``vorschlag``
