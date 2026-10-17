@@ -1253,3 +1253,75 @@ header nav.bereichsnav a.aktiv {
 }
 .station pre.protokoll { max-height: 22rem; overflow: auto; font-size: 0.8em; background: #f1eee8; padding: 0.6rem; border-radius: 4px; }
 .station p.ziel { max-width: 70ch; }
+
+/* Dichte im Kettendetail (Nutzerwunsch 17.10.2026): Kennzahlen eng, Glieder nah beieinander. */
+section.kettendetail.dichte-kompakt dl.struktur,
+section.kettendetail.dichte-sehr dl.struktur {
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.15rem 0.9rem;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+section.kettendetail.dichte-kompakt dl.struktur div,
+section.kettendetail.dichte-sehr dl.struktur div {
+  flex-direction: column;
+  gap: 0;
+  justify-content: flex-start;
+}
+
+section.kettendetail.dichte-kompakt li.glied {
+  margin-bottom: 0.4rem;
+  padding: 0.3rem 0.7rem 0.4rem;
+}
+
+section.kettendetail.dichte-sehr li.glied {
+  margin-bottom: 0.15rem;
+  padding: 0.15rem 0.6rem 0.2rem;
+  font-size: 0.78rem;
+}
+
+section.kettendetail.dichte-kompakt dt,
+section.kettendetail.dichte-sehr dt {
+  font-size: 0.7rem;
+  line-height: 1.1;
+}
+
+section.kettendetail.dichte-sehr dl.struktur {
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0 0.6rem;
+  padding: 0.15rem 0.5rem;
+}
+
+section.kettendetail.dichte-kompakt dl.kopf,
+section.kettendetail.dichte-sehr dl.kopf {
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 0.2rem 0.9rem;
+  padding: 0.4rem 0.8rem;
+  margin: 0.5rem 0;
+}
+
+section.kettendetail.dichte-kompakt dl.kopf div,
+section.kettendetail.dichte-sehr dl.kopf div {
+  flex-direction: column;
+  gap: 0;
+}
+
+section.kettendetail.dichte-kompakt ol.verlauf::before,
+section.kettendetail.dichte-sehr ol.verlauf::before {
+  left: 0.7rem;
+}
+
+section.kettendetail.dichte-kompakt li.glied,
+section.kettendetail.dichte-sehr li.glied {
+  margin-left: 2rem;
+}
+
+section.kettendetail.dichte-kompakt li.glied > header .marke,
+section.kettendetail.dichte-sehr li.glied > header .marke {
+  left: -2.15rem;
+  top: 0.2rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.75rem;
+}

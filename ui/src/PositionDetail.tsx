@@ -41,8 +41,35 @@ function oaErkennungsHinweis(wert: string | null): string | undefined {
   return undefined
 }
 
+// Dichte wie in der Positionsliste (gleicher gemerkter Wert, Nutzerwunsch 17.10.2026).
+type Dichte = 'normal' | 'kompakt' | 'sehr'
+const DICHTEN: [Dichte, string, string][] = [
+  ['normal', 'Normal', 'Wie bisher'],
+  ['kompakt', 'Kompakt', 'Kleinere Schrift, Kennzahlen eng in einer Zeile'],
+  ['sehr', 'Sehr kompakt', 'Kleinste Schrift, Glieder ohne Abstand'],
+]
+const DICHTE_SCHLUESSEL = 'positionen-dichte'
+
+function leseDichte(): Dichte {
+  try {
+    const wert = window.localStorage.getItem(DICHTE_SCHLUESSEL)
+    return wert === 'normal' || wert === 'sehr' || wert === 'kompakt' ? wert : 'kompakt'
+  } catch {
+    return 'kompakt'
+  }
+}
+
 export default function PositionDetail(): JSX.Element {
   const { chainId } = useParams()
+  const [dichte, setzeDichteZustand] = useState<Dichte>(() => leseDichte())
+  function setzeDichte(wert: Dichte): void {
+    setzeDichteZustand(wert)
+    try {
+      window.localStorage.setItem(DICHTE_SCHLUESSEL, wert)
+    } catch {
+      /* Speicher fehlt — die Wahl gilt dann nur für diese Sitzung. */
+    }
+  }
   const nummer = Number.parseInt(chainId ?? '', 10)
   const [kette, setzeKette] = useState<KetteDetail | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
@@ -107,7 +134,7 @@ export default function PositionDetail(): JSX.Element {
   }
 
   return (
-    <section>
+    <section className={`kettendetail dichte-${dichte}`}>
       <nav className="zurueck">
         <Link to="/">← Zur Positionsliste</Link>
       </nav>
@@ -157,6 +184,19 @@ export default function PositionDetail(): JSX.Element {
       </dl>
 
       <h3>Verlauf</h3>
+      <div className="diagramm-wahl" role="group" aria-label="Dichte der Ansicht">
+        {DICHTEN.map(([wert, name, hinweis]) => (
+          <button
+            key={wert}
+            type="button"
+            aria-pressed={dichte === wert}
+            title={hinweis}
+            onClick={() => setzeDichte(wert)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
       <ol className="verlauf">
         {kette.glieder.map((glied) => (
           <GliedKarte key={glied.struktur.structure_id} glied={glied} />
