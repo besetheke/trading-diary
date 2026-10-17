@@ -3518,3 +3518,23 @@ Tages wieder schließen. Umgesetzt im Roller (`taeglich`, `tagesende_schliessen`
 7. **Aufteilung bei Zuteilung:** Der Optionsanteil einer zugeteilten Position enthält die Prämie, der Aktienanteil
    den Kursgewinn gegen den Zuteilungspreis. Wer den IB-Einstand (Prämie in der Aktie) bevorzugt, sieht die
    Summe unverändert, aber eine andere Aufteilung — zu entscheiden, welche Aufteilung die Standardansicht sein soll.
+
+## OF-90 · Roller: Annahmen aus dem Serverfeedback vom 16.10.2026 (übernommen 17.10.2026)
+
+Vom Nutzer zur Übernahme freigegeben („Übernehme auch die Annahmen“). Die Werte sind Startwerte, **nicht** an echten
+Fills kalibriert; sie werden nach den ersten Läufen mit den neuen Ereignisdaten (`order_status`, `ib_preisschutz`,
+`ib_deckel`, `kostenbremse`, `ib_laerm`) überprüft. Code im Roller-Repo, Commit `2115f1a`.
+
+1. **Startanteil 0,25** (`start_anteil`): Die erste Kombi-Order startet bei `Mittel + 0,25 × (natürlich − Mittel)`,
+   nie unter dem Mittelkurs-Limit; danach feste Schritte (`nachzieh_anteil` der Strecke bis zur Grenze). Grund:
+   verzögerte Quoten machen den natürlichen Preis zu hoch (IB-Preisschutz 202/2161). Gilt für alle Strategien.
+   Prüfen: Füllquote und Spread-Kosten je Strategie; höher = schneller gefüllt, teurer.
+2. **Kostenbremse** (`max_kettenverlust_anteil`): Die Automatik rollt nicht weiter, wenn die Kette danach unter
+   −(Anteil × Spreadbreite) läge — **40 % im Normalprofil, 60 % im Testprofil** (K002: −10,40 bei Breite 25 ≈ 42 %).
+   Sie meldet Kette jetzt, Kosten Weiterrollen und Schließen; Freigabe/Schließen in der Station bleibt möglich.
+   Spannung zum Nutzerwunsch „keine Obergrenze für Rolls“: die Bremse zählt Geld, nicht Rolls, stoppt aber die
+   Automatik. Abschalten: `max_kettenverlust_anteil=None`. Offen: ob ein teurer Roll fachlich dennoch richtig ist.
+3. **Gruppierte IB-Meldungen** (`LAERM_CODES`): 10090, 200, 300, 2188 (aus dem Serverbefund) und 354 (von mir
+   ergänzt) erscheinen nur als Sammelzeile alle 10 Minuten plus Ereignis `ib_laerm`. Fehler zu einer Order bleiben
+   einzeln. Risiko: ein echter Fehler hinter Code 200 (falscher Strike/Verfall) fällt nur am Zähler auf — ein
+   plötzlich hoher Zähler ist das Signal.
