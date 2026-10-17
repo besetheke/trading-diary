@@ -3779,3 +3779,28 @@ Aus der Rückmeldung übernommen und umgesetzt (Tests in `tests/test_steuer_haer
 
 **Nicht übernommen:** Beträge mit abweichendem Kursdatum bleiben in der Vorschau (der Unterschied liegt bei ein bis zwei
 Tagen Kursverschiebung); sie sind im Status mit Anzahl und Summe genannt. Die Deklarationsfreigabe fehlt weiterhin.
+
+## OF-99 · Steuer: Rückmeldung zu den offenen Punkten (Kollege, 17.10.2026) — vorgemerkt, Steuer pausiert
+
+Vom Nutzer nach „Steuer vorerst pausieren“ nachgereicht. **Noch nicht umgesetzt**, rechtliche Aussagen nicht von mir
+geprüft. Vorschläge des Kollegen, die bei Wiederaufnahme anstehen:
+
+1. **Quellenhierarchie statt „Bestätigung durch den Steuerberater“:** Gesetz, aktuelles BMF-Schreiben (14.05.2025),
+   amtlicher Vordruck 2025, BFH-Rechtsprechung, IB-Unterlagen nur zur Klärung des Sachverhalts. Statt `ungeprueft` /
+   `laut_berater_antwort` je Regel die Marker `amtlich_belegt`, `aus_daten_belegt`, `vorsichtige_standardbehandlung`.
+   Absicherung für 2025: Berechnung mit kurzer Erläuterung unter „Ergänzende Angaben zur Steuererklärung“ einreichen
+   (keine Auskunft nach § 89 Abs. 2 AO für bereits verwirklichte Vorgänge).
+2. **Ersatzzahlungen 2025 (aus den Daten):** positive PIL 788,69 €, Stornos −30,21 €, netto empfangen 758,48 €;
+   laufende SYEP-Vergütung 238,86 €; zusammen 997,34 € als § 22 Nr. 3 (Freigrenze 256 € überschritten);
+   UNH-PIL-Belastung −187,06 € (Leerverkauf durch Zuteilung 12.09.–16.09.2025, Belastung 23.09.) nicht dagegen
+   saldieren, vorsichtshalber nicht abziehen; PIL-Quellensteuer 70,17 € nicht in KAP 41. Die IB-Anfrage wäre für 2025
+   nicht mehr nötig, Nachweis über „IB Managed Securities Lent Activity“ und „Fee Details“ des Activity Statements.
+3. **Rückkäufe (BMF 14.05.2025, Rn. 25):** gezahlte Glattstellungsprämie plus Kosten sind im Zahlungszeitpunkt negativer
+   Kapitalertrag im Verlustverrechnungstopf → Zeile 19 behält den Saldo, Zeile 22 enthält die Rückkäufe zusätzlich;
+   Standard `rueckkauf_als_verlust` wäre auf `True` umzustellen, der Vergleich ohne Rückkäufe bleibt als Alternative.
+   Zeile 22 2025: 803.595,03 € → 2.367.907,87 € (+1.564.312,84 €), Zeile 19 unverändert 80.424,76 €.
+4. **Deutsche Emittenten (§ 34d EStG: Sitz des Schuldners bzw. der veräußerten Gesellschaft):** 2025 nur HNR1,
+   Aktienverkaufsergebnis 164,29 € → von Zeile 19 nach Zeile 18 (Zeile 20 bleibt); Zeile 19 würde mit der
+   SYEP-Verschiebung nach SO auf etwa 80.021,61 € sinken. Keine Dividenden deutscher Emittenten 2025.
+5. **Offen bleiben:** Behandlung der 70,17 € ausländischer Steuer auf PIL (Anlage AUS bzw. Erstattung) und eine
+   mögliche Abziehbarkeit der 187,06 € Kompensationszahlung.
