@@ -3671,9 +3671,24 @@ zu klären; 17.832 von 26.422 Strömen tragen „kursdatum_abweichend“ (Regel 
    übrigen Länder (rund 290 EUR) stehen als „ungeklärt“.
 4. **Ersatzzahlungen:** 140 Buchungen bei 48 Symbolen; im Rohsatz kein Hinweis auf die Ursache (`code` leer, `dividendType`
    „Ordinary Dividend“).
-5. **6 ausgeübte gekaufte Optionen ohne Lieferungsausführung** (u. a. SMH Call 230, 245 im Januar/Februar 2023, CWH Put
-   24,5 März 2023, MED Put 50 Juni 2024): Zur selben Zeit steht keine Aktienausführung im Journal; ihre Kosten stehen
-   bis zur Klärung in den offenen Regeln.
+5. **6 ausgeübte gekaufte Optionen ohne Lieferung — gelöst (17.10.2026), kein Datenmangel, sondern zwei Fehler in
+   der Zuordnung:** (a) Aktien tragen im Journal oft kein `underlying` (53 von 166), nur das Symbol; die Zuordnung zur
+   Lieferung verglich beides nicht. (b) Ein gekaufter Put ohne Aktienbestand eröffnet einen Leerverkauf (STZ Put 145,
+   SPY Put 644 im Jahr 2025); das offene Bein nahm die Optionskosten nicht auf. Die Trade-Bestätigung des Nutzers
+   (SMH: Kauf 100 × 230 und 100 × 245 durch Ausübung, Verkäufe 10.03.2023 zu 238) stimmt mit dem Journal überein.
+   Jetzt 0 offene Fälle; Tests in `tests/test_steuer_basiswert.py`.
+6. **Verlustvortrag zum 31.12.2024 (Steuerbescheid, Angabe des Nutzers):** Einkünfte aus Kapitalvermögen mit
+   Abgeltungsteuer (§ 20 Abs. 6 Satz 1 EStG) 17.460 €; Aktienveräußerungen (§ 20 Abs. 6 Satz 4 EStG) 1.863 €. Eingang
+   in die Verrechnung ist Sache des Steuerberaters; die Aufbereitung verrechnet nicht und braucht die Zahlen nicht.
+   Die Jahre 2022 bis 2024 werden nicht mehr benötigt (nur 2025 und 2026).
+7. **Kurs von `fxRateToBase` (Test an den Daten, 30.980 USD-Ausführungen):** Der Kurs stimmt in 30.359 von 30.359
+   geprüften Fällen mit dem Kurs anderer Ausführungen desselben **Handelstags** überein (nur 2.583 zufällig auch mit dem
+   des Abrechnungstags). Es gilt also das Datum des Geschäfts; an 467 von 1.078 Handelstagen gibt es mehr als einen Kurs,
+   der Kurs folgt demnach dem Zeitpunkt des Geschäfts. Bestätigung durch IB steht aus.
+8. **USD-Tagessaldo ist aus den Daten rekonstruierbar:** Aus Ausführungen, Cash-Buchungen und EUR.USD-Devisengeschäften
+   (18 Käufe/Verkäufe, 142.696 USD gekauft) ergibt sich der Endbestand 2022 exakt (−165.338 USD wie im IB Cash Report);
+   2023 weicht um 140 USD ab, 2024 um 26.917 USD und 2025 um 6.337 USD, weil weitere Devisenpaare (EUR.SEK, USD.SEK,
+   EUR.PLN, PLN.EUR, EUR.CHF, EUR.GBP) noch nicht eingerechnet sind.
 
 **Neu gebaut:** `journal steuer-listen ORDNER` schreibt fünf Einzelfall-Listen für den Berater (Ersatzzahlungen,
 ETF-Beine, Optionskosten ohne Lieferung, Buchungen am Jahreswechsel, Quellensteuer zu prüfen); die Seite zeigt die

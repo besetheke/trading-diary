@@ -191,6 +191,11 @@ def _datum(e: dict, feld: str) -> date:
     return e["handelszeit"].date()
 
 
+def _basiswert(i: dict) -> str | None:
+    """Basiswert eines Instruments: ``underlying``, bei Aktien (dort oft leer) das Symbol."""
+    return i.get("underlying") or i.get("symbol")
+
+
 def _faktor(leg: dict, schluessel: str) -> Decimal:
     f = leg.get("open_faktor" if schluessel == "open" else "close_faktor")
     return Decimal(1) if f is None else Decimal(str(f))
@@ -357,7 +362,7 @@ def _option(s: _Sammler, leg, i, o, c, menge, mult, lieferungskosten) -> None:
     if ereignis in _LIEFERUNG_EREIGNISSE and art != "barausgleich":
         if ko is not None:
             kosten = _wert(o, fo, menge, mult) * ko - _komm_eur(s, o, fo, menge, ko)
-            lieferungskosten.append({"underlying": i.get("underlying"), "zeit": c["handelszeit"],
+            lieferungskosten.append({"underlying": _basiswert(i), "zeit": c["handelszeit"],
                                      "right": i.get("right"), "kosten": kosten, "symbol": symbol})
         return
     kc = None
@@ -426,7 +431,12 @@ def _ergebnisbein(s: _Sammler, leg, i, o, c, menge, mult, klasse, ab, ergebnis_l
     else:
         offen_seite = ("exec", o)
     if c is None:
-        return  # offen: nichts realisiert
+        # Offen: nichts realisiert. Entsteht das Bein durch Lieferung (z. B. Leerverkauf durch Ausübung eines gekauften
+        # Puts), nimmt es die Optionskosten trotzdem auf, damit sie nicht als „ohne Lieferung“ gelten.
+        if o is not None and o.get("ereignistyp") in _LIEFERUNG_EREIGNISSE:
+            ergebnis_legs.append({"leg": leg, "i": i, "o": o, "c": None, "brutto": _NULL, "komm": _NULL,
+                                  "optionskosten": _NULL, "menge": menge, "klasse": klasse, "etf": False, "offen": True})
+        return
     brutto = komm = _NULL
     kurse_ok = True
     for art, e in (offen_seite, ("exec", c)):
@@ -452,13 +462,14 @@ def _ergebnisbein(s: _Sammler, leg, i, o, c, menge, mult, klasse, ab, ergebnis_l
 
 def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, inst) -> None:
     for k in kosten_liste:
-        call = k["right"] == "C"
         treffer = []
         for r in ergebnis_legs:
-            if r["klasse"] != "STK" or (r["i"].get("underlying") != k["underlying"]):
+            if r["klasse"] != "STK" or _basiswert(r["i"]) != k["underlying"]:
                 continue
-            e = r["o"] if call else r["c"]
-            if e is not None and e.get("ereignistyp") in _LIEFERUNG_EREIGNISSE and e["handelszeit"] == k["zeit"]:
+            if any(
+                e is not None and e.get("ereignistyp") in _LIEFERUNG_EREIGNISSE and e["handelszeit"] == k["zeit"]
+                for e in (r["o"], r["c"])
+            ):
                 treffer.append(r)
         gesamt = sum((r["menge"] for r in treffer), _NULL)
         if not treffer or gesamt == _NULL:
@@ -471,6 +482,8 @@ def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, inst) -> 
 
 
 def _ergebnis_buchen(s: _Sammler, r: dict) -> None:
+    if r.get("offen"):
+        return  # noch nicht realisiert
     leg, i, c = r["leg"], r["i"], r["c"]
     symbol = i.get("symbol") or ""
     gesamt = r["brutto"] + r["komm"] + r["optionskosten"]
