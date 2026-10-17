@@ -1328,6 +1328,17 @@ export interface SteuerAntwort {
     kursdatum_abweichend: number
     stroeme: number
   }
+  ib_ueberleitung: {
+    jahr: number
+    ib_aktien: string
+    verschobene_praemien: string
+    rest_aktien: string
+    station_aktien: string
+    ib_optionen_futures: string
+    offene_praemien: string
+    rest_optionen: string
+    station_optionen: string
+  }[]
   fremdwaehrung_salden: { waehrung: string; von: string; bis: string; anfangsbestand: string; endbestand: string }[]
   jahre: SteuerJahr[]
   datenluecken: { schluessel: string; grund: string; text: string }[]

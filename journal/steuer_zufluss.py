@@ -167,3 +167,44 @@ def listen_schreiben(ergebnis: SteuerZuflussErgebnis, ordner: pathlib.Path) -> d
          if s.vorgang in ("quellensteuer_erstattungsfaehig", "quellensteuer_ungeklaert", "quellensteuer_ersatzzahlung")],
     )
     return anzahl
+
+
+def ib_ueberleitung_bericht(db_pfad: str | pathlib.Path, ergebnis: SteuerZuflussErgebnis) -> dict[int, dict]:
+    """Überleitung IB → Station je Jahr (siehe ``analytics.steuer_ueberleitung``). Nur lesend."""
+    from decimal import Decimal
+
+    from analytics.steuer_ueberleitung import ib_ueberleitung
+    from analytics.steuer_zufluss import _LIEFERUNG_EREIGNISSE
+    from journal.schema import flex_ib_realized
+
+    engine = create_db_engine(db_pfad)
+    with engine.connect() as v:
+        klasse_je_conid = {z["conid"]: z["asset_class"] for z in v.execute(
+            select(instruments.c.conid, instruments.c.asset_class)).mappings()}
+        ib_zeilen = [
+            {
+                "exec_id": z["exec_id"], "jahr": z["handelstag"].year,
+                "klasse": klasse_je_conid.get(z["conid"], "?"),
+                "eur": Decimal(str(z["fifo_pnl_realized"])) * Decimal(str(z["fx_rate_to_base"])),
+            }
+            for z in v.execute(
+                select(flex_ib_realized.c.exec_id, flex_ib_realized.c.handelstag, flex_ib_realized.c.conid,
+                       flex_ib_realized.c.fifo_pnl_realized, flex_ib_realized.c.fx_rate_to_base)
+            ).mappings()
+            if z["fifo_pnl_realized"] is not None and z["fx_rate_to_base"] is not None
+        ]
+        ereignis_je_exec = {z["exec_id"]: z["ereignistyp"] for z in v.execute(
+            select(executions.c.exec_id, executions.c.ereignistyp)).mappings()}
+        lieferung, offen = set(), set()
+        for z in v.execute(
+            select(legs.c.leg_id, legs.c.conid, legs.c.open_exec_id, legs.c.close_exec_id)
+            .where(legs.c.sicht == "konto")
+        ).mappings():
+            if z["close_exec_id"] is None:
+                offen.add(z["leg_id"])
+            elif klasse_je_conid.get(z["conid"]) == "STK" and (
+                ereignis_je_exec.get(z["open_exec_id"]) in _LIEFERUNG_EREIGNISSE
+                or ereignis_je_exec.get(z["close_exec_id"]) in _LIEFERUNG_EREIGNISSE
+            ):
+                lieferung.add(z["close_exec_id"])
+    return ib_ueberleitung(ergebnis, ib_zeilen, frozenset(lieferung), frozenset(offen))

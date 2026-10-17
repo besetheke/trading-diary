@@ -3693,3 +3693,30 @@ zu klären; 17.832 von 26.422 Strömen tragen „kursdatum_abweichend“ (Regel 
 **Neu gebaut:** `journal steuer-listen ORDNER` schreibt fünf Einzelfall-Listen für den Berater (Ersatzzahlungen,
 ETF-Beine, Optionskosten ohne Lieferung, Buchungen am Jahreswechsel, Quellensteuer zu prüfen); die Seite zeigt die
 Fremdwährungssalden und die Zahl der Ströme mit abweichendem Kursdatum.
+
+## OF-96 · Überleitung der Steuer-Aufbereitung zu IBs Realized P/L (17.10.2026)
+
+Anlass: Das Activity Statement 2026 (Aktien +34.882, Optionen −54.676 EUR) weicht stark von der Station ab. Die
+Seite „Steuer“ zeigt jetzt je Jahr die **Überleitung IB → Station** (`analytics/steuer_ueberleitung.py`, Tests in
+`tests/test_steuer_ueberleitung.py`). IBs Zahlen sind die importierten `fifoPnlRealized × fxRateToBase` (stimmen mit dem
+Activity Statement überein).
+
+| Jahr | IB Aktien | verschobene Prämien | Station Aktien (inkl. ETF) | IB Optionen + Futures | offene Prämien | Station Stillhalter + Termin |
+|---|---|---|---|---|---|---|
+| 2022 | 1.189 | 7.532 | −6.354 | 29.765 | 0 | 83.426 |
+| 2023 | −209 | 86.649 | −86.858 | 29.967 | 0 | 75.834 |
+| 2024 | −1.649 | 19.372 | −21.021 | 924 | 0 | 29.409 |
+| 2025 | −20.478 | 56.236 | −77.504 | 58.360 | 0 | 128.757 |
+| 2026 (bis 16.10.) | 34.882 | 124.525 | −89.680 | −48.824 | 315.123 | 378.723 |
+
+**Lesart:** (1) IB schiebt die Prämie einer zugeteilten Option in den Einstand der Aktie; die Station lässt sie als
+Stillhalterprämie stehen (Arbeitsstand des Steuerberaters, OF-92). Das verschiebt in jedem Jahr Beträge zwischen
+Aktien und Optionen (2023: 86.649 EUR) — der Aktien-Rest je Jahr bleibt unter 800 EUR, die Überleitung geht bei den
+Aktien also praktisch auf. (2) 2026: offene Short-Positionen mit 315.123 EUR Prämie zählen nur in der Station.
+(3) Der Options-Rest (2022 +46.128, 2023 −40.782, 2024 +9.113, 2025 +14.162, 2026 −12.101) ist im Wesentlichen der
+Zeitpunkt (Prämie im Zuflussjahr statt im Schließungsjahr), dazu Kommission, Kurs und Rundung; nicht weiter
+aufgeschlüsselt.
+
+**Folge für die Steuer:** Wurden die Jahre 2022 bis 2024 mit den IB-Zahlen erklärt, liegen Aktien- und
+Optionsergebnis nach der Regel des Steuerberaters (Prämie separat) anders. Aktienverluste sind nur mit
+Aktiengewinnen verrechenbar. Ob eine Berichtigung nötig ist, entscheidet der Steuerberater.

@@ -202,6 +202,49 @@ export default function Steuer(): JSX.Element {
         </>
       )}
 
+      <h3>Überleitung zu IBs Realized P/L (Activity Statement), EUR</h3>
+      <p className="sicht">
+        Warum die Station von den Summen im Activity Statement abweicht: <strong>IB schiebt die Prämie einer zugeteilten
+        Option in den Einstand der Aktie</strong> (die Option bucht 0) — die Station lässt sie als Stillhalterprämie
+        stehen (Arbeitsstand des Steuerberaters). Das verschiebt Beträge zwischen Aktien und Optionen, nicht die Summe.
+        Dazu zählen offene Short-Positionen in der Station schon im Zuflussjahr. „Rest“ ist nicht weiter aufgeschlüsselt
+        (Zuflussjahr statt Schließungsjahr, Kommission, Kurs, Rundung). Aktien der Station inklusive ETFs.
+      </p>
+      <div className="tabelle-rahmen">
+        <table className="positionen dichte-kompakt">
+          <thead>
+            <tr>
+              <th>Jahr</th>
+              <th className="zahl">IB Aktien</th>
+              <th className="zahl">− in die Aktie geschobene Prämien</th>
+              <th className="zahl">± Rest</th>
+              <th className="zahl"><strong>= Station Aktien</strong></th>
+              <th className="zahl">IB Optionen + Futures</th>
+              <th className="zahl">+ geschobene Prämien (Stillhalter)</th>
+              <th className="zahl">+ offene Prämien</th>
+              <th className="zahl">± Rest</th>
+              <th className="zahl"><strong>= Station Stillhalter + Termin</strong></th>
+            </tr>
+          </thead>
+          <tbody>
+            {daten.ib_ueberleitung.map((u) => (
+              <tr key={u.jahr}>
+                <td>{u.jahr}</td>
+                <td className="zahl"><Betrag wert={u.ib_aktien} /></td>
+                <td className="zahl"><Betrag wert={String(-Number(u.verschobene_praemien))} /></td>
+                <td className="zahl"><Betrag wert={u.rest_aktien} /></td>
+                <td className="zahl"><strong><Betrag wert={u.station_aktien} /></strong></td>
+                <td className="zahl"><Betrag wert={u.ib_optionen_futures} /></td>
+                <td className="zahl"><Betrag wert={u.verschobene_praemien} /></td>
+                <td className="zahl"><Betrag wert={u.offene_praemien} /></td>
+                <td className="zahl"><Betrag wert={u.rest_optionen} /></td>
+                <td className="zahl"><strong><Betrag wert={u.station_optionen} /></strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <h3>Fremdwährungssalden laut IB (Cash Report, nur zur Anzeige)</h3>
       <p className="sicht">
         Ein negativer Endbestand ist ein <strong>Sollsaldo</strong> (Margin-Kredit in dieser Währung), kein Guthaben. Der

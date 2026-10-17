@@ -85,7 +85,11 @@ from journal.schema import (
     tags,
 )
 from journal.steuer import steuer_bericht
-from journal.steuer_zufluss import fremdwaehrung_salden, steuer_zufluss_bericht
+from journal.steuer_zufluss import (
+    fremdwaehrung_salden,
+    ib_ueberleitung_bericht,
+    steuer_zufluss_bericht,
+)
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
@@ -1133,8 +1137,23 @@ class SteuerSaldoAntwort(BaseModel):
     endbestand: str
 
 
+class SteuerUeberleitungAntwort(BaseModel):
+    """Überleitung IB → Station je Jahr, EUR; Texte der Zeilen stehen in der Oberfläche."""
+
+    jahr: int
+    ib_aktien: str
+    verschobene_praemien: str
+    rest_aktien: str
+    station_aktien: str
+    ib_optionen_futures: str
+    offene_praemien: str
+    rest_optionen: str
+    station_optionen: str
+
+
 class SteuerAntwort(BaseModel):
     methode: dict
+    ib_ueberleitung: list[SteuerUeberleitungAntwort] = []
     fremdwaehrung_salden: list[SteuerSaldoAntwort] = []
     jahre: list[SteuerJahrAntwort]
     datenluecken: list[SteuerDatenlueckeAntwort]
@@ -3708,8 +3727,22 @@ def erzeuge_app(
             "kursdatum_abweichend": sum(1 for s in ergebnis.stroeme if s.pruefstatus != "ok"),
             "stroeme": len(ergebnis.stroeme),
         }
+        ueberleitung = ib_ueberleitung_bericht(db_pfad, ergebnis)
         return SteuerAntwort(
             methode=methode,
+            ib_ueberleitung=[
+                SteuerUeberleitungAntwort(
+                    jahr=jahr, ib_aktien=_als_text(u["ib_aktien"]),
+                    verschobene_praemien=_als_text(u["verschobene_praemien"]),
+                    rest_aktien=_als_text(u["rest_aktien"]),
+                    station_aktien=_als_text(u["station_aktien"]),
+                    ib_optionen_futures=_als_text(u["ib_optionen_futures"]),
+                    offene_praemien=_als_text(u["offene_praemien"]),
+                    rest_optionen=_als_text(u["rest_optionen"]),
+                    station_optionen=_als_text(u["station_optionen"]),
+                )
+                for jahr, u in ueberleitung.items()
+            ],
             fremdwaehrung_salden=[
                 SteuerSaldoAntwort(
                     waehrung=z["waehrung"], von=z["von"], bis=z["bis"],

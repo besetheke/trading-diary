@@ -491,7 +491,7 @@ def _ergebnis_buchen(s: _Sammler, r: dict) -> None:
         s.regel_offen("etf_investmentsteuer",
                       "ETF/ETN/ETP-Anteile: steuerliche Behandlung (Investmentsteuergesetz, Teilfreistellung) fehlt; nicht im Aktien-Topf.",
                       gesamt,
-                      detail={"leg_id": leg.get("leg_id"), "symbol": symbol,
+                      detail={"leg_id": leg.get("leg_id"), "symbol": symbol, "exec_id": c["exec_id"],
                               "eroeffnet": r["o"]["handelszeit"].date().isoformat() if r["o"] else "",
                               "geschlossen": c["handelszeit"].date().isoformat(), "ergebnis_eur": gesamt})
         return
