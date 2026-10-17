@@ -3549,6 +3549,7 @@ Die Seite `/steuer` (API `/steuer-auswertung`, `/steuer-csv`) bereitet die Zahle
 Töpfe Aktien/Termingeschäfte in EUR (Buchungskurs der Schließung, OF-59), daneben Dividenden, Quellensteuer, Zinsen,
 Gebühren aus den Cash-Buchungen. Sie verrechnet nichts und ist keine Steuerberatung.
 
+**Stand 17.10.2026: vorläufig entschieden, siehe OF-92 — die Prämie bleibt separat, die Aktie kommt zum Strike.**
 1. **Prämie bei Zuteilung (Frage an den Steuerberater).** AP-10v bucht die Prämie einer mit Lieferung beendeten
    Option (Zuteilung/Ausübung) in den Topf der Termingeschäfte, die gelieferte Aktie führt den Verlust gegen den
    Strike im Aktien-Topf (Echtbestand, netto aus Zuteilung und Ausübung, EUR: 2022 37.069, 2023 58.862, 2024 28.408,
@@ -3559,3 +3560,45 @@ Gebühren aus den Cash-Buchungen. Sie verrechnet nichts und ist keine Steuerbera
 2. **Weiter offen:** OF-58 (Jahresgrenze ohne Zeitzone), OF-59 (EUR je Zahlungsstrom statt Buchungskurs),
    Verlustverrechnung und Anlage KAP (Umfang mit dem Nutzer, OF-82.1).
 3. **Mitgebaut:** Dividenden je Titel auf der Titel-Seite (OF-89), Anzeige in Originalwährung und ohne Kommission.
+
+## OF-92 · Steuer: Arbeitsstand des Steuerberaters mit Anmerkungen (17.10.2026)
+
+Quelle: konsolidierte Antwort zur Fragenliste (OF-91) und Anmerkungen eines Kollegen. **Arbeitsstand, nicht
+gesichert** — vor Abnahme von AP-10c vom Steuerberater zu bestätigen. Plan: `auftraege/AP-10b.md` (Regeln, Tests),
+`AP-10c.md` (Umsetzung), `AP-10d.md` (wartet auf Daten/Berater). OF-91 Punkt 1 ist damit **vorläufig entschieden**:
+Die Prämie bleibt separat, die Aktie kommt zum Strike; die Vermutung „Prämie mindert Anschaffungskosten“ war falsch.
+
+**Übernommene Präzisierungen**
+
+1. **Verlustverrechnung:** Aktienverluste nur mit Aktiengewinnen; übrige Kapitalverluste mit positiven
+   Kapitalerträgen ohne die frühere 20.000-€-Grenze; keine Verrechnung mit anderen Einkunftsarten; **SO-Einkünfte**
+   (Ersatzzahlungen, SYEP, private Fremdwährungsgeschäfte) stehen außerhalb. Festgestellte Verlustvorträge sind
+   Eingabe; bankinterne Verlusttöpfe sind etwas anderes (kein inländischer Abzug).
+2. **Quellensteuer:** echte Dividenden: Anrechnung nach DBA-Grenze (USA regelmäßig 15 %), keine Garantie
+   vollständiger Anrechnung; Ersatzzahlungen: nicht automatisch in KAP 41, Entlastung gesondert prüfen
+   (Zahlungsart, Einkunftsart, DBA); „keine Anlage AUS“ gilt nur für die abgeltungsbesteuerten Erträge, nicht für
+   ausländische SO-Einkünfte. Irische Zinsquellensteuer nicht anrechenbar (unter den besprochenen Voraussetzungen).
+3. **Währung:** Anschaffung und Veräußerung getrennt zum maßgeblichen Kurs (Wertpapiere: Geschäftsabschluss;
+   Stillhalterprämie/Glattstellung: Zufluss bzw. Zahlung); Kursquelle und Datumsfelder dokumentieren; Netto zum
+   Schlusskurs ungeeignet. **Offen:** IB-Kurs (`fxRateToBase` der Ausführung) oder EZB-Referenzkurs (müsste
+   importiert werden).
+4. **Jahreswechsel:** kein Wahlrecht Handels-/Abrechnungstag. Maßgeblich ist der tatsächliche Zufluss bzw. die Zahlung;
+   anhand der IB-Abrechnung ist zu klären, welches Datumsfeld das abbildet. Das Journal hat `tradeDate`, `dateTime`
+   und `settleDateTarget` je Ausführung (alle 35.053 gefüllt). Bis zur Klärung: eine konfigurierbare Stelle
+   (Vorgabe `settleDateTarget`), Betroffenheit je Jahr wird gezählt.
+5. **SYEP:** Dividendenersatz (spricht für § 22 Nr. 3) und laufende Vergütung getrennt einordnen; „Interest“ in der
+   IB-Bezeichnung entscheidet nicht. Freigrenze 256 € gilt auf die **Summe** der § 22-Nr.-3-Leistungen nach Kosten;
+   steuerfrei ist, was darunter liegt. Abschalten vermeidet künftige Zahlungen, 2026 bleibt aufzuarbeiten.
+6. **USD-Konto:** Einordnung nach Vertrag, Verzinsungsstruktur und Funktion (Zahlungsverkehrskonto-Regel); IBs
+   Forex-Zahl „nicht ungeprüft verwendbar“ (nicht „für keine Variante verwendbar“); 1.000-€-Freigrenze gilt für alle
+   privaten Veräußerungsgeschäfte zusammen.
+7. **Zuteilung:** Aktie zum Strike **zuzüglich zugehöriger Transaktionskosten**, Prämie separat; IB-Werte sind
+   abzustimmen. Das Konzept der Aufbereitung ist richtig, ihre rechnerische **Umsetzung ist noch zu prüfen** (der
+   frühere Satz „macht es richtig“ war zu weitgehend).
+8. **Formulare:** KAP-Zeilen (19, 20, 22, 23, 41) gelten für **2025**; für 2026 vor Erstellung am amtlichen Vordruck
+   prüfen. **Verfall:** beim Stillhalter geschieht nichts weiter; bei gekaufter Option ist der wertlose Verfall für
+   die Verlustermittlung relevant.
+
+**Benötigt (Eingaben):** Flex-Daten 2025; steuerliche Anfangsbestände zum 01.01.2025 (Anschaffungskosten und -daten
+der Aktien-, Options- und USD-Bestände) und festgestellte Verlustvorträge; IB-Leihberichte für die Ursache der
+Ersatzzahlungen; USD-Saldoverlauf. Das ist keine Neubearbeitung alter Erklärungen, sondern die Ausgangsbasis 2025.
