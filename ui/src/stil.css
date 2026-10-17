@@ -1325,3 +1325,33 @@ section.kettendetail.dichte-sehr li.glied > header .marke {
   height: 1.4rem;
   font-size: 0.75rem;
 }
+
+/* Verlauf der Kette als Liste (Nutzerwunsch 17.10.2026): eine Zeile je Schritt, Strikes immer sichtbar. */
+table.verlaufsliste {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+table.verlaufsliste td.strikes {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+table.verlaufsliste td {
+  white-space: nowrap;
+}
+
+table.verlaufsliste tr.glied-zeile.offen-detail td {
+  background: var(--flaeche, #f3f1ea);
+}
+
+table.verlaufsliste tr.glied-detail > td {
+  white-space: normal;
+  padding: 0.3rem 0.5rem 0.6rem 2rem;
+  background: #fff;
+}
+
+table.verlaufsliste button.klein {
+  padding: 0 0.45rem;
+  line-height: 1.2;
+}

@@ -77,6 +77,8 @@ export interface Kettenglied {
   verknuepfungstyp: string
   erkennung: string
   struktur: Struktur
+  // Strikes laut Instrument der Legs („P 2910/2960“); leer bei Aktien.
+  strikes?: string | null
 }
 
 export interface KetteDetail extends Kette {

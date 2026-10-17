@@ -218,6 +218,9 @@ class KettengliedAntwort(BaseModel):
     verknuepfungstyp: str
     erkennung: str
     struktur: StrukturAntwort
+    # Strikes laut Instrument der Legs, z. B. „P 2910/2960“ oder „C 7900 · P 7800“:
+    # Einzeloptionen tragen ihre Strikes nicht an der Struktur.
+    strikes: str | None = None
 
 
 class KetteDetailAntwort(KetteAntwort):
@@ -1406,6 +1409,29 @@ def _realisiert_je_waehrung(
     return summen
 
 
+def _strikes_je_struktur(verbindung: Connection, structure_ids: list[int]) -> dict[int, str]:
+    """Strikes je Struktur aus den Instrumenten ihrer Legs, nach Seite gruppiert: ``P 2910/2960``,
+    bei Put und Call ``C 7900/7950 · P 7800/7750``. Aktien und Legs ohne Strike fehlen."""
+    if not structure_ids:
+        return {}
+    zeilen = verbindung.execute(
+        select(legs.c.structure_id, instruments.c.right, instruments.c.strike)
+        .join(instruments, instruments.c.conid == legs.c.conid)
+        .where(legs.c.structure_id.in_(structure_ids), instruments.c.strike.is_not(None))
+    ).all()
+    je: dict[int, dict[str, set[Decimal]]] = {}
+    for structure_id, seite, strike in zeilen:
+        je.setdefault(structure_id, {}).setdefault(seite or "", set()).add(Decimal(strike))
+    ergebnis: dict[int, str] = {}
+    for structure_id, seiten in je.items():
+        teile = []
+        for seite in sorted(seiten, reverse=True):          # P vor C ... Put zuerst
+            werte = "/".join(format(w.normalize(), "f") for w in sorted(seiten[seite]))
+            teile.append(f"{seite} {werte}".strip())
+        ergebnis[structure_id] = " · ".join(teile)
+    return ergebnis
+
+
 def _struktur_als_dict(s) -> dict:
     """Spaltenwerte einer Strukturzeile für das Antwortmodell (Vertrag 10)."""
     return dict(
@@ -2506,6 +2532,8 @@ def erzeuge_app(
                 .where(chain_links.c.chain_id == chain_id)
                 .order_by(chain_links.c.sequenz)
             ).mappings().all()
+            strikes_je_struktur = _strikes_je_struktur(
+                verbindung, [g["structure_id"] for g in glied_zeilen])
             strukturen = {
                 s["structure_id"]: s
                 for s in verbindung.execute(
@@ -2524,6 +2552,7 @@ def erzeuge_app(
                     struktur=StrukturAntwort(
                         **_struktur_als_dict(strukturen[g["structure_id"]])
                     ),
+                    strikes=strikes_je_struktur.get(g["structure_id"]),
                 )
                 for g in glied_zeilen
             ],

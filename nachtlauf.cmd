@@ -32,7 +32,7 @@ rem schreibt ganz oder gar nicht, die Datenbank ist danach konsistent, und
 rem eine naechtliche Sicherung soll nicht vom Netz abhaengen. Der erste
 rem Fehlercode bleibt der Rueckgabewert.
 if not defined FLEX_BACKUP_ZIEL goto fertig
-call backup.cmd journal.db "%FLEX_BACKUP_ZIEL%\journal-%TAG%.db" >> "%LOG%" 2>&1
+call "%~dp0backup.cmd" journal.db "%FLEX_BACKUP_ZIEL%\journal-%TAG%.db" >> "%LOG%" 2>&1
 set "BCODE=%errorlevel%"
 if "%CODE%"=="0" set "CODE=%BCODE%"
 if not "%BCODE%"=="0" goto fertig

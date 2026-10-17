@@ -1,5 +1,5 @@
 @echo off
-rem Konsistentes Backup mit VACUUM INTO (§3): backup.cmd <quelldatei> <zieldatei>
+rem Konsistentes Backup mit VACUUM INTO (Abschnitt 3): backup.cmd QUELLDATEI ZIELDATEI
 rem Der Zielpfad ist frei waehlbar (z. B. Netzlaufwerk). Die Aufbewahrung
 rem (letzte 14 Staende) rotiert der Aufrufer im Taskplaner-Skript.
 cd /d "%~dp0"

@@ -197,11 +197,31 @@ export default function PositionDetail(): JSX.Element {
           </button>
         ))}
       </div>
-      <ol className="verlauf">
-        {kette.glieder.map((glied) => (
-          <GliedKarte key={glied.struktur.structure_id} glied={glied} />
-        ))}
-      </ol>
+      <table className={`positionen verlaufsliste dichte-${dichte}`}>
+        <thead>
+          <tr>
+            <th className="zahl">#</th>
+            <th>Schritt</th>
+            <th>Typ</th>
+            <th>Strikes</th>
+            <th>Verfall</th>
+            <th className="zahl" title="Tage bis Verfall bei Eröffnung">DTE</th>
+            <th className="zahl">Menge</th>
+            <th>Eröffnet</th>
+            <th>Geschlossen</th>
+            <th className="zahl" title="Prämie je Kontrakt bei Eröffnung">Preis auf</th>
+            <th className="zahl" title="Prämie je Kontrakt bei Schließung">Preis zu</th>
+            <th className="zahl">Netto</th>
+            <th>Status</th>
+            <th aria-label="Details" />
+          </tr>
+        </thead>
+        <tbody>
+          {kette.glieder.map((glied) => (
+            <GliedZeilen key={glied.struktur.structure_id} glied={glied} />
+          ))}
+        </tbody>
+      </table>
 
       {/* AP-08j: Journal der Kette — unterhalb aller bestehenden Inhalte. */}
       <Journal scopeTyp="chain" scopeId={String(nummer)} />
@@ -209,7 +229,15 @@ export default function PositionDetail(): JSX.Element {
   )
 }
 
-function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
+// Strikes eines Schritts: das Vertical aus der Struktur, sonst (Einzeloption, Mehrbeiner) aus den Legs.
+function strikesText(glied: Kettenglied): string {
+  if (glied.strikes) return glied.strikes
+  const s = glied.struktur
+  if (s.short_strike && s.long_strike) return `${s.short_strike}/${s.long_strike}`
+  return s.short_strike ?? s.long_strike ?? '—'
+}
+
+function GliedZeilen({ glied }: { glied: Kettenglied }): JSX.Element {
   const struktur = glied.struktur
   const [offen, setzeOffen] = useState(false)
   const [detail, setzeDetail] = useState<StrukturDetail | null>(null)
@@ -231,236 +259,150 @@ function GliedKarte({ glied }: { glied: Kettenglied }): JSX.Element {
   }
 
   return (
-    <li className="glied">
-      <header>
-        <span className="marke" aria-hidden="true">
-          {glied.sequenz}
-        </span>
-        <div>
-          <h4>
-            {verknuepfung(glied.verknuepfungstyp)} · {struktur.typ}
-          </h4>
-          <p className="erkennung">
-            Verknüpfung: {glied.verknuepfungstyp} · Erkennung: {erkennung(glied.erkennung)}
-          </p>
-        </div>
-        <button type="button" onClick={umschalten}>
-          {offen ? 'Legs und Ausführungen ausblenden' : 'Legs und Ausführungen anzeigen'}
-        </button>
-      </header>
-
-      <dl className="struktur">
-        {/* AP-08lk, Punkt 1: Der Naturschlüssel (zehnstellige IB-Nummern,
-            durch | getrennt — je Leg eine) läuft aus einer gewöhnlichen
-            Rasterzelle heraus und verdeckt die Nachbarbeschriftung. Er
-            bekommt eine eigene Zeile über die volle Breite; der vollständige
-            Wert bleibt im Text und zusätzlich im title — kopierbar für die
-            Durchsicht (`journal kandidaten-einlesen`). */}
-        <div className="voll">
-          <dt>Struktur</dt>
-          <dd className="schluessel" title={struktur.natur_schluessel}>
-            {struktur.natur_schluessel}
-          </dd>
-        </div>
-        {/* AP-13x: OA-Strategie und -Status der Struktur (AP-13wk), direkt
-            nach der Verknüpfungs-Erkennung im Kartenkopf — reines
-            Durchreichen, leer bleibt —. Die OA-Erkennung wird nur als
-            Hinweis (title) beim Status sichtbar, kein eigenes Element. */}
-        <div>
-          <dt>OA-Strategie</dt>
-          <dd>{struktur.oa_strategie ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>OA-Status</dt>
-          <dd title={oaErkennungsHinweis(struktur.oa_erkennung)}>
-            {struktur.oa_status ?? '—'}
-          </dd>
-        </div>
-        <div>
-          <dt>Basiswert</dt>
-          <dd>{struktur.underlying}</dd>
-        </div>
-        <div>
-          <dt>Klasse</dt>
-          <dd>{struktur.asset_class}</dd>
-        </div>
-        <div>
-          <dt>Verfall</dt>
-          <dd>{datumDe(struktur.expiry)}</dd>
-        </div>
-        <div>
-          <dt>Short-Strike</dt>
-          <dd className="zahl">{struktur.short_strike ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Long-Strike</dt>
-          <dd className="zahl">{struktur.long_strike ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Breite</dt>
-          <dd className="zahl">{struktur.breite ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Menge</dt>
-          <dd className="zahl">{struktur.menge}</dd>
-        </div>
-        <div>
-          <dt>DTE bei Eröffnung</dt>
-          <dd>{struktur.dte_bei_eroeffnung ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Status</dt>
-          <dd>{struktur.status ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Eröffnet</dt>
-          <dd title={struktur.eroeffnet_am}>{zeitDe(struktur.eroeffnet_am)}</dd>
-        </div>
-        <div>
-          <dt>Geschlossen</dt>
-          <dd title={struktur.geschlossen_am ?? undefined}>
-            {zeitDe(struktur.geschlossen_am)}
-          </dd>
-        </div>
-        {/* AP-08fp, Vertrag 3 und 4, AP-08f1: Der Eröffnungs- und Schlusspreis
-            gehören fachlich neben das Ergebnis — deutsch über betrag(), ohne
-            Farbe, der Rohwert im title. Leer bleibt leer: eine offene
-            Struktur hat keinen Schlusspreis und zeigt —. */}
-        <div>
-          <dt>Preis auf</dt>
-          <dd className="zahl" title={struktur.eroeffnungspreis ?? undefined}>
-            {struktur.eroeffnungspreis === null
-              ? '—'
-              : `${betrag(struktur.eroeffnungspreis)} ${struktur.waehrung}`}
-          </dd>
-        </div>
-        <div>
-          <dt>Preis zu</dt>
-          <dd className="zahl" title={struktur.schlusspreis ?? undefined}>
-            {struktur.schlusspreis === null
-              ? '—'
-              : `${betrag(struktur.schlusspreis)} ${struktur.waehrung}`}
-          </dd>
-        </div>
-        <div>
-          <dt>Brutto</dt>
-          <dd className="zahl">
-            <Betrag wert={struktur.brutto_pnl} waehrung={struktur.waehrung} />
-          </dd>
-        </div>
-        <div>
-          <dt>Kommission</dt>
-          <dd className="zahl">
-            <Betrag wert={struktur.kommission} waehrung={struktur.waehrung} />
-          </dd>
-        </div>
-        <div>
-          <dt>Netto (Kontosicht)</dt>
-          <dd className="zahl">
-            <Betrag wert={struktur.netto_pnl} waehrung={struktur.waehrung} />
-          </dd>
-        </div>
-      </dl>
-
-      {offen && fehler && (
-        <section className="fehler">
-          <h4>Drilldown fehlgeschlagen</h4>
-          <p>{fehler}</p>
-        </section>
-      )}
-
-      {offen && detail !== null && (
-        <details className="drilldown" open>
-          <summary>Legs ({detail.legs.length})</summary>
-          {detail.legs.length === 0 ? (
-            <p className="sicht">Keine Legs zu dieser Struktur.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Conid</th>
-                  <th className="zahl">Menge</th>
-                  <th>Eröffnung</th>
-                  <th>Schluss</th>
-                  <th>Matching</th>
-                  <th>offen?</th>
-                  <th className="zahl">Brutto</th>
-                  <th className="zahl">Kommission</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.legs.map((leg) => (
-                  <tr key={leg.leg_id} className={leg.offen_ja_nein ? 'offen' : undefined}>
-                    <td title={leg.basis_ungeklaert ? 'Basiszuordnung ungeklärt' : undefined}>
-                      {leg.conid}
-                      {leg.basis_ungeklaert ? ' ⚠' : ''}
-                    </td>
-                    <td className="zahl">{leg.menge}</td>
-                    <td>{leg.open_exec_id}</td>
-                    <td>{leg.close_exec_id ?? '—'}</td>
-                    <td>{leg.matching_methode}</td>
-                    <td>{leg.offen_ja_nein ? 'ja' : 'nein'}</td>
-                    <td className="zahl">
-                      <Betrag wert={leg.brutto_pnl} waehrung={struktur.waehrung} />
-                    </td>
-                    <td className="zahl">
-                      <Betrag wert={leg.kommission_gesamt} waehrung={struktur.waehrung} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <>
+      <tr className={`glied-zeile${offen ? ' offen-detail' : ''}`}>
+        <td className="zahl">{glied.sequenz}</td>
+        <td title={`Verknüpfung: ${glied.verknuepfungstyp} · Erkennung: ${erkennung(glied.erkennung)}`}>
+          {verknuepfung(glied.verknuepfungstyp)}
+          {glied.erkennung !== 'auto' ? ` (${erkennung(glied.erkennung)})` : ''}
+        </td>
+        <td>{struktur.typ}</td>
+        <td className="strikes" title={`Struktur ${struktur.natur_schluessel}`}>
+          {strikesText(glied)}
+        </td>
+        <td className="zeit">{datumDe(struktur.expiry)}</td>
+        <td className="zahl">{struktur.dte_bei_eroeffnung ?? '—'}</td>
+        <td className="zahl">{struktur.menge}</td>
+        <td className="zeit" title={struktur.eroeffnet_am}>{zeitDe(struktur.eroeffnet_am)}</td>
+        <td className="zeit" title={struktur.geschlossen_am ?? undefined}>
+          {zeitDe(struktur.geschlossen_am)}
+        </td>
+        <td className="zahl" title={struktur.eroeffnungspreis ?? undefined}>
+          {struktur.eroeffnungspreis === null ? '—' : betrag(struktur.eroeffnungspreis)}
+        </td>
+        <td className="zahl" title={struktur.schlusspreis ?? undefined}>
+          {struktur.schlusspreis === null ? '—' : betrag(struktur.schlusspreis)}
+        </td>
+        <td className="zahl">
+          <Betrag wert={struktur.netto_pnl} waehrung={struktur.waehrung} />
+        </td>
+        <td title={oaErkennungsHinweis(struktur.oa_erkennung)}>
+          {struktur.status ?? '—'}
+          {struktur.oa_strategie ? ` · OA: ${struktur.oa_strategie}${struktur.oa_status ? ` (${struktur.oa_status})` : ''}` : ''}
+        </td>
+        <td>
+          <button type="button" className="klein" onClick={umschalten}
+            title="Legs und Ausführungen dieses Schritts"
+            aria-expanded={offen}>
+            {offen ? '▾' : '▸'}
+          </button>
+        </td>
+      </tr>
+      {offen && (
+        <tr className="glied-detail">
+          <td colSpan={14}>
+          {offen && fehler && (
+            <section className="fehler">
+              <h4>Drilldown fehlgeschlagen</h4>
+              <p>{fehler}</p>
+            </section>
           )}
-        </details>
-      )}
 
-      {offen && ausfuehrungen !== null && (
-        <details className="drilldown" open>
-          <summary>Ausführungen ({ausfuehrungen.length})</summary>
-          {ausfuehrungen.length === 0 ? (
-            <p className="sicht">Keine Ausführungen zu dieser Struktur.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Zeit</th>
-                  <th>Rolle</th>
-                  <th>Symbol</th>
-                  <th>Seite</th>
-                  <th className="zahl">Menge</th>
-                  <th className="zahl">Preis</th>
-                  <th className="zahl">Kommission</th>
-                  <th>Ereignis</th>
-                  <th>Batch</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ausfuehrungen.map((ausfuehrung) => (
-                  <tr key={ausfuehrung.exec_id}>
-                    <td className="zeit" title={ausfuehrung.handelszeit}>
-                      {zeitDe(ausfuehrung.handelszeit)}
-                    </td>
-                    <td>{ausfuehrung.rolle}</td>
-                    <td title={`Conid ${ausfuehrung.conid}`}>{ausfuehrung.symbol}</td>
-                    <td>{ausfuehrung.side}</td>
-                    <td className="zahl">{ausfuehrung.menge}</td>
-                    <td className="zahl" title={ausfuehrung.preis}>
-                      {betrag(ausfuehrung.preis)} {ausfuehrung.waehrung}
-                    </td>
-                    <td className="zahl">
-                      <Betrag wert={ausfuehrung.kommission} waehrung={ausfuehrung.waehrung} />
-                    </td>
-                    <td>{ausfuehrung.ereignistyp}</td>
-                    <td title={ausfuehrung.oa_trade ?? undefined}>
-                      {ausfuehrung.exec_batch ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {offen && detail !== null && (
+            <details className="drilldown" open>
+              <summary>Legs ({detail.legs.length})</summary>
+              {detail.legs.length === 0 ? (
+                <p className="sicht">Keine Legs zu dieser Struktur.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Conid</th>
+                      <th className="zahl">Menge</th>
+                      <th>Eröffnung</th>
+                      <th>Schluss</th>
+                      <th>Matching</th>
+                      <th>offen?</th>
+                      <th className="zahl">Brutto</th>
+                      <th className="zahl">Kommission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.legs.map((leg) => (
+                      <tr key={leg.leg_id} className={leg.offen_ja_nein ? 'offen' : undefined}>
+                        <td title={leg.basis_ungeklaert ? 'Basiszuordnung ungeklärt' : undefined}>
+                          {leg.conid}
+                          {leg.basis_ungeklaert ? ' ⚠' : ''}
+                        </td>
+                        <td className="zahl">{leg.menge}</td>
+                        <td>{leg.open_exec_id}</td>
+                        <td>{leg.close_exec_id ?? '—'}</td>
+                        <td>{leg.matching_methode}</td>
+                        <td>{leg.offen_ja_nein ? 'ja' : 'nein'}</td>
+                        <td className="zahl">
+                          <Betrag wert={leg.brutto_pnl} waehrung={struktur.waehrung} />
+                        </td>
+                        <td className="zahl">
+                          <Betrag wert={leg.kommission_gesamt} waehrung={struktur.waehrung} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
           )}
-        </details>
+
+          {offen && ausfuehrungen !== null && (
+            <details className="drilldown" open>
+              <summary>Ausführungen ({ausfuehrungen.length})</summary>
+              {ausfuehrungen.length === 0 ? (
+                <p className="sicht">Keine Ausführungen zu dieser Struktur.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Zeit</th>
+                      <th>Rolle</th>
+                      <th>Symbol</th>
+                      <th>Seite</th>
+                      <th className="zahl">Menge</th>
+                      <th className="zahl">Preis</th>
+                      <th className="zahl">Kommission</th>
+                      <th>Ereignis</th>
+                      <th>Batch</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ausfuehrungen.map((ausfuehrung) => (
+                      <tr key={ausfuehrung.exec_id}>
+                        <td className="zeit" title={ausfuehrung.handelszeit}>
+                          {zeitDe(ausfuehrung.handelszeit)}
+                        </td>
+                        <td>{ausfuehrung.rolle}</td>
+                        <td title={`Conid ${ausfuehrung.conid}`}>{ausfuehrung.symbol}</td>
+                        <td>{ausfuehrung.side}</td>
+                        <td className="zahl">{ausfuehrung.menge}</td>
+                        <td className="zahl" title={ausfuehrung.preis}>
+                          {betrag(ausfuehrung.preis)} {ausfuehrung.waehrung}
+                        </td>
+                        <td className="zahl">
+                          <Betrag wert={ausfuehrung.kommission} waehrung={ausfuehrung.waehrung} />
+                        </td>
+                        <td>{ausfuehrung.ereignistyp}</td>
+                        <td title={ausfuehrung.oa_trade ?? undefined}>
+                          {ausfuehrung.exec_batch ?? '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
+          )}
+          </td>
+        </tr>
       )}
-    </li>
+    </>
   )
 }
