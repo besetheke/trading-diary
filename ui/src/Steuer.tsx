@@ -44,7 +44,10 @@ export default function Steuer(): JSX.Element {
       .then((d) => {
         if (abgebrochen) return
         setzeDaten(d)
-        setzeJahr(d.jahre.length > 0 ? d.jahre[d.jahre.length - 1].jahr : null)
+        // Vorgabe: das letzte abgeschlossene Jahr (die Steuererklärung betrifft ein volles Jahr); sonst das jüngste.
+        const letztes = new Date().getFullYear() - 1
+        const vorgabe = d.jahre.find((j) => j.jahr === letztes) ?? d.jahre[d.jahre.length - 1]
+        setzeJahr(vorgabe ? vorgabe.jahr : null)
       })
       .catch((ursache: unknown) => {
         if (!abgebrochen) setzeFehler(fehlerText(ursache))
@@ -124,6 +127,26 @@ export default function Steuer(): JSX.Element {
           Altverfahren (nur zum Vergleich, nicht zur Übernahme)
         </a>
       </p>
+
+      <div className="diagramm-wahl" role="group" aria-label="Jahr der Details">
+        {[...daten.jahre].reverse().map((j) => {
+          const heute = new Date().getFullYear()
+          const zusatz = j.jahr === heute ? ' (laufend, bis Stichtag)' : j.jahr === heute - 1 ? ' (letztes Jahr)' : ''
+          return (
+            <button
+              key={j.jahr}
+              type="button"
+              aria-pressed={j.jahr === jahr}
+              title={`Details und KAP-Vorschau für ${j.jahr} zeigen`}
+              onClick={() => setzeJahr(j.jahr)}
+            >
+              {j.jahr}
+              {zusatz}
+            </button>
+          )
+        })}
+        {gewaehlt && <a href={`/steuer-csv?jahr=${gewaehlt.jahr}`} download>CSV {gewaehlt.jahr}</a>}
+      </div>
 
       {gewaehlt && (
         <>
