@@ -267,8 +267,8 @@ def titel_auswertung(
         if teile is not None:
             _buche_geldteile(z, klasse, teile)
 
-    # --- Teilrealisiert: geschlossene Beine in noch offenen Strukturen. Sie zählen im Realisierten erst,
-    # wenn ihre Struktur geschlossen ist (wie die Equity); hier stehen sie getrennt (OF-89, Punkt 3).
+    # --- Teilrealisiert: schon geschlossene Beine in noch offenen Strukturen. Im Realisierten
+    # zählen sie erst mit ihrer Struktur (wie die Equity); hier stehen sie getrennt (OF-89).
     for leg in leg_zeilen:
         sid = leg["structure_id"]
         if sid is None or leg["close_exec_id"] is None or geschlossen_am.get(sid) is not None:
