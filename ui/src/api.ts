@@ -570,6 +570,8 @@ export interface RollerKetteStand {
   alarm?: boolean
   vorschlag?: RollerRollPlan | null
   geprueft?: string
+  // Verlauf der Kette (Eröffnung, Rolls mit der Position, aus der gerollt wurde, PT/Schließen)
+  verlauf?: { art: string; netto: number | null; zeit?: string | null; von?: { verfall: string; short: number; long: number } | null }[]
 }
 
 export interface RollerStatistikZeile {

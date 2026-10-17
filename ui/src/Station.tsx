@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
 import { fehlerText, holeBreakout, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
-import type { BreakoutStand, RollerAntwort, RollerKette, RollerStrategie, System } from "./api";
+import type { BreakoutStand, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -161,6 +161,54 @@ function verfall(jjjjmmtt: string): string {
     : jjjjmmtt;
 }
 
+// Verlauf einer Roller-Kette als Liste: Eröffnung, jeder Roll mit Position vorher/nachher, kumuliertes Netto.
+function KettenVerlauf({ k }: { k: RollerKetteStand }): JSX.Element | null {
+  const schritte = k.verlauf ?? [];
+  if (schritte.length === 0) return null;
+  const rolls = schritte.filter((b) => b.art === "roll");
+  const aktuell = { verfall: k.aktiv.verfall, short: k.aktiv.short, long: k.aktiv.long };
+  // Position der Kette nach dem n-ten Roll = „von“ des nächsten Rolls, nach dem letzten die aktuelle.
+  const nach = (n: number) => rolls[n + 1]?.von ?? aktuell;
+  const pos = (p?: { verfall: string; short: number; long: number } | null) =>
+    p ? `${verfall(p.verfall)} ${p.short}/${p.long}` : "—";
+  let kumuliert = 0;
+  let rollIndex = -1;
+  return (
+    <details className="kettenverlauf">
+      <summary>
+        {k.kette_id} · Verlauf ({schritte.length} Schritte, {rolls.length} {rolls.length === 1 ? "Roll" : "Rolls"})
+      </summary>
+      <table className="strategie-tabelle">
+        <thead>
+          <tr>
+            <th>Zeit</th><th>Schritt</th><th>Position</th><th className="zahl">Netto</th><th className="zahl">Kette kumuliert</th>
+          </tr>
+        </thead>
+        <tbody>
+          {schritte.map((b, i) => {
+            kumuliert += b.netto ?? 0;
+            let position = "—";
+            if (b.art === "eroeffnung") position = pos(rolls[0]?.von ?? aktuell);
+            if (b.art === "roll") {
+              rollIndex += 1;
+              position = `${pos(b.von)} → ${pos(nach(rollIndex))}`;
+            }
+            return (
+              <tr key={`${b.art}-${i}`}>
+                <td className="zeit">{b.zeit ? b.zeit.replace("T", " ").slice(0, 16) : "—"}</td>
+                <td>{b.art}</td>
+                <td>{position}</td>
+                <td className="zahl">{zahl(b.netto)}</td>
+                <td className="zahl">{zahl(kumuliert)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
 function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
@@ -298,6 +346,9 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
               ))}
             </tbody>
           </table>
+          {s.ketten.map((k) => (
+            <KettenVerlauf key={`v-${k.kette_id}`} k={k} />
+          ))}
         </div>
       )}
       {meldung && <p className="hinweis">{meldung}</p>}
