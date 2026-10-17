@@ -1,7 +1,7 @@
 ---
 titel: Steuer nach Zufluss je Zahlungsstrom — Umsetzung
 modell: guenstig
-status: offen
+status: fertig
 abhaengig_von: AP-10b
 aendert_tests: nein
 ---
@@ -72,6 +72,14 @@ die Steuererklärung** und trägt den Stand von OF-92 statt der überholten Frag
 Umsetzung (Ergebnis im Schließungsjahr) erfüllt das nicht je Zahlungsstrom. **Vorschlag an den Nutzer:** AP-10 als
 „erste Fassung“ kennzeichnen und AP-10b/10c/10d als Fortsetzung aufnehmen. Der Plan ist fachliche Wahrheit — Änderung
 nur mit Zustimmung.
+
+## Stand (17.10.2026)
+
+Umgesetzt: `analytics/steuer_zufluss.py`, `analytics/steuer_konfig.py`, `journal/steuer_zufluss.py`, API
+(`/steuer-auswertung`, `/steuer-csv?methode=zufluss|alt`), CLI `journal steuer-zufluss`, Seite `/steuer`,
+Abgleich `werkzeuge/abgleich/steuer_zufluss_abgleich.py`. Alle 18 Fälle von AP-10b bestehen. **Fachliche Abnahme
+steht aus** (Bestätigung der Regeln durch den Steuerberater, OF-92/OF-93, Ergebnis des Abgleichs: OF-94).
+Entfernt: `analytics/steuer_jahre.py` (Jahresübersicht der Altmethode).
 
 ## Ausdrücklich nicht Teil dieses Pakets
 

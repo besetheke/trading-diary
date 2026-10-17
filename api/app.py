@@ -59,7 +59,7 @@ from analytics.nav import nav_bericht
 from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
 from analytics.steuer import als_csv as steuer_als_csv
-from analytics.steuer_jahre import jahres_uebersicht
+from analytics.steuer_zufluss import als_csv as steuer_zufluss_csv
 from analytics.strategien import strategie_bericht
 from analytics.titel import NativZeile, TitelZeile, titel_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
@@ -84,7 +84,8 @@ from journal.schema import (
     structures,
     tags,
 )
-from journal.steuer import lieferungs_schliessungen, steuer_bericht
+from journal.steuer import steuer_bericht
+from journal.steuer_zufluss import steuer_zufluss_bericht
 
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
@@ -1081,40 +1082,55 @@ class CashflowAntwort(BaseModel):
     monate: list[CashflowMonatAntwort]
 
 
-# Steuer (AP-10): Aufbereitung für den Steuerberater, keine Verlustverrechnung.
-class SteuerToepfeAntwort(BaseModel):
-    jahr: int
+# Steuer nach Zufluss (AP-10c): Aufbereitung für den Steuerberater, keine Verlustverrechnung.
+class SteuerTopfAntwort(BaseModel):
     topf: str
-    waehrung: str
-    brutto: str
-    kommission: str
-    netto: str
-    netto_eur_ib: str
-    anzahl_legs: int
-    eur_kurs_fehlt: int
+    gewinne: str
+    verluste: str
+    saldo: str
+    anzahl: int
+
+
+class SteuerKapPostenAntwort(BaseModel):
+    posten: str
+    zeile: int
+    betrag: str
+
+
+class SteuerKapAntwort(BaseModel):
+    formularjahr: int
+    status: str
+    vorlaeufig: bool
+    posten: list[SteuerKapPostenAntwort]
 
 
 class SteuerJahrAntwort(BaseModel):
     jahr: int
-    aktien_eur: str
-    termin_eur: str
-    aktien_legs: int
-    termin_legs: int
-    eur_kurs_fehlt: int
-    ungeklaert: int
-    praemie_lieferung_eur: str
-    ertraege: dict[str, str]
+    toepfe: list[SteuerTopfAntwort]
+    quellensteuer: dict[str, str]
+    betroffen: int
+    kap: SteuerKapAntwort
 
 
-class SteuerFehlerAntwort(BaseModel):
+class SteuerDatenlueckeAntwort(BaseModel):
     schluessel: str
     grund: str
+    text: str
+
+
+class SteuerRegelOffenAntwort(BaseModel):
+    art: str
+    text: str
+    anzahl: int
+    betrag_eur: str
 
 
 class SteuerAntwort(BaseModel):
+    methode: dict
     jahre: list[SteuerJahrAntwort]
-    toepfe: list[SteuerToepfeAntwort]
-    fehler: list[SteuerFehlerAntwort]
+    datenluecken: list[SteuerDatenlueckeAntwort]
+    regeln_offen: list[SteuerRegelOffenAntwort]
+    warnungen: list[str]
 
 
 # AP-06g: Kapitalentwicklung, realisiert (analytics.kapital), in EUR.
@@ -3674,44 +3690,71 @@ def erzeuge_app(
 
     @applikation.get("/steuer-auswertung", response_model=SteuerAntwort)
     def steuer_auswertung_seite() -> SteuerAntwort:
-        """Töpfe je Zuflussjahr (Aktien, Termingeschäfte) in EUR über den Buchungskurs der
-        Schließung, dazu Erträge aus den Cash-Buchungen (AP-10). Aufbereitung, keine Beratung."""
-        ergebnis = steuer_bericht(db_pfad)
-        monate = [(m.monat, m.kategorie, m.summe_eur) for m in cashflow_bericht(db_pfad).monate]
-        jahre = jahres_uebersicht(ergebnis, monate, lieferungs_schliessungen(db_pfad))
+        """Steuer nach Zufluss je Zahlungsstrom (AP-10c): Töpfe je Zuflussjahr, Gewinne und Verluste
+        getrennt, Quellensteuer in vier Zuständen, Datenlücken und offene Regeln getrennt.
+        Aufbereitung, keine Steuerberatung, keine Verlustverrechnung; Arbeitsstand, ungeprüft."""
+        ergebnis = steuer_zufluss_bericht(db_pfad)
         return SteuerAntwort(
+            methode=ergebnis.methode,
             jahre=[
                 SteuerJahrAntwort(
-                    jahr=j, aktien_eur=_als_text(z["aktien_eur"]),
-                    termin_eur=_als_text(z["termin_eur"]),
-                    aktien_legs=z["aktien_legs"], termin_legs=z["termin_legs"],
-                    eur_kurs_fehlt=z["eur_kurs_fehlt"], ungeklaert=z["ungeklaert"],
-                    praemie_lieferung_eur=_als_text(z["praemie_lieferung_eur"]),
-                    ertraege={k: _als_text(v) for k, v in z["ertraege"].items()},
+                    jahr=j,
+                    toepfe=[
+                        SteuerTopfAntwort(
+                            topf=name, gewinne=_als_text(v["gewinne"]),
+                            verluste=_als_text(v["verluste"]), saldo=_als_text(v["saldo"]),
+                            anzahl=v["anzahl"],
+                        )
+                        for name, v in sorted(b["toepfe"].items())
+                    ],
+                    quellensteuer={k: _als_text(v) for k, v in b["quellensteuer"].items()},
+                    betroffen=b["betroffen"],
+                    kap=SteuerKapAntwort(
+                        formularjahr=b["kap"]["formularjahr"], status=b["kap"]["status"],
+                        vorlaeufig=b["kap"]["vorlaeufig"],
+                        posten=[
+                            SteuerKapPostenAntwort(
+                                posten=n, zeile=p["zeile"], betrag=_als_text(p["betrag"]))
+                            for n, p in b["kap"]["posten"].items()
+                        ],
+                    ),
                 )
-                for j, z in jahre.items()
+                for j, b in ergebnis.jahre().items()
             ],
-            toepfe=[
-                SteuerToepfeAntwort(
-                    jahr=t.jahr, topf=t.topf, waehrung=t.waehrung, brutto=_als_text(t.brutto),
-                    kommission=_als_text(t.kommission), netto=_als_text(t.netto),
-                    netto_eur_ib=_als_text(t.netto_eur_ib), anzahl_legs=t.anzahl_legs,
-                    eur_kurs_fehlt=t.eur_kurs_fehlt,
+            datenluecken=[
+                SteuerDatenlueckeAntwort(schluessel=d.schluessel, grund=d.grund, text=d.text)
+                for d in ergebnis.datenluecken
+            ],
+            regeln_offen=[
+                SteuerRegelOffenAntwort(
+                    art=r.art, text=r.text, anzahl=r.anzahl, betrag_eur=_als_text(r.betrag_eur)
                 )
-                for t in ergebnis.toepfe
+                for r in ergebnis.regeln_offen
             ],
-            fehler=[SteuerFehlerAntwort(schluessel=f.schluessel, grund=f.grund)
-                    for f in ergebnis.fehler],
+            warnungen=ergebnis.warnungen,
         )
 
     @applikation.get("/steuer-csv")
-    def steuer_csv(jahr: int | None = None):
-        """CSV-Export von AP-10 (Töpfe, Details, Erträge, Fehler), wahlweise für ein Zuflussjahr."""
+    def steuer_csv(jahr: int | None = None, methode: str = "zufluss"):
+        """CSV-Export: ``zufluss`` (Standard) oder ``alt`` (AP-10, Schließungsjahr, als ALTVERFAHREN
+        gekennzeichnet — nicht zur Übernahme in die Steuererklärung)."""
         from fastapi.responses import Response
-        text = steuer_als_csv(steuer_bericht(db_pfad), jahr)
-        name = f"steuer-{jahr}.csv" if jahr else "steuer.csv"
-        return Response(content=text, media_type="text/csv; charset=utf-8",
-                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+        if methode == "alt":
+            text = (
+                "# ALTVERFAHREN — Schließungsjahr, nicht zur Übernahme in die Steuererklärung\n"
+                + steuer_als_csv(steuer_bericht(db_pfad), jahr)
+            )
+            name = f"steuer-alt-{jahr}.csv" if jahr else "steuer-alt.csv"
+        elif methode == "zufluss":
+            text = steuer_zufluss_csv(steuer_zufluss_bericht(db_pfad), jahr)
+            name = f"steuer-{jahr}.csv" if jahr else "steuer.csv"
+        else:
+            raise HTTPException(status_code=422, detail="methode: zufluss oder alt")
+        return Response(
+            content=text, media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
 
     @applikation.get("/cashflows", response_model=CashflowAntwort)
     def cashflows(von: date | None = None, bis: date | None = None) -> CashflowAntwort:

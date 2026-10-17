@@ -281,9 +281,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Zusätzlich Equity-Kurve und Drawdown als eigene CSV schreiben "
         "(AP-06, Tranche IV; immer Kontosicht, unabhängig von --sicht)",
     )
+    steuer_z = unterbefehle.add_parser(
+        "steuer-zufluss",
+        help="Steuer nach Zufluss je Zahlungsstrom (AP-10c): Töpfe, Quellensteuer, Datenlücken",
+    )
+    steuer_z.add_argument("datei", type=pathlib.Path, help="Pfad zur Zieldatei (CSV)")
+    steuer_z.add_argument("--jahr", type=int, default=None, help="Nur Zeilen dieses Zuflussjahres")
+    steuer_z.add_argument(
+        "--db", default=None,
+        help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
+    )
     steuer = unterbefehle.add_parser(
         "steuer",
-        help="Steuerliche Auswertung: Töpfe je Jahr, Details, Erträge, Fehler (AP-10)",
+        help="ALTVERFAHREN (AP-10, Schließungsjahr): Töpfe je Jahr, Details, Erträge, Fehler — "
+        "nicht zur Übernahme in die Steuererklärung; Neufassung: steuer-zufluss",
     )
     steuer.add_argument("datei", type=pathlib.Path, help="Pfad zur Zieldatei (CSV)")
     steuer.add_argument(
@@ -646,7 +657,25 @@ def main(argv: list[str] | None = None) -> int:
                 f"{len(equity.monate)} Monate, "
                 f"maximaler Drawdown {equity.max_drawdown_eur} EUR"
             )
+    elif argumente.befehl == "steuer-zufluss":
+        from analytics.steuer_zufluss import als_csv as zufluss_csv
+        from journal.steuer_zufluss import steuer_zufluss_bericht
+
+        db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
+        ergebnis = steuer_zufluss_bericht(db_pfad)
+        with open(argumente.datei, "w", encoding="utf-8-sig", newline="\n") as datei:
+            datei.write(zufluss_csv(ergebnis, jahr=argumente.jahr))
+        print(
+            f"Steuer nach Zufluss nach {argumente.datei}: {len(ergebnis.stroeme)} Zahlungsströme, "
+            f"{len(ergebnis.datenluecken)} Datenlücken, {len(ergebnis.regeln_offen)} offene Regeln "
+            "(Arbeitsstand, ungeprüft — keine Steuerberatung)"
+        )
     elif argumente.befehl == "steuer":
+        print(
+            "ALTVERFAHREN — Schließungsjahr, nicht zur Übernahme in die Steuererklärung; "
+            "die Neufassung ist `steuer-zufluss`.",
+            file=sys.stderr,
+        )
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         ergebnis = steuer_bericht(db_pfad)
         # UTF-8 mit BOM wie der Kennzahlen-Bericht (Regel 13): Excel öffnet

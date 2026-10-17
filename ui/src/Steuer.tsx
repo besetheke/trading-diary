@@ -3,11 +3,35 @@ import { fehlerText, holeSteuer } from './api'
 import type { SteuerAntwort } from './api'
 import Betrag from './Betrag'
 
-// Steuer (AP-10): die Töpfe je Zuflussjahr und die Erträge, wie die API sie aufbereitet. Hier wird nichts
-// gerechnet — weder verrechnet noch umgerechnet. Das ist eine Aufbereitung für den Steuerberater, keine
-// Steuerberatung und keine Verlustverrechnung.
+// Steuer nach Zufluss je Zahlungsstrom (AP-10c): reines Durchreichen der Aufbereitung aus GET /steuer-auswertung.
+// Nichts wird hier gerechnet, verrechnet oder umgerechnet. Arbeitsstand des Steuerberaters (OF-92/OF-93), ungeprüft:
+// keine Steuerberatung, keine Verlustverrechnung.
 
-const TOPF_NAME: Record<string, string> = { aktien: 'Aktien', termingeschaefte: 'Termingeschäfte' }
+const TOPF_NAME: Record<string, string> = {
+  aktien: 'Aktien',
+  termingeschaefte: 'Termingeschäfte',
+  stillhalter: 'Stillhalter (Prämie, Rückkauf)',
+  dividenden: 'Dividenden',
+  zinsen: 'Habenzinsen',
+  nicht_abziehbar: 'nicht abziehbar (Sollzinsen, Gebühren)',
+  so_kandidat: 'Ersatzzahlungen (SO-Kandidat, Einordnung offen)',
+}
+const TOPF_REIHENFOLGE = ['aktien', 'stillhalter', 'termingeschaefte', 'dividenden', 'zinsen', 'so_kandidat', 'nicht_abziehbar']
+
+const QST_NAME: Record<string, string> = {
+  vorlaeufig_anrechenbar: 'vorläufig anrechenbar',
+  erstattungsfaehig: 'möglicherweise erstattungsfähig',
+  ungeklaert: 'ungeklärt',
+  ersatzzahlung_zu_pruefen: 'auf Ersatzzahlungen (zu prüfen)',
+}
+
+const KAP_NAME: Record<string, string> = {
+  ausl_kapitalertraege_saldo: 'Saldo ausländische Kapitalerträge',
+  aktiengewinne: 'davon Aktiengewinne',
+  verluste_ohne_aktien: 'davon Verluste ohne Aktien',
+  aktienverluste: 'davon Aktienverluste',
+  anrechenbare_quellensteuer: 'anrechenbare Quellensteuer (vorläufige Obergrenze)',
+}
 
 export default function Steuer(): JSX.Element {
   const [daten, setzeDaten] = useState<SteuerAntwort | null>(null)
@@ -33,51 +57,41 @@ export default function Steuer(): JSX.Element {
   if (fehler) return <p className="fehler">{fehler}</p>
   if (daten === null) return <p className="laedt">Bereite die Steuerzahlen auf …</p>
 
-  const toepfe = daten.toepfe.filter((t) => t.jahr === jahr)
-  const kursFehlt = daten.jahre.reduce((s, j) => s + j.eur_kurs_fehlt, 0)
-  const ungeklaert = daten.jahre.reduce((s, j) => s + j.ungeklaert, 0)
+  const gewaehlt = daten.jahre.find((j) => j.jahr === jahr) ?? null
+  const topf = (j: SteuerAntwortJahr, name: string) => j.toepfe.find((t) => t.topf === name)
   return (
     <section>
-      <h2>Steuer — Altberechnung nach Schließungsjahr</h2>
-      <p className="fehler">
-        <strong>Altberechnung — nicht zur Übernahme in die Steuererklärung.</strong> Diese Zahlen buchen das ganze
-        Ergebnis eines Geschäfts im Jahr der Schließung und rechnen es zum Kurs der Schließung um. Offene Positionen
-        fehlen, Dividenden und Ersatzzahlungen stehen zusammen, ETFs zählen als Aktien. Die Neufassung (Zufluss je
-        Zahlungsstrom) ist in Arbeit: AP-10b bis AP-10d, Stand der Regeln in OF-92 und OF-93.
+      <h2>Steuer — Zufluss je Zahlungsstrom</h2>
+      <p className="hinweis">
+        <strong>Arbeitsstand, ungeprüft — keine Steuerberatung, keine Verlustverrechnung.</strong> Die Regeln stammen aus
+        der Antwort des Steuerberaters (OF-92) und sind von ihm zu bestätigen. Stillhalterprämien zählen im Zuflussjahr,
+        Rückkäufe im Zahlungsjahr, Spreads je Bein; Aktien zum Strike mit Erwerbs- und Veräußerungskosten;
+        Fremdwährung je Zahlungsstrom. Offene Positionen sind enthalten.
       </p>
       <p className="sicht">
-        Aufbereitung für den Steuerberater, <strong>keine Steuerberatung und keine Verlustverrechnung</strong>: Es gilt
-        das Jahr der schließenden Ausführung (Zuflussprinzip), getrennt nach Aktien und Termingeschäften. Euro-Beträge
-        rechnen mit dem Buchungskurs der Schließung, den auch IB verwendet. Dividenden, Quellensteuer, Zinsen und
-        Gebühren stehen daneben, nicht in den Töpfen.
+        Kursquelle: {daten.methode.kursquelle} (Kursdatum: {daten.methode.kursdatum_feld}); Prüfstatus:{' '}
+        {daten.methode.pruefstatus}. Datumsregeln je Vorgang (Steuerdatum / Kursdatum):{' '}
+        {Object.entries(daten.methode.datumsregeln)
+          .map(([k, v]) => `${k} ${v.steuerdatum}/${v.fx}`)
+          .join(', ')}
+        .
       </p>
-      {(kursFehlt > 0 || ungeklaert > 0 || daten.fehler.length > 0) && (
-        <p className="hinweis">
-          {kursFehlt > 0 ? `${kursFehlt} Geschäfte ohne Buchungskurs zählen nicht in den Euro-Summen. ` : ''}
-          {ungeklaert > 0 ? `${ungeklaert} Geschäfte mit ungeklärter Basis stehen außerhalb der Summen. ` : ''}
-          {daten.fehler.length > 0 ? `${daten.fehler.length} Hinweise in der Fehlerliste (CSV-Export).` : ''}
-        </p>
-      )}
+      {daten.warnungen.map((w) => (
+        <p className="hinweis" key={w}>{w}</p>
+      ))}
 
-      <h3>Jahresübersicht (EUR)</h3>
+      <h3>Jahresübersicht (EUR, Saldo je Topf — nicht verrechnet)</h3>
       <div className="tabelle-rahmen">
         <table className="positionen dichte-kompakt">
           <thead>
             <tr>
               <th>Zuflussjahr</th>
-              <th className="zahl">Aktien</th>
-              <th className="zahl">Termingeschäfte</th>
-              <th
-                className="zahl"
-                title="Prämien von Optionen, die mit Lieferung endeten (Zuteilung/Ausübung): Sie stehen in den Termingeschäften, die Aktie trägt den Gegenposten im Aktien-Topf — siehe Fragen unten"
-              >
-                davon Prämie bei Lieferung
+              {TOPF_REIHENFOLGE.map((t) => (
+                <th key={t} className="zahl">{TOPF_NAME[t]}</th>
+              ))}
+              <th className="zahl" title="Buchungen, die bei einem Wechsel der Datumsregel (Handels-/Abrechnungstag) in ein anderes Jahr fielen">
+                am Jahreswechsel betroffen
               </th>
-              <th className="zahl">Dividenden</th>
-              <th className="zahl">Quellensteuer</th>
-              <th className="zahl">Zinsen erhalten</th>
-              <th className="zahl">Zinsen gezahlt</th>
-              <th className="zahl">Gebühren</th>
               <th>Export</th>
             </tr>
           </thead>
@@ -85,23 +99,14 @@ export default function Steuer(): JSX.Element {
             {daten.jahre.map((j) => (
               <tr key={j.jahr} className={j.jahr === jahr ? 'summe' : undefined}>
                 <td>
-                  <button
-                    type="button"
-                    className="sortierer"
-                    onClick={() => setzeJahr(j.jahr)}
-                    title="Töpfe dieses Jahres unten zeigen"
-                  >
+                  <button type="button" className="sortierer" onClick={() => setzeJahr(j.jahr)} title="Details unten zeigen">
                     {j.jahr}
                   </button>
                 </td>
-                <td className="zahl"><Betrag wert={j.aktien_eur} /></td>
-                <td className="zahl"><Betrag wert={j.termin_eur} /></td>
-                <td className="zahl"><Betrag wert={j.praemie_lieferung_eur} /></td>
-                <td className="zahl"><Betrag wert={j.ertraege.dividenden} /></td>
-                <td className="zahl"><Betrag wert={j.ertraege.quellensteuer} /></td>
-                <td className="zahl"><Betrag wert={j.ertraege.zinsen_erhalten} /></td>
-                <td className="zahl"><Betrag wert={j.ertraege.zinsen_gezahlt} /></td>
-                <td className="zahl"><Betrag wert={j.ertraege.gebuehren} /></td>
+                {TOPF_REIHENFOLGE.map((t) => (
+                  <td key={t} className="zahl"><Betrag wert={topf(j, t)?.saldo ?? '0'} /></td>
+                ))}
+                <td className="zahl">{j.betroffen}</td>
                 <td><a href={`/steuer-csv?jahr=${j.jahr}`} download>CSV {j.jahr}</a></td>
               </tr>
             ))}
@@ -109,37 +114,81 @@ export default function Steuer(): JSX.Element {
         </table>
       </div>
       <p>
-        <a href="/steuer-csv" download>Alle Jahre als CSV</a>
+        <a href="/steuer-csv" download>Alle Jahre als CSV</a> ·{' '}
+        <a href="/steuer-csv?methode=alt" download title="Altverfahren: Ergebnis im Schließungsjahr, nur zum Vergleich">
+          Altverfahren (nur zum Vergleich, nicht zur Übernahme)
+        </a>
       </p>
 
-      {jahr !== null && (
+      {gewaehlt && (
         <>
-          <h3>Töpfe {jahr} je Währung</h3>
+          <h3>{gewaehlt.jahr}: Gewinne und Verluste je Topf (getrennt, nicht verrechnet)</h3>
           <div className="tabelle-rahmen">
             <table className="positionen dichte-kompakt">
               <thead>
                 <tr>
                   <th>Topf</th>
-                  <th>Währung</th>
-                  <th className="zahl">Brutto</th>
-                  <th className="zahl">Kommission</th>
-                  <th className="zahl">Netto</th>
-                  <th className="zahl" title="Netto × Buchungskurs der Schließung">Netto in EUR</th>
-                  <th className="zahl">Legs</th>
-                  <th className="zahl">ohne Kurs</th>
+                  <th className="zahl">Gewinne / Einnahmen</th>
+                  <th className="zahl">Verluste / Rückkäufe</th>
+                  <th className="zahl">Saldo</th>
+                  <th className="zahl">Posten</th>
                 </tr>
               </thead>
               <tbody>
-                {toepfe.map((t) => (
-                  <tr key={`${t.topf}-${t.waehrung}`}>
-                    <td>{TOPF_NAME[t.topf] ?? t.topf}</td>
-                    <td>{t.waehrung}</td>
-                    <td className="zahl"><Betrag wert={t.brutto} waehrung={t.waehrung} /></td>
-                    <td className="zahl"><Betrag wert={t.kommission} waehrung={t.waehrung} /></td>
-                    <td className="zahl"><Betrag wert={t.netto} waehrung={t.waehrung} /></td>
-                    <td className="zahl"><Betrag wert={t.netto_eur_ib} /></td>
-                    <td className="zahl">{t.anzahl_legs}</td>
-                    <td className="zahl">{t.eur_kurs_fehlt}</td>
+                {TOPF_REIHENFOLGE.filter((t) => topf(gewaehlt, t)).map((t) => {
+                  const z = topf(gewaehlt, t)!
+                  return (
+                    <tr key={t}>
+                      <td>{TOPF_NAME[t]}</td>
+                      <td className="zahl"><Betrag wert={z.gewinne} /></td>
+                      <td className="zahl"><Betrag wert={z.verluste} /></td>
+                      <td className="zahl"><Betrag wert={z.saldo} /></td>
+                      <td className="zahl">{z.anzahl}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <h3>{gewaehlt.jahr}: Quellensteuer (vorläufige Obergrenze, EUR)</h3>
+          <div className="tabelle-rahmen">
+            <table className="positionen dichte-kompakt">
+              <tbody>
+                {Object.entries(QST_NAME).map(([k, name]) => (
+                  <tr key={k}>
+                    <td>{name}</td>
+                    <td className="zahl"><Betrag wert={gewaehlt.quellensteuer[k] ?? '0'} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="sicht">
+            Anrechenbar ist hier höchstens der Satz des Quellenstaats (USA 15 %) auf die Bruttodividende; die deutsche
+            Anrechnungsbegrenzung ist nicht geprüft. Der Überhang kann erstattungsfähig sein. Ersatzzahlungen gehen nicht
+            automatisch in die Anrechnung.
+          </p>
+
+          <h3>
+            {gewaehlt.jahr}: Vorschau Anlage KAP (vorläufig, nicht verrechnet) — Zeilen {gewaehlt.kap.formularjahr}:{' '}
+            {gewaehlt.kap.status === 'ungeprueft' ? 'ungeprüft' : 'laut Antwort des Steuerberaters'}
+          </h3>
+          <div className="tabelle-rahmen">
+            <table className="positionen dichte-kompakt">
+              <thead>
+                <tr>
+                  <th className="zahl">Zeile</th>
+                  <th>Posten</th>
+                  <th className="zahl">Betrag EUR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gewaehlt.kap.posten.map((p) => (
+                  <tr key={p.posten}>
+                    <td className="zahl">{p.zeile}</td>
+                    <td>{KAP_NAME[p.posten] ?? p.posten}</td>
+                    <td className="zahl"><Betrag wert={p.betrag} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -148,29 +197,55 @@ export default function Steuer(): JSX.Element {
         </>
       )}
 
+      <h3>Offene Regeln — nicht in den Töpfen oder noch ungeklärt</h3>
+      {daten.regeln_offen.length === 0 ? (
+        <p className="sicht">Keine.</p>
+      ) : (
+        <div className="tabelle-rahmen">
+          <table className="positionen dichte-kompakt">
+            <thead>
+              <tr>
+                <th>Art</th>
+                <th className="zahl">Anzahl</th>
+                <th className="zahl">Betrag EUR</th>
+                <th>Hinweis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {daten.regeln_offen.map((r) => (
+                <tr key={r.art}>
+                  <td>{r.art}</td>
+                  <td className="zahl">{r.anzahl}</td>
+                  <td className="zahl"><Betrag wert={r.betrag_eur} /></td>
+                  <td>{r.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h3>Datenlücken</h3>
+      {daten.datenluecken.length === 0 ? (
+        <p className="sicht">Keine: Jeder gebuchte Zahlungsstrom hat seinen Kurs.</p>
+      ) : (
+        <ul>
+          {daten.datenluecken.slice(0, 50).map((d) => (
+            <li key={`${d.schluessel}-${d.grund}`}>{d.text} ({d.schluessel})</li>
+          ))}
+        </ul>
+      )}
+
       <h3>Offene Fragen für den Steuerberater</h3>
       <ol>
-        <li>
-          <strong>Prämie bei Zuteilung (Short Put/Call mit Lieferung):</strong> Arbeitsstand des Steuerberaters
-          (noch zu bestätigen): Die Stillhalterprämie bleibt separat und gilt im Zuflussjahr, die Aktie kommt mit dem
-          Strike an (Erwerbskosten erhöhen die Anschaffungskosten). Die Altberechnung hier bucht die Prämie ins
-          Schließungsjahr; Optionen auf Aktien bei gekaufter Ausübung (Long Call/Put) und ETFs sind noch nicht
-          berücksichtigt.
-        </li>
-        <li>
-          <strong>Umrechnung:</strong> Die Altberechnung rechnet das Netto zum Kurs der Schließung um — das ist
-          ungeeignet. Vorgesehen: jeder Zahlungsstrom zum Kurs seines maßgeblichen Tages (OF-92); Kursquelle (IB oder
-          EZB) ist noch zu klären.
-        </li>
-        <li>
-          <strong>Jahresgrenze:</strong> Das Jahr folgt der gespeicherten Handelszeit ohne Zeitzone; Geschäfte kurz vor
-          Mitternacht am Jahreswechsel können im anderen Jahr stehen (OF-58).
-        </li>
-        <li>
-          <strong>Verlustverrechnung und Anlage KAP:</strong> Die Seite verrechnet nichts (Aktienverluste,
-          Termingeschäfte, Zinsen, Quellensteuer-Anrechnung). Das ist Sache des Steuerberaters.
-        </li>
+        <li>Datumsfeld je Vorgang (Handels- oder Abrechnungstag) und Kursquelle (IB oder EZB) bestätigen — der IB-Kurs
+          gehört zum Handelstag; wo die Regel den Abrechnungstag verlangt, steht „kursdatum_abweichend“.</li>
+        <li>Ersatzzahlungen und SYEP: Einordnung (§ 22 Nr. 3 oder § 20), Ursache je Buchung, Quellensteuer.</li>
+        <li>ETF/ETN/ETP (Investmentsteuergesetz) und gekaufte Optionen mit Lieferung (Long Call/Put) prüfen.</li>
+        <li>USD-Konto: Verzinsung und Funktion (§ 20 oder § 23), Anfangsbestände und Verlustvorträge.</li>
       </ol>
     </section>
   )
 }
+
+type SteuerAntwortJahr = SteuerAntwort['jahre'][number]

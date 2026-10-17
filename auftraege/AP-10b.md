@@ -124,7 +124,8 @@ Neue, frei erfundene Testwelt mit von Hand gerechneten Werten (CLAUDE.md Regel 8
 15. **ETF-Lieferung:** Aktie vs. ETF — der ETF-Anteil steht in `regeln_offen` (InvStG), nicht im Aktien-Topf; eine
     Option auf den ETF bleibt Termingeschäft.
 16. **Cash-Buchung ohne Kurs** (Dividende): erscheint in `datenluecken`, nicht still in einer Summe.
-17. **Anfangsbestand** leer → Warnung; mit Eingabe → Bestand fließt in die FIFO-Paarung ein.
+17. **Ungeklärte Basis:** ohne Anfangsbestand → „offen“ (`regeln_offen`), nicht gerechnet; mit Anfangsbestand
+    (100 × 40) und Verkauf 100 × 45 → +500. Warnung bei leerem Anfangsbestand: Fall 18.
 18. Gewinne/Verluste getrennt je Topf; Ausgabe `methode` nennt Kursquelle, Datumsregeln, Formularjahr, Prüfstatus.
 
 **Golden-Daten:** `werkzeuge/abgleich/steuer_zufluss.py` (Regel 2: nur Zählwerte und Summen je Jahr, nur starkes
@@ -133,9 +134,11 @@ Modell) vergleicht neue und alte Methode und IBs Berichtswerte und gibt je Jahr 
 
 ## Altverfahren ausdrücklich kennzeichnen
 
-`journal steuer` (CLI-Export von AP-10) wird auf die neue Methode umgestellt **oder** trägt in Kopfzeile und
-Dateiname „ALTVERFAHREN — Schließungsjahr, nicht zur Übernahme in die Steuererklärung“. Die Seite „Steuer“ trägt
-diesen Hinweis bereits für die bisherigen Zahlen.
+`journal steuer` (CLI-Export von AP-10) bleibt **unverändert in der Datei** — der geschützte Test
+`tests/test_steuer.py::test_cli_schreibt_csv_datei` verlangt den alten Spaltenkopf als erste Zeile (eine Änderung
+bräuchte ein eigenes Korrekturpaket). Stattdessen gibt der Befehl bei jedem Lauf auf stderr den Hinweis „ALTVERFAHREN —
+nicht zur Übernahme in die Steuererklärung“ aus, und die Neufassung ist ein eigener Befehl `journal steuer-zufluss`.
+Über die API trägt `/steuer-csv?methode=alt` die Kennzeichnung in der ersten Zeile und im Dateinamen.
 
 ## Ausdrücklich nicht Teil dieses Pakets
 

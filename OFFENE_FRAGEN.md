@@ -3632,3 +3632,29 @@ Steuererklärung“; ihre Fragenliste folgt OF-92.
 **Nicht nachgeprüft:** die rechtlichen Zitate des Kollegen (BMF Rn. 22/27/29/32, InvStG, § 32d, § 22 Nr. 3) — zur
 Bestätigung durch den Steuerberater. Der Hinweis, dass der Windows-Testclient bei ihm hing, ist kein Befund zum
 Endpunkt: Die API-Tests laufen bei mir grün.
+
+## OF-94 · Steuer nach Zufluss: Abgleich neu gegen alt am Echtbestand (17.10.2026, AP-10c)
+
+`werkzeuge/abgleich/steuer_zufluss_abgleich.py`, Journal-Datenbank, EUR, gerundet. Nur Summen und Zählwerte.
+
+| Jahr | Aktien alt | Aktien neu | Termin alt | Stillhalter + Termin neu | Differenz | davon offene Prämien |
+|---|---|---|---|---|---|---|
+| 2022 | −6.852 | −6.354 | 66.834 | 83.426 | +16.591 | 0 |
+| 2023 | −71.438 | −82.082 | 88.829 | 75.834 | −12.996 | 0 |
+| 2024 | −19.591 | −17.495 | 29.332 | 29.409 | +77 | 0 |
+| 2025 | −68.548 | −52.133 | 96.021 | 128.757 | +32.736 | 0 |
+| 2026 (bis 16.10.) | −8.687 | −81.489 | 8.436 | 378.723 | +370.287 | 315.123 |
+
+**Lesart:** (1) 2026: Die Prämien der **offenen** Short-Positionen (Verfälle Oktober bis Dezember 2026,
+315.123 EUR) zählen jetzt im Zuflussjahr; das Altverfahren übersprang offene Beine. (2) **Aktien 2026 −73.000 EUR
+tiefer:** Jede Seite wird zu ihrem eigenen Kurs umgerechnet; USD-Aktien, die bei hohem Kurs gekauft und bei
+niedrigem verkauft wurden, tragen den Kurseffekt (Altverfahren: Netto zum Schlusskurs). (3) ETF-Anteile (43 Beine,
+−40.253 EUR) stehen nicht mehr im Aktien-Topf, sondern in den offenen Regeln. (4) Barausgleich (Indexoptionen) steht
+als Termingeschäft, die zugehörige Prämie als Stillhalter — der Saldo beider ist die Zahl, die sich mit dem Altverfahren
+vergleichen lässt. (5) „Am Jahreswechsel betroffen“: 56, 25, 32, 27 Buchungen (2023 bis 2026) würden bei Wechsel von
+Abrechnungs- auf Handelstag in ein anderes Jahr fallen.
+
+**Datenlücken: 0.** Offene Regeln: Ersatzzahlungen 140 Fälle (5.310 EUR), ETF 43, Optionskosten ohne zugeordnete
+Lieferung 6 (−1.612 EUR), Cash ausgeschlossen 29, sonstige Cash-Buchungen 6. **Noch nicht geprüft:** der Abgleich
+gegen IBs Berichtswerte (nur gegen das Altverfahren); 6 ausgeübte gekaufte Optionen ohne passende Lieferung bleiben
+zu klären; 17.832 von 26.422 Strömen tragen „kursdatum_abweichend“ (Regel Abrechnungstag, IB-Kurs vom Handelstag).

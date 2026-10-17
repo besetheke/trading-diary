@@ -1293,35 +1293,43 @@ export function holePerformance(von?: string | null, bis?: string | null): Promi
   return hole(`/performance${zeitraumQuery(von, bis)}`) as Promise<Performance>
 }
 
-// Steuer (AP-10): Aufbereitung für den Steuerberater — keine Beratung, keine Verlustverrechnung.
-export interface SteuerJahr {
-  jahr: number
-  aktien_eur: string
-  termin_eur: string
-  aktien_legs: number
-  termin_legs: number
-  eur_kurs_fehlt: number
-  ungeklaert: number
-  praemie_lieferung_eur: string
-  ertraege: Record<string, string>
+// Steuer nach Zufluss je Zahlungsstrom (AP-10c): Aufbereitung für den Steuerberater, keine Beratung,
+// keine Verlustverrechnung; Arbeitsstand, ungeprüft.
+export interface SteuerTopf {
+  topf: string
+  gewinne: string
+  verluste: string
+  saldo: string
+  anzahl: number
 }
 
-export interface SteuerTopf {
+export interface SteuerKap {
+  formularjahr: number
+  status: string
+  vorlaeufig: boolean
+  posten: { posten: string; zeile: number; betrag: string }[]
+}
+
+export interface SteuerJahr {
   jahr: number
-  topf: string
-  waehrung: string
-  brutto: string
-  kommission: string
-  netto: string
-  netto_eur_ib: string
-  anzahl_legs: number
-  eur_kurs_fehlt: number
+  toepfe: SteuerTopf[]
+  quellensteuer: Record<string, string>
+  betroffen: number
+  kap: SteuerKap
 }
 
 export interface SteuerAntwort {
+  methode: {
+    verfahren: string
+    kursquelle: string
+    kursdatum_feld: string
+    pruefstatus: string
+    datumsregeln: Record<string, { steuerdatum: string; fx: string }>
+  }
   jahre: SteuerJahr[]
-  toepfe: SteuerTopf[]
-  fehler: { schluessel: string; grund: string }[]
+  datenluecken: { schluessel: string; grund: string; text: string }[]
+  regeln_offen: { art: string; text: string; anzahl: number; betrag_eur: string }[]
+  warnungen: string[]
 }
 
 export function holeSteuer(): Promise<SteuerAntwort> {
