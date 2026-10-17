@@ -20,7 +20,7 @@ def test_regeln_offen_tragen_einzelfaelle_und_die_listen_werden_geschrieben(tmp_
          cash("Withholding Tax", "-3.30", "1", date(2025, 7, 7), symbol="GPK", beschr="GPK(US2) PAYMENT IN LIEU OF DIVIDEND - US TAX")]
     erg = lauf([leg(1, 14, "A", "B", "10")], execs, [etf], c)
     etf_falle = next(r for r in erg.regeln_offen if r.art == "etf_investmentsteuer").details
-    assert etf_falle == [{"leg_id": 1, "symbol": "SPY", "eroeffnet": "2025-01-05", "geschlossen": "2025-02-05", "ergebnis_eur": D("100")}]
+    assert etf_falle == [{"leg_id": 1, "symbol": "SPY", "exec_id": "B", "eroeffnet": "2025-01-05", "geschlossen": "2025-02-05", "ergebnis_eur": D("100")}]
     anzahl = listen_schreiben(erg, tmp_path / "listen")
     assert anzahl["etf_beine.csv"] == 1 and anzahl["ersatzzahlungen.csv"] == 1
     assert anzahl["quellensteuer_zu_pruefen.csv"] == 1                       # 3,30 auf die Ersatzzahlung
