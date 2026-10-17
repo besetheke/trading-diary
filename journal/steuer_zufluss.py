@@ -169,11 +169,10 @@ def listen_schreiben(ergebnis: SteuerZuflussErgebnis, ordner: pathlib.Path) -> d
     return anzahl
 
 
-def ib_ueberleitung_bericht(db_pfad: str | pathlib.Path, ergebnis: SteuerZuflussErgebnis) -> dict[int, dict]:
-    """Überleitung IB → Station je Jahr (siehe ``analytics.steuer_ueberleitung``). Nur lesend."""
+def ib_daten_laden(db_pfad: str | pathlib.Path) -> tuple[list[dict], frozenset, frozenset]:
+    """IBs Realized P/L je Ausführung (EUR), die Schließungen der Aktienbeine mit Lieferung und die offenen Legs."""
     from decimal import Decimal
 
-    from analytics.steuer_ueberleitung import ib_ueberleitung
     from analytics.steuer_zufluss import _LIEFERUNG_EREIGNISSE
     from journal.schema import flex_ib_realized
 
@@ -207,4 +206,12 @@ def ib_ueberleitung_bericht(db_pfad: str | pathlib.Path, ergebnis: SteuerZufluss
                 or ereignis_je_exec.get(z["close_exec_id"]) in _LIEFERUNG_EREIGNISSE
             ):
                 lieferung.add(z["close_exec_id"])
-    return ib_ueberleitung(ergebnis, ib_zeilen, frozenset(lieferung), frozenset(offen))
+    return ib_zeilen, frozenset(lieferung), frozenset(offen)
+
+
+def ib_ueberleitung_bericht(db_pfad: str | pathlib.Path, ergebnis: SteuerZuflussErgebnis, daten=None) -> dict[int, dict]:
+    """Überleitung IB → Station je Jahr (siehe ``analytics.steuer_ueberleitung``). Nur lesend."""
+    from analytics.steuer_ueberleitung import ib_ueberleitung
+
+    ib_zeilen, lieferung, offen = daten or ib_daten_laden(db_pfad)
+    return ib_ueberleitung(ergebnis, ib_zeilen, lieferung, offen)

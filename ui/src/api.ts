@@ -1304,10 +1304,15 @@ export interface SteuerTopf {
 }
 
 export interface SteuerKap {
+  variante: string
+  name: string
+  beschreibung: string
   formularjahr: number
   status: string
   vorlaeufig: boolean
   posten: { posten: string; zeile: number; betrag: string }[]
+  zusammensetzung: { name: string; betrag: string }[]
+  hinweise: string[]
 }
 
 export interface SteuerJahr {
@@ -1315,7 +1320,7 @@ export interface SteuerJahr {
   toepfe: SteuerTopf[]
   quellensteuer: Record<string, string>
   betroffen: number
-  kap: SteuerKap
+  kap_varianten: SteuerKap[]
 }
 
 export interface SteuerAntwort {

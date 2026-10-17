@@ -3720,3 +3720,39 @@ aufgeschlüsselt.
 **Folge für die Steuer:** Wurden die Jahre 2022 bis 2024 mit den IB-Zahlen erklärt, liegen Aktien- und
 Optionsergebnis nach der Regel des Steuerberaters (Prämie separat) anders. Aktienverluste sind nur mit
 Aktiengewinnen verrechenbar. Ob eine Berichtigung nötig ist, entscheidet der Steuerberater.
+
+## OF-97 · KAP-Vorschau in zwei Varianten (17.10.2026)
+
+Anlass: Die erste KAP-Vorschau (Zeile 19: 300.812 EUR für 2026, Zeile 22: −23,2 Mio.) war unplausibel. Ursachen: (1) Die
+Rückkäufe von Stillhalterpositionen zählten als „Verluste“ in Zeile 22 — sie sind negative Einnahmen derselben Art wie
+die Prämien und gehören in einen Saldo. (2) Die 300.812 EUR enthalten 315.123 EUR Prämien noch **offener** Positionen
+(Zuflussprinzip), die wirtschaftlich noch nicht verdient sind.
+
+**Jetzt zwei Varianten nebeneinander** (Seite „Steuer“, je Jahr; vorläufig, nicht verrechnet; Zeilen 2025 laut Antwort
+des Steuerberaters, 2026 ungeprüft):
+
+- **A „Zufluss, Prämie separat“** (Arbeitsstand des Steuerberaters): Z19 = Saldo aus Aktien, Stillhalter (Prämien
+  abzüglich Rückkäufe), Termingeschäften, Dividenden, Habenzinsen; Z20 = Aktiengewinne; Z22 = Verluste der
+  Termingeschäfte (gekaufte Optionen, Barausgleich, Futures) und ein negativer Stillhaltersaldo; Z23 = Aktienverluste.
+- **B „IB-Methode (Realized P/L)“**: wie das Activity Statement — Z19 = IB-Aktien + IB-Optionen/Futures + Dividenden +
+  Habenzinsen; Z20/Z23 = IB-Aktiengewinne/-verluste, Z22 = IB-Verluste bei Optionen und Futures (je Ausführung, IB
+  selbst weist je Lot aus). Offene Positionen fehlen, Prämien zugeteilter Optionen stehen in der Aktie.
+
+| 2026 (bis 16.10.) | A | B |
+|---|---|---|
+| Z19 Saldo | 300.812 | −10.363 |
+| Z20 Aktiengewinne | 64.615 | 91.145 |
+| Z22 Verluste ohne Aktien | 6.880.644 | 10.130.331 |
+| Z23 Aktienverluste | 146.104 | 56.262 |
+| Z41 Quellensteuer (vorläufig) | 204 | 204 |
+
+| 2025 | A | B |
+|---|---|---|
+| Z19 | 80.425 | 42.073 |
+| Z20 | 14.496 | 28.660 |
+| Z22 | 803.595 | 1.295.275 |
+| Z23 | 67.019 | 49.139 |
+| Z41 | 226 | 226 |
+
+Zeile 22 sind **Bruttoverluste einzelner Optionsgeschäfte** (hoher Umschlag, SPX-0DTE) — die Größe ist kein Fehler; der
+Saldo steht in Zeile 19. ETFs stehen in Variante A nicht im Aktien-Topf (offene Regeln), in Variante B zählen sie als Aktien.

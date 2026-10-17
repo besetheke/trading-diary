@@ -150,34 +150,77 @@ class SteuerZuflussErgebnis:
         return dict(sorted(jahre.items()))
 
 
+KAP_POSTEN = (
+    "ausl_kapitalertraege_saldo",
+    "aktiengewinne",
+    "verluste_ohne_aktien",
+    "aktienverluste",
+    "anrechenbare_quellensteuer",
+)
+
+
+def kap_block(
+    formularjahr: int,
+    variante: str,
+    name: str,
+    beschreibung: str,
+    teile: dict[str, Decimal],
+    aktiengewinne: Decimal,
+    verluste_ohne_aktien: Decimal,
+    aktienverluste: Decimal,
+    quellensteuer: Decimal,
+) -> dict:
+    """Eine KAP-Vorschau (**vorläufig, nicht verrechnet**). ``teile`` sind die Bestandteile des Saldos der
+    ausländischen Kapitalerträge (Zeile 19); ``verluste_ohne_aktien`` und ``aktienverluste`` sind positive
+    Beträge (die „davon“-Zeilen 22 und 23). Zeilen und Status kommen aus der Konfiguration je Formularjahr."""
+    z = kap_zeilen(formularjahr)
+    werte = {
+        "ausl_kapitalertraege_saldo": sum(teile.values(), _NULL),
+        "aktiengewinne": aktiengewinne,
+        "verluste_ohne_aktien": verluste_ohne_aktien,
+        "aktienverluste": aktienverluste,
+        "anrechenbare_quellensteuer": quellensteuer,
+    }
+    return {
+        "variante": variante,
+        "name": name,
+        "beschreibung": beschreibung,
+        "formularjahr": formularjahr,
+        "status": z["status"],
+        "vorlaeufig": True,
+        "posten": {n: {"zeile": z["zeilen"][n], "betrag": werte[n]} for n in KAP_POSTEN},
+        "zusammensetzung": dict(teile),
+    }
+
+
 def _kap_vorschau(formularjahr: int, block: dict) -> dict:
-    """Werte je KAP-Posten, **vorläufig und nicht verrechnet** (Zeilen je Formularjahr, Status wie in der Konfig)."""
+    """Variante A: Zufluss je Zahlungsstrom, Stillhalterprämie separat (Arbeitsstand des Steuerberaters).
+
+    Stillhalterprämien und Rückkäufe sind **Einnahmen und negative Einnahmen derselben Art** und werden zu einem
+    Saldo zusammengefasst — ein Rückkauf ist kein „Verlust“ für Zeile 22. Verluste ohne Aktien sind die Verluste
+    der Termingeschäfte (gekaufte Optionen, Barausgleich, Futures); ist der Stillhaltersaldo eines Jahres negativ,
+    zählt er ebenfalls dazu."""
     t = block["toepfe"]
 
     def feld(topf: str, name: str) -> Decimal:
         return t.get(topf, {}).get(name, _NULL)
 
-    aktien_gewinne = feld(TOPF_AKTIEN, "gewinne")
-    aktien_verluste = -feld(TOPF_AKTIEN, "verluste")
-    ohne_aktien_verluste = -(feld(TOPF_STILLHALTER, "verluste") + feld(TOPF_TERMIN, "verluste"))
-    saldo = sum(
-        (feld(topf, "saldo") for topf in (TOPF_AKTIEN, TOPF_TERMIN, TOPF_STILLHALTER, TOPF_DIVIDENDEN, TOPF_ZINSEN)),
-        _NULL,
+    still = feld(TOPF_STILLHALTER, "saldo")
+    verluste_ohne_aktien = -feld(TOPF_TERMIN, "verluste") + (-still if still < _NULL else _NULL)
+    return kap_block(
+        formularjahr, "zufluss", "Zufluss, Prämie separat",
+        "Arbeitsstand des Steuerberaters: Stillhalterprämie im Zuflussjahr, Rückkauf im Zahlungsjahr, Aktie zum "
+        "Strike; offene Positionen sind enthalten.",
+        {
+            "Aktien": feld(TOPF_AKTIEN, "saldo"),
+            "Stillhalter (Prämien abzüglich Rückkäufe)": still,
+            "Termingeschäfte (inkl. Barausgleich)": feld(TOPF_TERMIN, "saldo"),
+            "Dividenden": feld(TOPF_DIVIDENDEN, "saldo"),
+            "Habenzinsen": feld(TOPF_ZINSEN, "saldo"),
+        },
+        feld(TOPF_AKTIEN, "gewinne"), verluste_ohne_aktien, -feld(TOPF_AKTIEN, "verluste"),
+        block["quellensteuer"]["vorlaeufig_anrechenbar"],
     )
-    werte = {
-        "ausl_kapitalertraege_saldo": saldo,
-        "aktiengewinne": aktien_gewinne,
-        "verluste_ohne_aktien": ohne_aktien_verluste,
-        "aktienverluste": aktien_verluste,
-        "anrechenbare_quellensteuer": block["quellensteuer"]["vorlaeufig_anrechenbar"],
-    }
-    z = kap_zeilen(formularjahr)
-    return {
-        "formularjahr": formularjahr,
-        "status": z["status"],
-        "vorlaeufig": True,
-        "posten": {name: {"zeile": z["zeilen"][name], "betrag": wert} for name, wert in werte.items()},
-    }
 
 
 # --------------------------------------------------------------------------------------------- Hilfen

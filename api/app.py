@@ -59,6 +59,7 @@ from analytics.nav import nav_bericht
 from analytics.oa_vergleich import oa_vergleich_bericht
 from analytics.performance import performance_bericht
 from analytics.steuer import als_csv as steuer_als_csv
+from analytics.steuer_ueberleitung import kap_ib_varianten
 from analytics.steuer_zufluss import als_csv as steuer_zufluss_csv
 from analytics.strategien import strategie_bericht
 from analytics.titel import NativZeile, TitelZeile, titel_bericht
@@ -87,6 +88,7 @@ from journal.schema import (
 from journal.steuer import steuer_bericht
 from journal.steuer_zufluss import (
     fremdwaehrung_salden,
+    ib_daten_laden,
     ib_ueberleitung_bericht,
     steuer_zufluss_bericht,
 )
@@ -1101,11 +1103,21 @@ class SteuerKapPostenAntwort(BaseModel):
     betrag: str
 
 
+class SteuerKapTeilAntwort(BaseModel):
+    name: str
+    betrag: str
+
+
 class SteuerKapAntwort(BaseModel):
+    variante: str
+    name: str
+    beschreibung: str
     formularjahr: int
     status: str
     vorlaeufig: bool
     posten: list[SteuerKapPostenAntwort]
+    zusammensetzung: list[SteuerKapTeilAntwort]
+    hinweise: list[str] = []
 
 
 class SteuerJahrAntwort(BaseModel):
@@ -1113,7 +1125,7 @@ class SteuerJahrAntwort(BaseModel):
     toepfe: list[SteuerTopfAntwort]
     quellensteuer: dict[str, str]
     betroffen: int
-    kap: SteuerKapAntwort
+    kap_varianten: list[SteuerKapAntwort]
 
 
 class SteuerDatenlueckeAntwort(BaseModel):
@@ -3727,7 +3739,36 @@ def erzeuge_app(
             "kursdatum_abweichend": sum(1 for s in ergebnis.stroeme if s.pruefstatus != "ok"),
             "stroeme": len(ergebnis.stroeme),
         }
-        ueberleitung = ib_ueberleitung_bericht(db_pfad, ergebnis)
+        ib_daten = ib_daten_laden(db_pfad)
+        ueberleitung = ib_ueberleitung_bericht(db_pfad, ergebnis, ib_daten)
+        kap_ib = kap_ib_varianten(ib_daten[0], ergebnis.jahre())
+
+        def kap_antwort(k: dict, hinweise: list[str]) -> SteuerKapAntwort:
+            return SteuerKapAntwort(
+                variante=k["variante"], name=k["name"], beschreibung=k["beschreibung"],
+                formularjahr=k["formularjahr"], status=k["status"], vorlaeufig=k["vorlaeufig"],
+                posten=[
+                    SteuerKapPostenAntwort(
+                        posten=n, zeile=p["zeile"], betrag=_als_text(p["betrag"]))
+                    for n, p in k["posten"].items()
+                ],
+                zusammensetzung=[
+                    SteuerKapTeilAntwort(name=n, betrag=_als_text(b))
+                    for n, b in k["zusammensetzung"].items()
+                ],
+                hinweise=hinweise,
+            )
+
+        def kap_varianten(jahr: int, b: dict) -> list[SteuerKapAntwort]:
+            offene = ueberleitung.get(jahr, {}).get("offene_praemien", Decimal(0))
+            hinweise_a = (
+                [f"Darin: {_als_text(offene)} EUR Prämien noch offener Positionen "
+                 "(Zufluss im Jahr der Eröffnung)."]
+                if offene
+                else []
+            )
+            return [kap_antwort(b["kap"], hinweise_a), kap_antwort(kap_ib[jahr], [])]
+
         return SteuerAntwort(
             methode=methode,
             ib_ueberleitung=[
@@ -3764,15 +3805,7 @@ def erzeuge_app(
                     ],
                     quellensteuer={k: _als_text(v) for k, v in b["quellensteuer"].items()},
                     betroffen=b["betroffen"],
-                    kap=SteuerKapAntwort(
-                        formularjahr=b["kap"]["formularjahr"], status=b["kap"]["status"],
-                        vorlaeufig=b["kap"]["vorlaeufig"],
-                        posten=[
-                            SteuerKapPostenAntwort(
-                                posten=n, zeile=p["zeile"], betrag=_als_text(p["betrag"]))
-                            for n, p in b["kap"]["posten"].items()
-                        ],
-                    ),
+                    kap_varianten=kap_varianten(j, b),
                 )
                 for j, b in ergebnis.jahre().items()
             ],

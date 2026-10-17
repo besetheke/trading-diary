@@ -99,3 +99,40 @@ def ib_ueberleitung(
             "rest_optionen": rest_optionen,
         }
     return ergebnis_je_jahr
+
+
+def kap_ib_varianten(ib_zeilen: list[dict], jahre: dict[int, dict]) -> dict[int, dict]:
+    """Variante B der KAP-Vorschau: **IBs Realized P/L** (wie im Activity Statement) — realisiert beim Schließen,
+    die Prämie einer zugeteilten Option liegt im Einstand der Aktie, offene Positionen fehlen. Gewinne und Verluste
+    je IB-Ausführung (IB selbst weist sie je Lot aus; je Ausführung ist eine Näherung). Dividenden, Habenzinsen und
+    Quellensteuer stammen unverändert aus der Station (``jahre`` von ``SteuerZuflussErgebnis.jahre()``)."""
+    from analytics.steuer_zufluss import TOPF_DIVIDENDEN, TOPF_ZINSEN, kap_block
+
+    ib: dict[int, dict[str, Decimal]] = defaultdict(
+        lambda: {"stk_g": _NULL, "stk_v": _NULL, "opt_g": _NULL, "opt_v": _NULL}
+    )
+    for z in ib_zeilen:
+        if z["klasse"] == KLASSE_AKTIEN:
+            k = "stk_g" if z["eur"] >= _NULL else "stk_v"
+        elif z["klasse"] == KLASSE_OPTIONEN or z["klasse"] in KLASSEN_FUTURES:
+            k = "opt_g" if z["eur"] >= _NULL else "opt_v"
+        else:
+            continue
+        ib[z["jahr"]][k] += z["eur"]
+    ergebnis = {}
+    for jahr in sorted(set(ib) | set(jahre)):
+        w = ib[jahr]
+        t = jahre.get(jahr, {"toepfe": {}, "quellensteuer": {"vorlaeufig_anrechenbar": _NULL}})
+        ergebnis[jahr] = kap_block(
+            jahr, "ib", "IB-Methode (Realized P/L)",
+            "Wie das Activity Statement: realisiert beim Schließen, Prämie zugeteilter Optionen im Einstand der Aktie, "
+            "offene Positionen nicht enthalten.",
+            {
+                "Aktien (IB)": w["stk_g"] + w["stk_v"],
+                "Optionen und Futures (IB)": w["opt_g"] + w["opt_v"],
+                "Dividenden": t["toepfe"].get(TOPF_DIVIDENDEN, {}).get("saldo", _NULL),
+                "Habenzinsen": t["toepfe"].get(TOPF_ZINSEN, {}).get("saldo", _NULL),
+            },
+            w["stk_g"], -w["opt_v"], -w["stk_v"], t["quellensteuer"]["vorlaeufig_anrechenbar"],
+        )
+    return ergebnis

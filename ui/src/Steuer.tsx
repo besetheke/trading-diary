@@ -176,25 +176,68 @@ export default function Steuer(): JSX.Element {
           </p>
 
           <h3>
-            {gewaehlt.jahr}: Vorschau Anlage KAP (vorläufig, nicht verrechnet) — Zeilen {gewaehlt.kap.formularjahr}:{' '}
-            {gewaehlt.kap.status === 'ungeprueft' ? 'ungeprüft' : 'laut Antwort des Steuerberaters'}
+            {gewaehlt.jahr}: Vorschau Anlage KAP in zwei Varianten (vorläufig, nicht verrechnet) — Zeilen{' '}
+            {gewaehlt.kap_varianten[0].formularjahr}:{' '}
+            {gewaehlt.kap_varianten[0].status === 'ungeprueft' ? 'ungeprüft' : 'laut Antwort des Steuerberaters'}
           </h3>
+          <p className="sicht">
+            <strong>Zeile 19</strong> ist der Saldo aller ausländischen Kapitalerträge (Aktien, Optionen, Stillhalter,
+            Dividenden, Habenzinsen); <strong>Zeile 20</strong> die darin enthaltenen Aktiengewinne,{' '}
+            <strong>Zeile 22</strong> die Bruttoverluste ohne Aktien (einzelne Optionsgeschäfte, Barausgleich, Futures —
+            bei hohem Umschlag sehr große Zahlen) und <strong>Zeile 23</strong> die Aktienverluste. Der Saldo steht in
+            Zeile 19; die Zeilen 20, 22 und 23 sind „davon“-Beträge und werden nicht voneinander abgezogen. Welche
+            Variante gilt, entscheidet der Steuerberater.
+          </p>
           <div className="tabelle-rahmen">
             <table className="positionen dichte-kompakt">
               <thead>
                 <tr>
                   <th className="zahl">Zeile</th>
                   <th>Posten</th>
+                  {gewaehlt.kap_varianten.map((k) => (
+                    <th key={k.variante} className="zahl" title={k.beschreibung}>{k.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {gewaehlt.kap_varianten[0].posten.map((p, idx) => (
+                  <tr key={p.posten}>
+                    <td className="zahl">{p.zeile}</td>
+                    <td>{KAP_NAME[p.posten] ?? p.posten}</td>
+                    {gewaehlt.kap_varianten.map((k) => (
+                      <td key={k.variante} className="zahl"><Betrag wert={k.posten[idx].betrag} /></td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="tabelle-rahmen">
+            <table className="positionen dichte-kompakt">
+              <thead>
+                <tr>
+                  <th>Zusammensetzung von Zeile 19</th>
                   <th className="zahl">Betrag EUR</th>
                 </tr>
               </thead>
               <tbody>
-                {gewaehlt.kap.posten.map((p) => (
-                  <tr key={p.posten}>
-                    <td className="zahl">{p.zeile}</td>
-                    <td>{KAP_NAME[p.posten] ?? p.posten}</td>
-                    <td className="zahl"><Betrag wert={p.betrag} /></td>
-                  </tr>
+                {gewaehlt.kap_varianten.map((k) => (
+                  <>
+                    <tr key={`${k.variante}-kopf`} className="summe">
+                      <td colSpan={2}><strong>{k.name}</strong> — {k.beschreibung}</td>
+                    </tr>
+                    {k.zusammensetzung.map((t) => (
+                      <tr key={`${k.variante}-${t.name}`}>
+                        <td>{t.name}</td>
+                        <td className="zahl"><Betrag wert={t.betrag} /></td>
+                      </tr>
+                    ))}
+                    {k.hinweise.map((h) => (
+                      <tr key={`${k.variante}-${h}`}>
+                        <td colSpan={2} className="hinweis">{h}</td>
+                      </tr>
+                    ))}
+                  </>
                 ))}
               </tbody>
             </table>
