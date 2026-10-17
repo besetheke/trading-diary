@@ -38,7 +38,13 @@ export default function Steuer(): JSX.Element {
   const ungeklaert = daten.jahre.reduce((s, j) => s + j.ungeklaert, 0)
   return (
     <section>
-      <h2>Steuer — Aufbereitung nach Zuflussjahr</h2>
+      <h2>Steuer — Altberechnung nach Schließungsjahr</h2>
+      <p className="fehler">
+        <strong>Altberechnung — nicht zur Übernahme in die Steuererklärung.</strong> Diese Zahlen buchen das ganze
+        Ergebnis eines Geschäfts im Jahr der Schließung und rechnen es zum Kurs der Schließung um. Offene Positionen
+        fehlen, Dividenden und Ersatzzahlungen stehen zusammen, ETFs zählen als Aktien. Die Neufassung (Zufluss je
+        Zahlungsstrom) ist in Arbeit: AP-10b bis AP-10d, Stand der Regeln in OF-92 und OF-93.
+      </p>
       <p className="sicht">
         Aufbereitung für den Steuerberater, <strong>keine Steuerberatung und keine Verlustverrechnung</strong>: Es gilt
         das Jahr der schließenden Ausführung (Zuflussprinzip), getrennt nach Aktien und Termingeschäften. Euro-Beträge
@@ -145,14 +151,16 @@ export default function Steuer(): JSX.Element {
       <h3>Offene Fragen für den Steuerberater</h3>
       <ol>
         <li>
-          <strong>Prämie bei Zuteilung (Short Put/Call mit Lieferung):</strong> Hier steht die Prämie im Topf der
-          Termingeschäfte (Spalte „davon Prämie bei Lieferung“), die gelieferte Aktie führt den Verlust gegen den
-          Strike im Aktien-Topf. Möglicherweise gehört die Prämie steuerlich in die Anschaffungskosten der Aktie (so
-          bucht auch IB). Das verschiebt Beträge zwischen den Töpfen — mit dem Steuerberater klären.
+          <strong>Prämie bei Zuteilung (Short Put/Call mit Lieferung):</strong> Arbeitsstand des Steuerberaters
+          (noch zu bestätigen): Die Stillhalterprämie bleibt separat und gilt im Zuflussjahr, die Aktie kommt mit dem
+          Strike an (Erwerbskosten erhöhen die Anschaffungskosten). Die Altberechnung hier bucht die Prämie ins
+          Schließungsjahr; Optionen auf Aktien bei gekaufter Ausübung (Long Call/Put) und ETFs sind noch nicht
+          berücksichtigt.
         </li>
         <li>
-          <strong>Umrechnung:</strong> EUR über den Buchungskurs der Schließung (wie IB). Steuerlich kann der Kurs je
-          Zahlungsstrom (Eröffnung und Schließung einzeln) gefordert sein (OF-59).
+          <strong>Umrechnung:</strong> Die Altberechnung rechnet das Netto zum Kurs der Schließung um — das ist
+          ungeeignet. Vorgesehen: jeder Zahlungsstrom zum Kurs seines maßgeblichen Tages (OF-92); Kursquelle (IB oder
+          EZB) ist noch zu klären.
         </li>
         <li>
           <strong>Jahresgrenze:</strong> Das Jahr folgt der gespeicherten Handelszeit ohne Zeitzone; Geschäfte kurz vor

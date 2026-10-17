@@ -3602,3 +3602,33 @@ Die Prämie bleibt separat, die Aktie kommt zum Strike; die Vermutung „Prämie
 **Benötigt (Eingaben):** Flex-Daten 2025; steuerliche Anfangsbestände zum 01.01.2025 (Anschaffungskosten und -daten
 der Aktien-, Options- und USD-Bestände) und festgestellte Verlustvorträge; IB-Leihberichte für die Ursache der
 Ersatzzahlungen; USD-Saldoverlauf. Das ist keine Neubearbeitung alter Erklärungen, sondern die Ausgangsbasis 2025.
+
+## OF-93 · Review des Plans a193f1d (Kollege, 17.10.2026) — eingearbeitet in AP-10b/c/d
+
+Der Kollege hat Code, Tests, API, Seite und AP-10b/c/d geprüft (Reviewbericht liegt bei ihm). Seine Befunde zur
+alten Methode habe ich am Code gegengeprüft:
+
+| Befund | Gegenprüfung |
+|---|---|
+| Offene Positionen übersprungen | stimmt: `analytics/steuer.py` verwirft offene Legs (AP-10-Vertrag 2) |
+| Netto zum Schlusskurs | stimmt: Kauf und Verkauf zu je 100 USD ergeben 0 EUR statt −10 EUR bei Kursen 0,90 und 0,80 |
+| Ersatzzahlung und echte Dividende zusammen | stimmt: `cashflows.py` bildet beide auf `dividenden` ab |
+| Kursmangel der Cash-Buchungen geht verloren | stimmt für die neue Seite: die API übernahm nur `summe_eur`, nicht `anzahl_kurs_fehlt` |
+| ETFs als Aktien | stimmt: `STK` umfasst im Echtbestand 9 ETF-Symbole (73 Ausführungen); `subCategory` steht im Rohsatz |
+| `leg_seiten` verwirft bei fehlendem Kurs die ganze Liste | stimmt laut Dokumentation der Funktion |
+
+**Folgen für die Pläne (eingearbeitet):** Offene Beine, Teilglattstellungen und Rolls als Pflichtfälle; Datum/Kurs je
+Vorgangsart statt globalem Schalter (Steuerdatum, FX-Datum, Quelle, Prüfstatus); Ausübung gekaufter Optionen mit
+Lieferung (Long Call → Anschaffungskosten, Long Put → Veräußerungsergebnis); Erwerbs-/Veräußerungskosten getrennt;
+ETF/ETN/ETP als „ungeklärt (InvStG)“; Quellensteuer als vorläufige Obergrenze in drei Zuständen; Test „unter 256 €
+→ steuerfrei“ gestrichen (Einordnung offen); Gewinne und Verluste getrennt; Datenlücken und offene Regeln getrennt;
+Schnittstelle für Anfangsbestände schon in AP-10b/c; CLI-Export umstellen oder als ALTVERFAHREN kennzeichnen;
+`tests/test_api_steuer.py` und `tests/test_steuer_jahre.py` werden in AP-10b **namentlich** ersetzt; eigene
+Zerlegung der Zahlungsströme statt `leg_seiten`.
+
+**Sofort umgesetzt:** Die Seite „Steuer“ trägt jetzt den Hinweis „Altberechnung — nicht zur Übernahme in die
+Steuererklärung“; ihre Fragenliste folgt OF-92.
+
+**Nicht nachgeprüft:** die rechtlichen Zitate des Kollegen (BMF Rn. 22/27/29/32, InvStG, § 32d, § 22 Nr. 3) — zur
+Bestätigung durch den Steuerberater. Der Hinweis, dass der Windows-Testclient bei ihm hing, ist kein Befund zum
+Endpunkt: Die API-Tests laufen bei mir grün.

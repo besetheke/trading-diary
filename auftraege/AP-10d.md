@@ -11,12 +11,19 @@ aendert_tests: nein
 Dieses Paket ist **nicht beginnbar**, solange die Eingaben unten fehlen. Es steht hier, damit nichts verloren geht
 und die Abhängigkeiten sichtbar sind. Vorgehen je Teil: erst Rückfrage beantworten, dann Auftrag schärfen.
 
+## Teil 0 · Datenprüfung, parallel ab sofort (blockiert nichts)
+
+Aus den vorhandenen Daten gezielte Listen **mit Buchungen und Beträgen** für den Steuerberater: Ersatzzahlungen je
+Jahr, ETF-Anteile und -Lieferungen (9 Symbole), Buchungen um den Jahreswechsel, Quellensteuer-Überhang je Land,
+Optionen mit Lieferung je Jahr. Nur Zählwerte und Summen im Bericht (CLAUDE.md Regel 2); die Einzelbuchungen für
+den Berater erzeugt der Nutzer aus der Datenbank.
+
 ## Teil 1 · Steuerliche Anfangsbestände zum 01.01.2025
 
 Benötigt für 2025: Anschaffungskosten und -daten der übernommenen **Aktien-, Options- und USD-Bestände**. Die
 Datenbank beginnt 2022; was davor erworben wurde, hat nur den Einstand laut IB. **Eingabe vom Nutzer/Berater:**
 Bestandsliste zum Stichtag mit Anschaffungsdatum und -kosten, dazu die festgestellten Verlustvorträge aus den
-Bescheiden. Das Paket gleicht sie mit den Beständen der Datenbank ab und listet Abweichungen; es **rechnet nichts
+Bescheiden. Die **Eingabestruktur** liegt schon in AP-10b/c (R16); hier kommen die realen Werte. Das Paket gleicht sie mit den Beständen der Datenbank ab und listet Abweichungen; es **rechnet nichts
 nach**. Das ist keine Neubearbeitung alter Erklärungen, sondern die Ausgangsbasis 2025.
 
 ## Teil 2 · Ersatzzahlungen und SYEP

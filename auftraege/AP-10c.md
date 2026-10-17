@@ -18,28 +18,48 @@ unveränderliche Tests) anzufassen.
    Kontosicht, Ausführungen mit `dateTime`, `tradeDate`, `settleDateTarget`, `fxRateToBase`, `ereignistyp`,
    Kommission; Instrumente (Klasse, Abwicklungsart, Land); Cash-Buchungen mit `settleDate`, `dividendType`,
    `issuerCountryCode`, `description`. Ausgabe je Formularjahr: Stillhalter-Zufluss, Glattstellungen, Barausgleich,
-   Termingeschäfte, Aktienveräußerung (Strike plus Transaktionskosten), Dividenden, anrechenbare/nicht
+   Termingeschäfte, Aktienanschaffung/-veräußerung (Strike, Erwerbs- und Veräußerungskosten getrennt, R5/R6), Dividenden, anrechenbare/nicht
    anrechenbare Quellensteuer, SO-Kandidaten, Zinsen, nicht abziehbare Posten — je Posten mit Kursquelle und
    Datumsfeld.
 2. **Rechengrundlage:** Die Zahlungsströme je Bein entstehen aus Eröffnungs- und Schließungsausführung; jeder
-   Strom nimmt Datum und Kurs **seiner** Ausführung. Die vorhandene Zerlegung `leg_seiten` (analytics/kennzahlen)
-   wird gelesen, nicht verändert (CLAUDE.md Regel 8: keine zweite, abweichende EUR-Rechnung — Abweichung zur
-   Equity ist hier die Methode, nicht ein Fehler, und wird im Abgleich gezeigt).
-3. **Hülle** `journal/steuer_zufluss.py`: liest und übergibt; Konfiguration (`ZUFLUSS_DATUM`, Satztabelle je
-   Land, KAP-Zeilentabelle je Formularjahr) liegt in **einer** Datei `analytics/steuer_konfig.py`, nicht verteilt.
-4. **API:** `GET /steuer-auswertung` liefert die neue Methode (Felder je Jahr wie oben, dazu `methode` mit
-   Kursquelle, Datumsfeld, Formularjahr, Status „geprüft/ungeprüft“); `GET /steuer-csv` bekommt das neue Format;
-   die alte Methode (Schließungsjahr) bleibt als `/steuer-csv?methode=alt` für den Vergleich.
+   Strom nimmt Datum und Kurs **seiner** Ausführung (Regeltabelle je Vorgangsart, AP-10b R7). **`leg_seiten` ist
+   nicht die Grundlage** (AP-10b R14): sie liefert bei fehlendem Kurs `None` für die ganze Leg-Liste, eine bekannte
+   Eröffnungsprämie würde verschwinden. Eigene Zerlegung `zahlungsstroeme(...)`, ein Eintrag je Strom, jede
+   Eröffnungsprämie und Kommission genau einmal; offene Beine, Teilglattstellungen, Restmengen und Rolls gehören
+   dazu. Die Abweichung zur Equity ist die Methode, nicht ein Fehler, und wird im Abgleich gezeigt.
+   Ausübung gekaufter Optionen mit Lieferung (R5) und Instrumentklassifikation ETF/ETN/ETP (R13, `subCategory` aus
+   dem Rohsatz der Ausführung, keine Schemaänderung) gehören in diese Rechnung.
+   `cashflows.py` bleibt unverändert (unveränderliche Tests): Dividenden und Ersatzzahlungen werden hier **eigens**
+   getrennt (`dividendType`, Beschreibung, Typ „Payment In Lieu“), und der Kursmangel der Cash-Buchungen
+   (`anzahl_kurs_fehlt`) wird bis in die API **durchgereicht**, nicht verworfen.
+3. **Hülle** `journal/steuer_zufluss.py`: liest und übergibt; Konfiguration (Regeltabelle Steuerdatum/FX-Datum je
+   Vorgangsart statt globalem Schalter, Satztabelle je Land, KAP-Zeilentabelle je Formularjahr) liegt in **einer**
+   Datei `analytics/steuer_konfig.py`. Kursbeschaffung hinter der Schnittstelle `Kursquelle` (IB-Kurs je
+   Ausführung zuerst; EZB später ohne Umbau). Eingang für **Anfangsbestände** und **Verlustvorträge** (R16), leer
+   erlaubt, mit Warnung.
+4. **API:** `GET /steuer-auswertung` liefert die neue Methode: je Jahr Gewinne und Verluste **getrennt** je Topf,
+   Quellensteuer in drei Zuständen, `datenluecken` und `regeln_offen` getrennt, dazu `methode` (Kursquelle,
+   Datumsregeln, Formularjahr, Prüfstatus, Warnungen). `GET /steuer-csv` bekommt das neue Format; die alte Methode
+   bleibt als `/steuer-csv?methode=alt` mit Kennzeichnung ALTVERFAHREN. Der CLI-Export `journal steuer` wird
+   umgestellt oder gekennzeichnet (AP-10b). Der bisherige API-Test `test_api_steuer.py` wird in AP-10b ersetzt.
 5. **UI:** Seite `/steuer` zeigt Töpfe getrennt nach den Posten der Regeln (Aktien, Termingeschäfte, Stillhalter,
-   Dividenden, Quellensteuer anrechenbar/nicht, **SO-Kandidaten**, Zinsen, nicht abziehbar), je Jahr; Kopfzeile
+   Dividenden, Quellensteuer vorläufig anrechenbar / möglicherweise erstattungsfähig / ungeklärt, **SO-Kandidaten
+   (Einordnung offen)**, ETF (ungeklärt), Zinsen, nicht abziehbar), je Jahr, Gewinne und Verluste getrennt; Kopfzeile
    nennt Methode, Kursquelle und Datumsfeld. Die Liste „Offene Fragen“ der Seite wird auf den Stand von OF-92
    gebracht (Prämie bei Zuteilung ist entschieden, vorbehaltlich Bestätigung). **Keine Summe „steuerpflichtig“** und
    keine Verrechnung — nur Aufbereitung.
-6. **Betroffenheit:** je Jahr die Zahl der Buchungen, die bei Wechsel von `settle` auf `handel` in ein anderes Jahr
-   fielen (Regel R1), sichtbar auf der Seite und im CSV.
+6. **Betroffenheit:** je Jahr die Zahl der Buchungen, die bei Wechsel der Datumsregel (R7) in ein anderes Jahr
+   fielen, sichtbar auf der Seite und im CSV.
+
+## Sofortmaßnahme (schon erledigt, 17.10.2026)
+
+Die bestehende Seite „Steuer“ kennzeichnet ihre Zahlen als **Altberechnung (Schließungsjahr), nicht zur Übernahme in
+die Steuererklärung** und trägt den Stand von OF-92 statt der überholten Frage zur Prämie bei Zuteilung.
 
 ## Reihenfolge
 
+0. **Parallel ab sofort (AP-10d, Datenprüfung):** betroffene Buchungen und Beträge für die Beraterfragen
+   zusammenstellen (Ersatzzahlungen, ETF-Lieferungen, Jahreswechsel, Quellensteuer-Überhang).
 1. AP-10b (stark): Regeln, Tests, Fixtures, Abgleichsskript. **Danach Abnahme der Regeln durch den Steuerberater.**
 2. AP-10c (günstig): 1–4 gegen die Tests, dann 5–6.
 3. Abgleich am Echtbestand (stark): neue gegen alte Methode je Jahr; Abweichungen nach Ursache aufgeschlüsselt
