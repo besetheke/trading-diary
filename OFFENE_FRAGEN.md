@@ -3551,8 +3551,8 @@ Gebühren aus den Cash-Buchungen. Sie verrechnet nichts und ist keine Steuerbera
 
 1. **Prämie bei Zuteilung (Frage an den Steuerberater).** AP-10v bucht die Prämie einer mit Lieferung beendeten
    Option (Zuteilung/Ausübung) in den Topf der Termingeschäfte, die gelieferte Aktie führt den Verlust gegen den
-   Strike im Aktien-Topf (Echtbestand: Prämien bei Lieferung 2022 37.069 EUR, 2023 59.689, 2024 29.006, 2025 41.124,
-   2026 141.225). Möglicherweise gehört die Prämie steuerlich in die Anschaffungskosten der Aktie (so bucht auch
+   Strike im Aktien-Topf (Echtbestand, netto aus Zuteilung und Ausübung, EUR: 2022 37.069, 2023 58.862, 2024 28.408,
+   2025 37.660, 2026 57.260). Möglicherweise gehört die Prämie steuerlich in die Anschaffungskosten der Aktie (so bucht auch
    IB, vgl. OF-24-Auflage). Das verschöbe Beträge zwischen den Töpfen — und Aktienverluste sind nur mit
    Aktiengewinnen verrechenbar. **Nicht geraten, nicht umgebucht:** die Seite zeigt die Prämie je Jahr getrennt aus
    (Spalte „davon Prämie bei Lieferung“), die Töpfe bleiben nach AP-10v. Entscheidung nach Rücksprache.
