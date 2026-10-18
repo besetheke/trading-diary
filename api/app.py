@@ -4007,7 +4007,7 @@ def erzeuge_app(
             pruefe_station_aufruf(request)
             if aktion not in ("start", "stop"):
                 raise HTTPException(status_code=404, detail="unbekannte Aktion")
-            ok, text = (momentum_steuerung.starten() if aktion == "start"
+            ok, text = (momentum_steuerung.starten_mit_aufraeumen() if aktion == "start"
                         else momentum_steuerung.beenden())
             if not ok:
                 raise HTTPException(status_code=409, detail=text)

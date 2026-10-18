@@ -58,3 +58,31 @@ def test_starten_wenn_es_schon_laeuft_startet_nichts(monkeypatch):
     monkeypatch.setattr(ms, "laeuft", lambda: True)
     monkeypatch.setattr(ms.subprocess, "Popen", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Start")))
     assert ms.starten()[0]
+
+
+def test_beenden_beendet_auch_den_hängenden_starter_zuerst(monkeypatch):
+    """Ursache „Momentum Lab lässt sich nicht einschalten“: der Starter blieb nach dem Stopp stehen."""
+    aufrufe = []
+
+    def ausgabe(befehl):
+        aufrufe.append(befehl)
+        return "777\n" if befehl[0] == "powershell" and "start_momentum_lab_hidden" in befehl[-1] else NETSTAT
+
+    monkeypatch.setattr(ms, "_ausgabe", ausgabe)
+    monkeypatch.setattr(ms, "_kommandozeile", lambda pid: r"python -m streamlit run x\momentum_lab\app.py")
+    assert ms.beenden()[0]
+    starter = ["taskkill", "/PID", "777", "/T", "/F"]
+    server = ["taskkill", "/PID", "4242", "/T", "/F"]
+    assert starter in aufrufe and server in aufrufe and aufrufe.index(starter) < aufrufe.index(server)
+
+
+def test_starten_raeumt_alte_starter_vor_dem_start_ab(monkeypatch, tmp_path):
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "start_momentum_lab_hidden.ps1").write_text("", encoding="utf-8")
+    monkeypatch.setenv("MOMENTUM_LAB_ORDNER", str(tmp_path))
+    monkeypatch.setattr(ms, "laeuft", lambda: False)
+    aufrufe = []
+    monkeypatch.setattr(ms, "_ausgabe", lambda b: aufrufe.append(b) or ("888\n" if b[0] == "powershell" else ""))
+    monkeypatch.setattr(ms.subprocess, "Popen", lambda befehl, **kw: None)
+    assert ms.starten_mit_aufraeumen()[0]
+    assert ["taskkill", "/PID", "888", "/T", "/F"] in aufrufe

@@ -15,7 +15,7 @@ import subprocess
 
 PORT = 8501
 _KEIN_FENSTER = 0x08000000      # CREATE_NO_WINDOW
-_ABGELOEST = 0x00000008         # DETACHED_PROCESS
+_ABGELOEST = 0x00000200         # CREATE_NEW_PROCESS_GROUP (DETACHED_PROCESS beendet den Starter sofort und stumm)
 
 
 def lab_ordner() -> pathlib.Path:
@@ -48,8 +48,38 @@ def _kommandozeile(pid: int) -> str:
                      f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"]).strip()
 
 
+def _starter_pids(mindestalter_s: int = 0) -> list[int]:
+    """PIDs der versteckten Starter-Skripte von Momentum Lab (älter als ``mindestalter_s``).
+
+    Der Starter überwacht den Server. Endet der Server (Stopp von außen), zeigt der Starter einen
+    Fehlerdialog in seinem unsichtbaren Fenster und hält dabei die Sperre — jeder weitere Start
+    scheiterte danach stumm. Deshalb werden Starter beim Stopp und vor einem Start mit beendet."""
+    text = _ausgabe(["powershell", "-NoProfile", "-Command",
+                     "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
+                     "Where-Object { $_.CommandLine -like '*start_momentum_lab_hidden*' -and "
+                     f"(New-TimeSpan -Start $_.CreationDate).TotalSeconds -ge {mindestalter_s} }} | "
+                     "ForEach-Object { $_.ProcessId }"])
+    return [int(z.strip()) for z in text.splitlines() if z.strip().isdigit()]
+
+
+def _starter_beenden(mindestalter_s: int = 0) -> None:
+    try:
+        pids = _starter_pids(mindestalter_s)
+    except Exception:       # Aufräumen ist nur ein Zusatz; der eigentliche Stopp/Start darf daran nicht scheitern
+        return
+    for pid in pids:
+        _ausgabe(["taskkill", "/PID", str(pid), "/T", "/F"])
+
+
 def laeuft() -> bool:
     return pid_am_port(_ausgabe(["netstat", "-ano", "-p", "tcp"])) is not None
+
+
+def starten_mit_aufraeumen() -> tuple[bool, str]:
+    """Wie ``starten``, räumt vorher hängengebliebene Starter (älter als 90 s) ab, falls Lab nicht läuft."""
+    if not laeuft():
+        _starter_beenden(mindestalter_s=90)
+    return starten()
 
 
 def starten() -> tuple[bool, str]:
@@ -70,8 +100,10 @@ def beenden() -> tuple[bool, str]:
     """Beendet Momentum Lab samt Unterprozessen — nur wenn der Port-Halter wirklich Momentum Lab ist."""
     pid = pid_am_port(_ausgabe(["netstat", "-ano", "-p", "tcp"]))
     if pid is None:
+        _starter_beenden()
         return True, "Momentum Lab läuft nicht."
     if not ist_momentum_lab(_kommandozeile(pid)):
         return False, f"Port {PORT} gehört einem anderen Programm (PID {pid}) — nicht beendet."
+    _starter_beenden()          # zuerst den Starter, sonst bleibt er mit Fehlerdialog und Sperre stehen
     _ausgabe(["taskkill", "/PID", str(pid), "/T", "/F"])
     return True, "Momentum Lab wurde beendet."

@@ -35,17 +35,42 @@ function useSystem(): [System | null, string | null, () => void] {
   return [daten, fehler, () => setzeStand((s) => s + 1)];
 }
 
+const MOMENTUM_URL = "http://127.0.0.1:8501";
+
+// Wartet (höchstens 60 s), bis Momentum Lab antwortet; no-cors genügt, es geht nur um Erreichbarkeit.
+async function warteAufLab(): Promise<boolean> {
+  for (let i = 0; i < 40; i++) {
+    try {
+      await fetch(`${MOMENTUM_URL}/_stcore/health`, { mode: "no-cors", cache: "no-store" });
+      return true;
+    } catch {
+      await new Promise((weiter) => window.setTimeout(weiter, 1500));
+    }
+  }
+  return false;
+}
+
 // Schalter für Momentum Lab (eigener Dienst auf Port 8501): Start ohne Fenster, Stopp nur für Momentum Lab selbst.
 function MomentumSchalter({ an, neu }: { an: boolean | null; neu: () => void }): JSX.Element {
   const [arbeitet, setzeArbeitet] = useState(false);
   const [meldung, setzeMeldung] = useState<string | null>(null);
   function schalten(): void {
     const aktion = an ? "stop" : "start";
+    // Der Tab muss im Klick selbst geöffnet werden (sonst blockt der Browser ihn); er bekommt die
+    // Adresse, sobald Momentum Lab antwortet. Momentum Lab läuft nie eingebettet in der Station.
+    const tab = aktion === "start" ? window.open("about:blank", "_blank") : null;
+    if (tab) tab.document.title = "Momentum Lab startet …";
     setzeArbeitet(true);
     setzeMeldung(null);
     sendeMomentumBefehl(aktion)
-      .then((r) => setzeMeldung(r.text))
-      .catch((e) => setzeMeldung(fehlerText(e)))
+      .then((r) => {
+        setzeMeldung(r.text);
+        if (aktion === "start") return warteAufLab().then((ok) => {
+          if (ok && tab) tab.location.href = MOMENTUM_URL;
+          else if (!ok) { tab?.close(); setzeMeldung("Momentum Lab antwortet nicht – Protokolle im Ordner .venv/app_logs von momentum-lab."); }
+        });
+      })
+      .catch((e) => { tab?.close(); setzeMeldung(fehlerText(e)); })
       .finally(() => {
         // Der Start dauert einige Sekunden: mehrmals neu prüfen, statt auf einen Klick zu warten.
         [1500, 4000, 8000, 14000].forEach((ms) => window.setTimeout(neu, ms));
@@ -57,6 +82,12 @@ function MomentumSchalter({ an, neu }: { an: boolean | null; neu: () => void }):
       <button type="button" onClick={schalten} disabled={arbeitet} aria-pressed={an === true}>
         {arbeitet ? "bitte warten …" : an ? "Ausschalten" : "Einschalten"}
       </button>
+      {an === true && (
+        <>
+          {" "}
+          <a href={MOMENTUM_URL} target="_blank" rel="noreferrer">In neuem Tab öffnen</a>
+        </>
+      )}
       {meldung && <span className="sicht"> {meldung}</span>}
     </span>
   );
@@ -611,15 +642,15 @@ export function MomentumSeite(): JSX.Element {
     );
   }
   return (
-    <section className="station eingebettet">
+    <section className="station">
+      <h2>Momentum Lab</h2>
       <p className="sicht">
-        Momentum Lab läuft als eigener Dienst und ist hier eingebettet.{" "}
-        <a href="http://127.0.0.1:8501" target="_blank" rel="noreferrer">
-          In eigenem Fenster öffnen
-        </a>{" "}
+        Momentum Lab läuft als eigener Dienst und öffnet in einem eigenen Tab, nicht eingebettet in der Suite.
+      </p>
+      <p>
+        <a href={MOMENTUM_URL} target="_blank" rel="noreferrer">Momentum Lab in neuem Tab öffnen</a>{" "}
         <MomentumSchalter an={true} neu={neu} />
       </p>
-      <iframe title="Momentum Lab" src="http://127.0.0.1:8501" className="einbettung" />
     </section>
   );
 }
