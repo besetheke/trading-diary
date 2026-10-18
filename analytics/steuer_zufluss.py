@@ -100,6 +100,7 @@ class Datenluecke:
     schluessel: str
     grund: str
     text: str
+    jahr: int | None = None  # betroffenes Steuerjahr; ``None`` = unbekannt, gilt für jedes Jahr
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class RegelOffen:
     anzahl: int
     betrag_eur: Decimal
     details: list = field(default_factory=list)  # Einzelfälle (Dicts) für die Listen an den Steuerberater
+    # Anzahl und Betrag je Jahr; Schlüssel ``None`` = Jahr unbekannt, gilt für jedes Jahr
+    je_jahr: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -175,13 +178,19 @@ class SteuerZuflussErgebnis:
         „deklarierbar mit Erläuterung“: Berechnung und kurze Erläuterung unter „Ergänzende Angaben zur
         Steuererklärung“ (§ 150 Abs. 7 AO) einreichen. ``hinweise`` sind nicht blockierend."""
         gruende, hinweise = [], []
-        if self.datenluecken:
-            gruende.append(f"{len(self.datenluecken)} Datenlücken (fehlender Kurs, Datum oder Ausführung).")
+        luecken = [d for d in self.datenluecken if d.jahr in (None, jahr)]  # nur dieses Jahr (und Unbekanntes)
+        if luecken:
+            gruende.append(f"{len(luecken)} Datenlücken (fehlender Kurs, Datum oder Ausführung).")
         for r in self.regeln_offen:
+            # Fälle dieses Jahres und solche ohne bekanntes Jahr; Regeln ohne Jahresangabe zählen insgesamt
+            je = [r.je_jahr[j] for j in (jahr, None) if j in r.je_jahr] if r.je_jahr else [[r.anzahl, r.betrag_eur]]
+            anzahl, betrag = sum(x[0] for x in je), sum((x[1] for x in je), _NULL)
+            if anzahl == 0:
+                continue
             if r.art in _BLOCKIEREND:
-                gruende.append(f"{r.art}: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) nicht zugeordnet.")
+                gruende.append(f"{r.art}: {anzahl} Fälle ({_geld(betrag)} EUR) nicht zugeordnet.")
             else:
-                hinweise.append(f"{r.art}: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) in der Standardbehandlung.")
+                hinweise.append(f"{r.art}: {anzahl} Fälle ({_geld(betrag)} EUR) in der Standardbehandlung.")
         vorsichtig = [r["id"] for r in REGELN if r["marker"] == VORSICHTIG]
         hinweise.append(
             f"{len(vorsichtig)} Regeln als vorsichtige Standardbehandlung markiert (Tabelle „Regeln und Grundlage“); "
@@ -370,7 +379,8 @@ def _komm_eur(s: "_Sammler", e: dict, faktor: Decimal, menge: Decimal, kurs: Dec
     if w == "EUR":
         return k
     s.luecke(e["exec_id"], "kommission_waehrung_abweichend",
-             f"Kommission in {w}, Ausführung in {e.get('waehrung')}: kein Kurs für die Kommission")
+             f"Kommission in {w}, Ausführung in {e.get('waehrung')}: kein Kurs für die Kommission",
+             e["handelszeit"].year)
     return _NULL
 
 
@@ -383,15 +393,19 @@ class _Sammler:
         self.heuristisch = 0  # Optionskosten ohne assignment_links über Basiswert und Zeitstempel zugeordnet
         self.ohne_kategorie: set[str] = set()  # Aktien ohne IB-Kategorie (ETF oder Aktie nicht unterscheidbar)
 
-    def luecke(self, schluessel: str, grund: str, text: str) -> None:
-        self.luecken.setdefault((schluessel, grund), Datenluecke(schluessel, grund, text))
+    def luecke(self, schluessel: str, grund: str, text: str, jahr: int | None = None) -> None:
+        self.luecken.setdefault((schluessel, grund), Datenluecke(schluessel, grund, text, jahr))
 
-    def regel_offen(self, art: str, text: str, betrag: Decimal = _NULL, detail: dict | None = None) -> None:
-        eintrag = self.offen.setdefault(art, [text, 0, _NULL, []])
+    def regel_offen(self, art: str, text: str, betrag: Decimal = _NULL, detail: dict | None = None,
+                    jahr: int | None = None) -> None:
+        eintrag = self.offen.setdefault(art, [text, 0, _NULL, [], {}])
         eintrag[1] += 1
         eintrag[2] += betrag
         if detail is not None:
             eintrag[3].append(detail)
+        je = eintrag[4].setdefault(jahr, [0, _NULL])
+        je[0] += 1
+        je[1] += betrag
 
     def strom(self, *, vorgang, regel, topf, e, brutto, komm, optionskosten=_NULL, waehrung, symbol, leg_id=None,
               land=None):
@@ -404,7 +418,8 @@ class _Sammler:
         if FELD_ABRECHNUNG in (r["steuerdatum"], r["fx"], self.konfig.alternative(regel)) and not e.get("settle_date"):
             # Kein stilles Ersetzen: ohne Abrechnungsdatum steht der Handelstag, und die Lücke wird gemeldet.
             self.luecke(str(e["exec_id"]), "abrechnungsdatum_fehlt",
-                        f"Ausführung {e['exec_id']}: kein Abrechnungsdatum, Handelstag ersatzweise verwendet")
+                        f"Ausführung {e['exec_id']}: kein Abrechnungsdatum, Handelstag ersatzweise verwendet",
+                        datum.year)
             status = "abrechnungsdatum_fehlt"
         self.stroeme.append(
             Strom(
@@ -489,7 +504,7 @@ def steuer_zufluss(
     return SteuerZuflussErgebnis(
         stroeme=sorted(s.stroeme, key=lambda x: (x.steuerdatum, x.exec_id or "", x.vorgang)),
         datenluecken=sorted(s.luecken.values(), key=lambda d: (d.schluessel, d.grund)),
-        regeln_offen=[RegelOffen(a, t, n, b, d) for a, (t, n, b, d) in sorted(s.offen.items())],
+        regeln_offen=[RegelOffen(a, t, n, b, d, j) for a, (t, n, b, d, j) in sorted(s.offen.items())],
         warnungen=warnungen,
         methode={
             "verfahren": "Zufluss je Zahlungsstrom",
@@ -510,14 +525,15 @@ def _art(s: _Sammler, i: dict, c: dict) -> str | None:
     art = i.get("abwicklungsart")
     if art not in ("lieferung", "barausgleich"):
         s.luecke(c["exec_id"], "abwicklungsart_unbekannt",
-                 f"Instrument {i.get('symbol')}: Abwicklungsart {art!r} unbekannt — Zuteilung/Ausübung nicht bewertet")
+                 f"Instrument {i.get('symbol')}: Abwicklungsart {art!r} unbekannt — Zuteilung/Ausübung nicht bewertet",
+                 c["handelszeit"].year)
         return None
     return art
 
 
 def _kurs(s: _Sammler, e: dict) -> Decimal | None:
     if e.get("buchungskurs") is None:
-        s.luecke(e["exec_id"], "kurs_fehlt", f"Ausführung {e['exec_id']}: kein Buchungskurs")
+        s.luecke(e["exec_id"], "kurs_fehlt", f"Ausführung {e['exec_id']}: kein Buchungskurs", e["handelszeit"].year)
         return None
     return e["buchungskurs"]
 
@@ -575,7 +591,8 @@ def _option(s: _Sammler, leg, i, o, c, menge, mult, lieferungskosten) -> None:
 def _barausgleich_preis(s: _Sammler, c: dict, ereignis: str, art: str | None) -> Decimal | None:
     if ereignis in _LIEFERUNG_EREIGNISSE and art == "barausgleich":
         if c.get("schlusskurs") is None:
-            s.luecke(c["exec_id"], "schlusskurs_fehlt", f"Ausführung {c['exec_id']}: Barausgleich ohne Schlusskurs")
+            s.luecke(c["exec_id"], "schlusskurs_fehlt", f"Ausführung {c['exec_id']}: Barausgleich ohne Schlusskurs",
+                     c["handelszeit"].year)
             return None
         return c["schlusskurs"]
     return c["preis"]
@@ -616,7 +633,8 @@ def _ergebnisbein(s: _Sammler, leg, i, o, c, menge, mult, klasse, ab, ergebnis_l
         a = ab.get(leg["conid"])
         if a is None:
             s.regel_offen("basis_ungeklaert", "Herkunft der Basis ungeklärt: ohne steuerlichen Anfangsbestand nicht gerechnet.",
-                          detail={"leg_id": leg.get("leg_id"), "symbol": i.get("symbol")})
+                          detail={"leg_id": leg.get("leg_id"), "symbol": i.get("symbol")},
+                          jahr=c["handelszeit"].year if c else None)
             return
         offen_seite = ("anfang", a)
     else:
@@ -678,7 +696,8 @@ def _optionskosten_verteilen(s: _Sammler, kosten_liste, ergebnis_legs, link_je_o
         if not treffer or gesamt == _NULL:
             s.regel_offen("optionskosten_ohne_lieferung",
                           "Kosten einer ausgeübten gekauften Option ohne zugeordnete Lieferung: nicht gerechnet.", -k["kosten"],
-                          detail={"symbol": k["symbol"], "zeit": k["zeit"].isoformat(), "kosten_eur": k["kosten"]})
+                          detail={"symbol": k["symbol"], "zeit": k["zeit"].isoformat(), "kosten_eur": k["kosten"]},
+                          jahr=k["zeit"].year)
             continue
         for r in treffer:
             r["optionskosten"] -= k["kosten"] * r["menge"] / gesamt
@@ -696,7 +715,8 @@ def _ergebnis_buchen(s: _Sammler, r: dict) -> None:
                       gesamt,
                       detail={"leg_id": leg.get("leg_id"), "symbol": symbol, "exec_id": c["exec_id"],
                               "eroeffnet": r["o"]["handelszeit"].date().isoformat() if r["o"] else "",
-                              "geschlossen": c["handelszeit"].date().isoformat(), "ergebnis_eur": gesamt})
+                              "geschlossen": c["handelszeit"].date().isoformat(), "ergebnis_eur": gesamt},
+                      jahr=_datum(c, FELD_HANDEL).year)
         return
     stk = r["klasse"] == "STK"
     regel = "wertpapierverkauf" if stk else "termingeschaeft"
@@ -729,7 +749,7 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
         if typ in ("Deposits/Withdrawals",):
             continue
         if c.get("kurs") is None:
-            s.luecke(schluessel, "kurs_fehlt", f"Cash-Buchung {typ} ohne Kurs")
+            s.luecke(schluessel, "kurs_fehlt", f"Cash-Buchung {typ} ohne Kurs", c["datum"].year)
             continue
         eur = c["betrag"] * c["kurs"]
         if typ in ("Dividends", "Payment In Lieu Of Dividends"):
@@ -750,7 +770,8 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
                               "Einkünfte dieser Kategorie zusammen; Nachweis der Leihe über das Activity Statement "
                               "(Securities Lent Activity, Fee Details).", eur,
                               detail={"datum": tag.isoformat(), "symbol": c.get("symbol") or "", "betrag_eur": eur,
-                                      "waehrung": c.get("waehrung") or "", "beschreibung": c.get("beschreibung") or ""})
+                                      "waehrung": c.get("waehrung") or "", "beschreibung": c.get("beschreibung") or ""},
+                              jahr=tag.year)
             key = (c.get("symbol"), _basis_beschreibung(c.get("beschreibung"), False), tag, ersatz)
             g = brutto_gruppen.setdefault(key, {"brutto": _NULL, "land": c.get("land"), "ersatz": ersatz})
             g["brutto"] += eur
@@ -765,7 +786,8 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
         elif typ == "Other Fees":
             _cash_strom(s, c, "gebuehr", "zins", TOPF_NICHT_ABZIEHBAR, eur)
         else:
-            s.regel_offen("cash_sonstige", f"Cash-Buchungen vom Typ „{typ}“ sind nicht zugeordnet.", eur)
+            s.regel_offen("cash_sonstige", f"Cash-Buchungen vom Typ „{typ}“ sind nicht zugeordnet.", eur,
+                          jahr=c["datum"].year)
 
     steuer_je_gruppe: dict[tuple, dict] = {}
     for z in steuer_zeilen:
@@ -814,7 +836,8 @@ def _cash_strom(s: _Sammler, c: dict, vorgang: str, regel: str, topf: str, eur: 
     status = "ok" if _datum(e, r["fx"]) == c["datum"].date() else "kursdatum_abweichend"
     if not c.get("settle_date") and FELD_ABRECHNUNG in (r["steuerdatum"], r["fx"], s.konfig.alternative(regel)):
         s.luecke(f"cash:{c.get('symbol') or ''}:{c['datum'].date()}", "abrechnungsdatum_fehlt",
-                 f"Cash-Buchung {c['typ']}: kein Abrechnungsdatum, Buchungsdatum ersatzweise verwendet")
+                 f"Cash-Buchung {c['typ']}: kein Abrechnungsdatum, Buchungsdatum ersatzweise verwendet",
+                 c["datum"].year)
         status = "abrechnungsdatum_fehlt"
     s.stroeme.append(
         Strom(vorgang=vorgang, regel=regel, topf=topf, jahr=datum.year, steuerdatum=datum, fx_datum=c["datum"].date(),

@@ -19,9 +19,18 @@ function useSystem(): [System | null, string | null, () => void] {
   const [fehler, setzeFehler] = useState<string | null>(null);
   const [stand, setzeStand] = useState(0);
   useEffect(() => {
+    // Überholte Antworten (Abruf 1 antwortet nach Abruf 2) und die Seite nach dem Verlassen dürfen nichts setzen.
+    let aktuell = true;
     holeSystem()
-      .then(setzeDaten)
-      .catch((e) => setzeFehler(fehlerText(e)));
+      .then((d) => {
+        if (!aktuell) return;
+        setzeDaten(d);
+        setzeFehler(null); // ein späterer Erfolg löscht den Fehler (R12)
+      })
+      .catch((e) => aktuell && setzeFehler(fehlerText(e)));
+    return () => {
+      aktuell = false;
+    };
   }, [stand]);
   return [daten, fehler, () => setzeStand((s) => s + 1)];
 }
@@ -60,11 +69,12 @@ function Ampel({ an }: { an: boolean | null }): JSX.Element {
 
 export function SystemSeite(): JSX.Element {
   const [daten, fehler, neu] = useSystem();
-  if (fehler) return <p className="fehler">{fehler}</p>;
+  if (daten === null && fehler) return <p className="fehler">{fehler}</p>;
   if (daten === null) return <p className="laedt">Prüfe Dienste …</p>;
   return (
     <section className="station">
       <h2>System</h2>
+      {fehler && <p className="fehler">Letzter Abruf fehlgeschlagen ({fehler}) — angezeigt wird der letzte Stand.</p>}
       <p className="sicht">
         Welche Dienste der Station laufen und wie frisch die Daten sind. Geprüft
         wird nur, ob der Port antwortet — keine Anmeldung bei IB.{" "}
@@ -143,7 +153,7 @@ function KettenZelle({ k }: { k?: RollerKette }): JSX.Element {
       </Link>
       {k.ketten && k.ketten > 1 ? ` (${k.ketten} Ketten)` : ""}
       {" · "}
-      bisher <Betrag wert={k.realisiert_bisher} />
+      bisher <Betrag wert={k.realisiert_bisher} waehrung={k.waehrung ?? undefined} />
       {k.praemie_offen_eur !== null && (
         <>
           {" · "}
@@ -428,10 +438,17 @@ export function RollerSeite(): JSX.Element {
   const [fehler, setzeFehler] = useState<string | null>(null);
   useEffect(() => {
     let aktiv = true;
-    const laden = () =>
-      holeRoller()
-        .then((d) => aktiv && setzeDaten(d))
-        .catch((e) => aktiv && setzeFehler(fehlerText(e)));
+    let zaehler = 0;
+    const laden = () => {
+      const nr = ++zaehler; // nur die jüngste Anfrage zählt (überholte Antworten werden verworfen)
+      return holeRoller()
+        .then((d) => {
+          if (!aktiv || nr !== zaehler) return;
+          setzeDaten(d);
+          setzeFehler(null); // ein späterer Erfolg löscht den Fehler (R12)
+        })
+        .catch((e) => aktiv && nr === zaehler && setzeFehler(fehlerText(e)));
+    };
     laden();
     const takt = window.setInterval(laden, 15000);
     return () => {
@@ -440,12 +457,16 @@ export function RollerSeite(): JSX.Element {
     };
   }, []);
 
-  if (fehler) return <p className="fehler">{fehler}</p>;
+  if (daten === null && fehler) return <p className="fehler">{fehler}</p>;
   if (daten === null) return <p className="laedt">Frage den Roller …</p>;
+  const fehlerzeile = fehler ? (
+    <p className="fehler">Letzter Abruf fehlgeschlagen ({fehler}) — angezeigt wird der letzte Stand.</p>
+  ) : null;
   if (!daten.erreichbar || daten.status === null) {
     return (
       <section className="station">
         <h2>Options Roller</h2>
+        {fehlerzeile}
         <p className="hinweis">
           Der Roller-Dienst läuft nicht. Starten im Ordner des Rollers mit{" "}
           <code>.venv\Scripts\python -m roller.dienst</code> (nur lesend; E-Mails
@@ -459,6 +480,7 @@ export function RollerSeite(): JSX.Element {
   return (
     <section className="station">
       <h2>Options Roller</h2>
+      {fehlerzeile}
       <p className="sicht">
         Stufe {s.stufe}: {s.orders.freigegeben ? s.orders.modus : "nur lesen — der Dienst setzt keine Orders ab"}.{" "}
         <span className={s.ib.verbunden ? "ampel gruen" : "ampel rot"}>

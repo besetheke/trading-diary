@@ -353,6 +353,9 @@ def degradations_bericht(
                     legs.c.open_exec_id,
                     legs.c.close_exec_id,
                     legs.c.menge,
+                    # Faktoren der Kapitalmaßnahmen (R09), sonst falsch nach Splits
+                    legs.c.open_faktor,
+                    legs.c.close_faktor,
                 ).where(legs.c.sicht == "kette")
             ).mappings()
         ]

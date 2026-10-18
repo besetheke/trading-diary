@@ -31,6 +31,10 @@ export default defineConfig({
       '/nav': 'http://localhost:8000',
       // AP-08d: Bestand laut IB; die Seite heißt /bestand (wie /monat bei /kalender).
       '/depot': 'http://localhost:8000',
+      // Titel und Steuer (AP-16, AP-10c): API-Wege; die Seiten heißen /titel und /steuer.
+      '/titel-auswertung': 'http://localhost:8000',
+      '/steuer-auswertung': 'http://localhost:8000',
+      '/steuer-csv': 'http://localhost:8000',
       // AP-08u: Überleitung vom Ergebnis zum Kontostand.
       '/ueberleitung': 'http://localhost:8000',
       // AP-08p: Wertentwicklung (Drawdown %, Wochen, Monate).

@@ -484,6 +484,7 @@ export interface RollerKette {
   strategie: string | null
   eroeffnet_am: string
   realisiert_bisher: string | null
+  waehrung?: string | null // Währung von realisiert_bisher
   praemie_offen_eur: string | null
   praemie_aktuell_eur: string | null
   unrealisiert_eur: string | null

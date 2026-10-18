@@ -645,12 +645,17 @@ def _fasse_ketten_zusammen(infos: list[dict]) -> dict:
         werte = [Decimal(i[feld]) for i in infos if i[feld] is not None]
         return _als_text(sum(werte, Decimal("0"))) if werte else None
 
+    # Das realisierte Ergebnis steht in der Währung der Glieder: nur bei gleicher Währung summieren
+    waehrungen = {i.get("waehrung") for i in infos if i.get("realisiert_bisher") is not None}
+    bisher_waehrung = next(iter(waehrungen)) if len(waehrungen) == 1 else None
+
     erste = min(infos, key=lambda i: i["chain_id"])
     return {
         "chain_id": erste["chain_id"], "ketten": len(infos),
         "anzahl_rolls": max(i["anzahl_rolls"] for i in infos), "strategie": erste["strategie"],
         "eroeffnet_am": min(i["eroeffnet_am"] for i in infos),
-        "realisiert_bisher": summe("realisiert_bisher"),
+        "realisiert_bisher": summe("realisiert_bisher") if len(waehrungen) <= 1 else None,
+        "waehrung": bisher_waehrung,
         "praemie_offen_eur": summe("praemie_offen_eur"),
         "praemie_aktuell_eur": summe("praemie_aktuell_eur"),
         "unrealisiert_eur": summe("unrealisiert_eur"),
@@ -708,6 +713,7 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
         ketten = {k["chain_id"]: k for k in verbindung.execute(
             select(chains).where(chains.c.chain_id.in_(ids))).mappings()}
         bisher = _realisiert_bisher(verbindung, ids)
+        waehrung_je = _waehrung_je_kette(verbindung, ids)
         unreal = _unrealisiert_je_kette(verbindung, ids)
         for chain_id in ids:
             k = ketten[chain_id]
@@ -716,6 +722,7 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
                 "chain_id": chain_id, "anzahl_rolls": k["anzahl_rolls"],
                 "strategie": k["oa_strategie"], "eroeffnet_am": k["eroeffnet_am"].isoformat(),
                 "realisiert_bisher": _als_text(bisher.get(chain_id)),
+                "waehrung": waehrung_je.get(chain_id),
                 "praemie_offen_eur": u[2], "praemie_aktuell_eur": u[3], "unrealisiert_eur": u[0],
             }
     for position, treffer in positionen:
@@ -1691,6 +1698,20 @@ def _realisiert_bisher(verbindung: Connection, chain_ids: list[int]) -> dict[int
         if netto is not None:
             summe[chain_id] = summe.get(chain_id, Decimal("0")) + netto
     return {c: s for c, s in summe.items() if len(waehrungen[c]) == 1}
+
+
+def _waehrung_je_kette(verbindung: Connection, chain_ids: list[int]) -> dict[int, str]:
+    """Währung der Glieder einer offenen Kette, nur wenn eindeutig (wie ``_realisiert_bisher``)."""
+    if not chain_ids:
+        return {}
+    waehrungen: dict[int, set[str]] = {}
+    for chain_id, waehrung in verbindung.execute(
+        select(chain_links.c.chain_id, structures.c.waehrung)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+        .where(chain_links.c.chain_id.in_(chain_ids))
+    ):
+        waehrungen.setdefault(chain_id, set()).add(waehrung)
+    return {c: next(iter(w)) for c, w in waehrungen.items() if len(w) == 1}
 
 
 KEIN_UNREAL: tuple[None, int, None, None] = (None, 0, None, None)
