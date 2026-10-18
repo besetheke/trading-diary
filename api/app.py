@@ -65,6 +65,7 @@ from analytics.strategien import strategie_bericht
 from analytics.titel import NativZeile, TitelZeile, titel_bericht
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
+from journal.depot_stichtag import aktueller_depot_stichtag
 from journal.durchsicht import _gruppen_bilden, _urteile_schreiben
 from journal.preise import praemie_als_text
 from journal.schema import (
@@ -2249,7 +2250,7 @@ def _unrealisiert_der_auswahl(
 def _bewertungsgrundlage(verbindung: Connection, offene: list[dict], bis: date | None):
     """Bestand laut IB (jüngster Stichtag, nicht nach ``bis``), Eröffnungen und
     Multiplikatoren für ``unrealisiert_auswertung`` (AP-07fu, AP-07ku)."""
-    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    stichtag = aktueller_depot_stichtag(verbindung)
     if stichtag is not None and bis is not None and bis < stichtag:
         stichtag = None
     bestand: dict[int, dict] = {}
@@ -2342,7 +2343,7 @@ def _aktien_einkauf_aufbauen(verbindung: Connection) -> AktienEinkaufListeAntwor
     der um Optionsprämien gekürzt ist. IB bucht eine zugeteilte Option mit 0 und schiebt die
     Prämie in den Einstand der Aktie (siehe ``analytics/ib_abgleich.py``); das Journal führt
     die Prämie im realisierten Ergebnis der Option."""
-    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    stichtag = aktueller_depot_stichtag(verbindung)
     ib: dict[int, dict] = {}
     if stichtag is not None:
         for z in verbindung.execute(
@@ -2495,7 +2496,7 @@ def _titel_aufbauen(db_pfad, von: date | None = None, bis: date | None = None) -
 
 def _depot_aufbauen(verbindung: Connection) -> DepotAntwort:
     """Bestand des jüngsten Stichtags aus ``flex_open_positions`` (AP-08d)."""
-    stichtag = verbindung.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+    stichtag = aktueller_depot_stichtag(verbindung)
     if stichtag is None:
         return DepotAntwort(
             stichtag=None,

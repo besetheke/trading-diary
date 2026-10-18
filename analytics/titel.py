@@ -45,6 +45,7 @@ from analytics.kennzahlen import (
 )
 from analytics.unrealisiert import unrealisiert_auswertung
 from journal.db import create_db_engine
+from journal.depot_stichtag import aktueller_depot_stichtag
 from journal.schema import (
     chain_links,
     chains,
@@ -435,11 +436,7 @@ def titel_bericht(
                     symbol=json.loads(z["roh_json"]).get("symbol") or None,
                 )
             )
-        stichtag = v.execute(
-            select(flex_open_positions.c.stichtag)
-            .order_by(flex_open_positions.c.stichtag.desc())
-            .limit(1)
-        ).scalar()
+        stichtag = aktueller_depot_stichtag(v)
         bestand: dict[int, dict] = {}
         if stichtag is not None:
             for z in v.execute(

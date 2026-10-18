@@ -202,6 +202,15 @@ def bestand_berechnen(verbindung: Connection) -> Bestand:
 
     # -- Lesen (Vertrag 4): Rohdaten.
     ausfuehrungen = [dict(z) for z in verbindung.execute(select(executions)).mappings()]
+    # Einzelkonto-Grenze (AP-17e, Review R04): Matching, Strukturen, NAV und Steuer unterscheiden
+    # Konten nicht; mit einem zweiten Konto würden Käufe des einen gegen Verkäufe des anderen gepaart.
+    konten = sorted({satz["konto"] for satz in ausfuehrungen})
+    if len(konten) > 1:
+        raise ValueError(
+            f"Mehrere Konten in den Ausführungen ({', '.join(konten)}): Matching und Auswertungen "
+            "gelten bisher nur für ein Konto, ein Matching über Konten wäre falsch. Das zweite "
+            "Konto bitte nicht importieren, bis die Mehrkonto-Unterstützung eingeführt ist (R04)."
+        )
     exec_je_id = {satz["exec_id"]: satz for satz in ausfuehrungen}
     instrument_je_conid = {
         satz["conid"]: satz for satz in verbindung.execute(select(instruments)).mappings()

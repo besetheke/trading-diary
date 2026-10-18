@@ -40,10 +40,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from analytics.kennzahlen import _wirtschaftlich, bewerte_barausgleich
 from journal.db import create_db_engine
+from journal.depot_stichtag import aktueller_depot_stichtag
 from journal.schema import (
     corporate_actions,
     executions,
@@ -281,7 +282,7 @@ def ib_abgleich_bericht(db_pfad: str | pathlib.Path) -> IbAbgleich:
             select(flex_ib_realized.c.exec_id, flex_ib_realized.c.fifo_pnl_realized,
                    flex_ib_realized.c.fx_rate_to_base)
         ).mappings()}
-        stichtag = v.execute(select(func.max(flex_open_positions.c.stichtag))).scalar()
+        stichtag = aktueller_depot_stichtag(v)
         bestand = []
         if stichtag is not None:
             for z in v.execute(select(flex_open_positions.c.conid, flex_open_positions.c.roh_json)
