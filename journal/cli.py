@@ -511,6 +511,14 @@ def main(argv: list[str] | None = None) -> int:
             f"{ergebnis.campaign_kandidaten_offen} offene Campaign-Kandidaten; "
             f"Roller: {ergebnis.roller_neu} neu verknüpft, "
             f"{ergebnis.roller_ohne_kette} ohne Journal-Kette"
+            + (
+                f"; Journal-Bezüge: {ergebnis.journal_bezuege_umgehaengt} umgehängt, "
+                f"{ergebnis.journal_bezuege_uneindeutig} uneindeutig, "
+                f"{ergebnis.journal_bezuege_verwaist} verwaist"
+                if ergebnis.journal_bezuege_umgehaengt + ergebnis.journal_bezuege_uneindeutig
+                + ergebnis.journal_bezuege_verwaist
+                else ""
+            )
         )
         if ergebnis.overrides_verwaist > 0:
             # Vertrag 20: Verwaistes wird niemals übergangen — der Aufruf

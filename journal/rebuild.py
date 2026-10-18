@@ -82,6 +82,7 @@ from journal.roller_verknuepfung import METHODE as ROLLER_METHODE
 from journal.roller_verknuepfung import verknuepfe_roller
 from journal.schema import (
     assignment_links,
+    attachments,
     campaign_ablehnungen,
     campaign_links,
     campaigns,
@@ -89,8 +90,10 @@ from journal.schema import (
     chain_overrides,
     chains,
     corporate_actions,
+    entity_tags,
     executions,
     instruments,
+    journal_entries,
     legs,
     roller_link,
     structures,
@@ -144,6 +147,12 @@ class RebuildErgebnis:
     # existiert dort unter anderem Schlüssel (umgeleitete Ausführungen).
     overrides_kette_angewandt: int = 0
     overrides_kette_ohne_entsprechung: int = 0
+    # AP-17d (Review R02): Notizen, Tags und Anhänge an Ketten/Strukturen, deren Naturschlüssel
+    # sich durch einen nachgelieferten Teilfill ändert: auf die fortgeführte Position umgehängt.
+    # Ohne eindeutige Fortsetzung (uneindeutig/verwaist) bleiben sie unverändert, gezählt.
+    journal_bezuege_umgehaengt: int = 0
+    journal_bezuege_uneindeutig: int = 0
+    journal_bezuege_verwaist: int = 0
 
 
 @dataclass(frozen=True)
@@ -183,6 +192,7 @@ class _SichtErgebnis:
     kette_je_schluessel: dict[str, Kette]
     glieder_je_kette: dict[str, list[list]]
     ketten_ergebnis: KettenErgebnis
+    bezuege: tuple[int, int, int] = (0, 0, 0)  # umgehängt, uneindeutig, verwaist (AP-17d)
 
 
 def bestand_berechnen(verbindung: Connection) -> Bestand:
@@ -475,6 +485,81 @@ def _anzahl_je_sicht(verbindung: Connection, tabelle, sicht: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _schluessel_teile(schluessel: str) -> frozenset[str]:
+    """Die eröffnenden Ausführungen im Naturschlüssel (``E1|E2``, bei Ketten ``k:`` davor)."""
+    return frozenset(schluessel.removeprefix("k:").split("|"))
+
+
+def _bezuege_vorhanden(verbindung: Connection, scope_typ: str, scope_id: str) -> bool:
+    for tabelle in (journal_entries, attachments, entity_tags):
+        gefunden = verbindung.execute(
+            select(tabelle.c.scope_id).where(
+                tabelle.c.scope_typ == scope_typ, tabelle.c.scope_id == scope_id)
+        ).first()
+        if gefunden:
+            return True
+    return False
+
+
+def _bezuege_umhaengen(verbindung: Connection, scope_typ: str, alt_id: int, neu_id: int) -> None:
+    alt, neu = str(alt_id), str(neu_id)
+    for tabelle in (journal_entries, attachments):
+        verbindung.execute(
+            update(tabelle)
+            .where(tabelle.c.scope_typ == scope_typ, tabelle.c.scope_id == alt)
+            .values(scope_id=neu)
+        )
+    # entity_tags: (tag_id, scope_typ, scope_id) ist der Schlüssel; hat die Fortsetzung den Tag,
+    # fällt der alte weg.
+    alte_tags = verbindung.execute(
+        select(entity_tags.c.tag_id).where(
+            entity_tags.c.scope_typ == scope_typ, entity_tags.c.scope_id == alt)
+    ).all()
+    for (tag_id,) in alte_tags:
+        schon = verbindung.execute(
+            select(entity_tags.c.tag_id).where(
+                entity_tags.c.tag_id == tag_id,
+                entity_tags.c.scope_typ == scope_typ,
+                entity_tags.c.scope_id == neu,
+            )
+        ).first()
+        bedingung = (entity_tags.c.tag_id == tag_id, entity_tags.c.scope_typ == scope_typ,
+                     entity_tags.c.scope_id == alt)
+        if schon:
+            verbindung.execute(delete(entity_tags).where(*bedingung))
+        else:
+            verbindung.execute(update(entity_tags).where(*bedingung).values(scope_id=neu))
+
+
+def _journal_bezuege_fortfuehren(
+    verbindung: Connection,
+    scope_typ: str,
+    entfallen: dict[int, str],
+    frische: dict[str, int],
+) -> tuple[int, int, int]:
+    """Hängt Notizen, Tags und Anhänge einer wegfallenden Kette/Struktur auf ihre Fortsetzung um.
+
+    ``entfallen``: id → alter Naturschlüssel (die Zeilen werden gleich gelöscht); ``frische``: neue
+    Schlüssel ohne Vorgänger. Eine Fortsetzung ist ein neuer Schlüssel, dessen Ausführungen eine
+    echte Obermenge der alten sind (``E1`` → ``E1|E2``). Genau eine: umhängen. Mehrere: unverändert
+    lassen (uneindeutig). Keine: verwaist. Rückgabe: (umgehängt, uneindeutig, verwaist).
+    """
+    umgehaengt = uneindeutig = verwaist = 0
+    for alt_id, alter_schluessel in entfallen.items():
+        if not _bezuege_vorhanden(verbindung, scope_typ, str(alt_id)):
+            continue
+        alt_teile = _schluessel_teile(alter_schluessel)
+        kandidaten = [i for k, i in frische.items() if alt_teile < _schluessel_teile(k)]
+        if len(kandidaten) == 1:
+            _bezuege_umhaengen(verbindung, scope_typ, alt_id, kandidaten[0])
+            umgehaengt += 1
+        elif kandidaten:
+            uneindeutig += 1
+        else:
+            verwaist += 1
+    return umgehaengt, uneindeutig, verwaist
+
+
 def _sicht_schreiben(
     verbindung: Connection,
     sicht: str,
@@ -554,7 +639,15 @@ def _sicht_schreiben(
         if schluessel not in struktur_id_je_schluessel
         and structure_id not in gesicherte_struktur_ids
     ]
+    bezuege = [0, 0, 0]
     if entfallene_struktur_ids:
+        # Notizen/Tags/Anhänge einer wegfallenden Struktur wandern auf die Fortsetzung (AP-17d)
+        for i, n in enumerate(_journal_bezuege_fortfuehren(
+            verbindung, "structure",
+            {sid: k for k, sid in alte_struktur_ids.items() if sid in entfallene_struktur_ids},
+            {k: sid for k, sid in struktur_id_je_schluessel.items() if k not in alte_struktur_ids},
+        )):
+            bezuege[i] += n
         verbindung.execute(
             delete(structures).where(structures.c.structure_id.in_(entfallene_struktur_ids))
         )
@@ -607,6 +700,12 @@ def _sicht_schreiben(
         if schluessel not in ketten_id_je_schluessel and chain_id not in gesicherte_ketten_ids
     ]
     if entfallene_ketten_ids:
+        for i, n in enumerate(_journal_bezuege_fortfuehren(
+            verbindung, "chain",
+            {cid: k for k, cid in alte_ketten_ids.items() if cid in entfallene_ketten_ids},
+            {k: cid for k, cid in ketten_id_je_schluessel.items() if k not in alte_ketten_ids},
+        )):
+            bezuege[i] += n
         _roller_links_abraeumen(verbindung, entfallene_ketten_ids)
         verbindung.execute(delete(chains).where(chains.c.chain_id.in_(entfallene_ketten_ids)))
 
@@ -643,6 +742,7 @@ def _sicht_schreiben(
         kette_je_schluessel=kette_je_schluessel,
         glieder_je_kette=glieder_je_kette,
         ketten_ergebnis=ketten_ergebnis,
+        bezuege=tuple(bezuege),
     )
 
 
@@ -858,6 +958,9 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         chain_links_kette=_anzahl_je_sicht(verbindung, chain_links, "kette"),
         overrides_kette_angewandt=overrides_kette_angewandt,
         overrides_kette_ohne_entsprechung=ohne_entsprechung,
+        journal_bezuege_umgehaengt=konto.bezuege[0] + kette_sicht.bezuege[0],
+        journal_bezuege_uneindeutig=konto.bezuege[1] + kette_sicht.bezuege[1],
+        journal_bezuege_verwaist=konto.bezuege[2] + kette_sicht.bezuege[2],
     )
 
 

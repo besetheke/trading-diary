@@ -20,7 +20,7 @@ Kostenbremse, gruppiertes Fehlerprotokoll, Auswertung des Ereignisprotokolls. Nu
 1. **Server:** Deploy des Roller-Stands `cc55049` und der Journal-Änderungen (Checkliste: `werkzeuge/server/`); danach Läufe auswerten
    (`python -m roller.auswertung`), dabei OF-90 prüfen (Startanteil 0,25, Kostenbremse 40/60 %). Mail-Passwort/Empfänger auf dem Server.
 2. **Roller:** SPX-0DTE bleibt bei IB `PreSubmitted` (Ursache offen); Wiedereinstieg wartet auf Entscheidungen des Nutzers.
-3. **Review-Befunde:** AP-17 (A schnelle Fixes, B BCS-Typisierung und C Befehlsabsicherung erledigt; offen: C Befehlsabsicherung, D Notizen, E Depot/Konten, F, G Ausbau).
+3. **Review-Befunde:** AP-17 (A schnelle Fixes, B BCS-Typisierung, C Befehlsabsicherung und D Journalbezüge erledigt; offen: C Befehlsabsicherung, D Notizen, E Depot/Konten, F, G Ausbau).
 4. **Steuer (pausiert):** ETF/ETN/ETP, Entlastung der 70,17 EUR PIL-Steuer, Abziehbarkeit der 187,06 EUR Kompensation, KAP 2026, USD-
    Sollsaldo (Rekonstruktion bis 2022 exakt, danach fehlen EUR.SEK u. a.), Kursquelle IB/EZB.
 5. **Nicht anfassen:** `momentum-lab` (unversionierte Änderungen).
