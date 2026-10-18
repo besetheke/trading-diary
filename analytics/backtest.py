@@ -41,7 +41,14 @@ from engine.oo_zuordnung import (
 )
 from ingest.optionomega import legs_lesen
 from journal.db import create_db_engine
-from journal.schema import executions, instruments, oo_trades, oo_zuordnung, optionapp_trades
+from journal.schema import (
+    executions,
+    instruments,
+    legs,
+    oo_trades,
+    oo_zuordnung,
+    optionapp_trades,
+)
 
 # AP-12c: Schwellen der Ursachenbestimmung — Annahmen (OF-84), hier an einer
 # Stelle änderbar.
@@ -335,32 +342,49 @@ def _live_laden(v) -> list[LiveZeile]:
         waehrung, profit = _oa_waehrung_und_profit(dict(z))
         offen = z["status"] == "RUNNING"
         oa[z["oa_trade"]] = (z["strategie"], None if offen or waehrung != "USD" else profit, offen)
-    roh: dict[str, list] = defaultdict(list)
+    # Eröffnungsfingerabdruck und Endereignisse kommen aus getrennten Datenmengen (AP-17f, R07):
+    # eröffnet wird per Trade; geendet wird laut gematchter Leg (close_exec_id) oder laut Ereignis
+    # mit derselben OA-Nummer (Verfall, Zuteilung, Ausübung tragen oft keine oder eine andere).
+    alle = {}
     for z in v.execute(
-        select(executions.c.oa_trade, executions.c.handelszeit, executions.c.side,
-               executions.c.menge, instruments.c.underlying, instruments.c.right,
-               instruments.c.strike, instruments.c.expiry, executions.c.ereignistyp)
+        select(executions.c.exec_id, executions.c.oa_trade, executions.c.handelszeit,
+               executions.c.side, executions.c.menge, instruments.c.underlying,
+               instruments.c.right, instruments.c.strike, instruments.c.expiry,
+               executions.c.ereignistyp)
         .join(instruments, instruments.c.conid == executions.c.conid)
-        .where(executions.c.oa_trade.is_not(None), executions.c.ereignistyp == "trade",
-               instruments.c.asset_class.in_(("OPT", "FOP")))
-        .order_by(executions.c.handelszeit)
+        .where(instruments.c.asset_class.in_(("OPT", "FOP")))
     ).mappings():
-        if z["oa_trade"] in oa:
-            roh[z["oa_trade"]].append(z)
+        alle[z["exec_id"]] = z
+    schluss_je_eroeffnung: dict[str, set] = defaultdict(set)
+    gematcht = select(legs.c.open_exec_id, legs.c.close_exec_id).where(
+        legs.c.close_exec_id.is_not(None), legs.c.sicht == "konto")
+    for z in v.execute(gematcht).mappings():
+        schluss_je_eroeffnung[z["open_exec_id"]].add(z["close_exec_id"])
+    schluss_ids = {c for ids in schluss_je_eroeffnung.values() for c in ids}
+    roh: dict[str, list] = defaultdict(list)
+    for exec_id, z in sorted(alle.items(), key=lambda p: (p[1]["handelszeit"], p[0])):
+        if (z["oa_trade"] in oa and z["ereignistyp"] == "trade" and exec_id not in schluss_ids):
+            roh[z["oa_trade"]].append((exec_id, z))
     ergebnis = []
-    for nummer, zeilen in roh.items():
+    for nummer, paare in roh.items():
+        zeilen = [z for _, z in paare]
         beginn = zeilen[0]["handelszeit"]
-        legs = tuple(
+        eroeffnend = [(i, z) for i, z in paare if z["handelszeit"] - beginn <= EROEFFNUNG_FENSTER]
+        legs_ = tuple(
             Leg(int(abs(z["menge"])), "S" if z["side"] == "SELL" else "B", z["right"],
                 Decimal(z["strike"]), z["expiry"])
-            for z in zeilen if z["handelszeit"] - beginn <= EROEFFNUNG_FENSTER
+            for _, z in eroeffnend
         )
-        # Ausstieg (AP-12c): die Ausführungen nach dem Eröffnungsfenster.
-        schliessend = [z for z in zeilen if z["handelszeit"] - beginn > EROEFFNUNG_FENSTER]
+        eigene = {i for i, _ in eroeffnend}
+        schluss = {c for i in eigene for c in schluss_je_eroeffnung.get(i, ())}
+        schliessend = [alle[c] for c in schluss if c in alle]
+        schliessend += [z for i, z in alle.items()
+                        if z["oa_trade"] == nummer and i not in eigene and i not in schluss
+                        and i not in schluss_ids and z["handelszeit"] - beginn > EROEFFNUNG_FENSTER]
         strategie, profit, offen = oa[nummer]
-        e = Eroeffnung(nummer, strategie, beginn, zeilen[0]["underlying"], legs)
+        e = Eroeffnung(nummer, strategie, beginn, zeilen[0]["underlying"], legs_)
         ergebnis.append(LiveZeile(
-            e, kontrakte(legs), profit, offen,
+            e, kontrakte(legs_), profit, offen,
             ende=max((z["handelszeit"] for z in schliessend), default=None),
             ausgelaufen=(all(z["ereignistyp"] != "trade" for z in schliessend)
                          if schliessend else None),

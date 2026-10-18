@@ -3817,3 +3817,11 @@ Rechtsquellen und Randnummern stehen als Hinweis auf der Seite und sind von der 
 
 **Noch offen:** Quellensteuer auf PIL (70,17 EUR; Anlage AUS bzw. Erstattung), Abziehbarkeit der PIL-Belastung
 (187,06 EUR), ETF/ETN/ETP, KAP-Zeilen 2026, USD-Sollsaldo und Verlustverrechnung.
+
+## OF-101 · Paarung gleichzeitiger Legs ohne Orderreferenz (AP-17f, R06, 18.10.2026)
+
+Annahme im Code (`engine/structures.py`): Gleichzeitig eröffnete Legs ohne OA-/Batch-Schlüssel werden nach einer festen
+Reihenfolge (Zeit, Basiswert, Verfall, Recht, Strike, …) sortiert; ein Bein geht in den passenden Cluster mit den wenigsten Beinen
+seiner Richtung. Das macht das Ergebnis reproduzierbar, beweist aber nicht die richtige Paarung (z. B. Long 90/Short 100 und
+Long 95/Short 105 gegen Long 90/Short 105 und Long 95/Short 100). Frage: Soll bei mehr als einer möglichen Paarung eine
+Rückfrage in der Oberfläche (M04) erscheinen, oder genügt der Vorschlagsstatus `heuristik`?

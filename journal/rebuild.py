@@ -203,7 +203,8 @@ def bestand_berechnen(verbindung: Connection) -> Bestand:
     # -- Lesen (Vertrag 4): Rohdaten.
     ausfuehrungen = [dict(z) for z in verbindung.execute(select(executions)).mappings()]
     # Einzelkonto-Grenze (AP-17e, Review R04): Matching, Strukturen, NAV und Steuer unterscheiden
-    # Konten nicht; mit einem zweiten Konto würden Käufe des einen gegen Verkäufe des anderen gepaart.
+    # Konten nicht; mit einem zweiten Konto würden Käufe des einen gegen Verkäufe des anderen
+    # gepaart.
     konten = sorted({satz["konto"] for satz in ausfuehrungen})
     if len(konten) > 1:
         raise ValueError(

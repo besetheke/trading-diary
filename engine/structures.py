@@ -170,6 +170,19 @@ class _ArbeitsLeg:
     exec_batch: str | None
 
 
+def _leg_sortierschluessel(al: _ArbeitsLeg) -> tuple:
+    """Total ordnender Schlüssel: Zeit, Basiswert, Verfall, Recht, Strike, Richtung, Menge, IDs."""
+    return (
+        al.handelszeit, al.underlying or "", al.expiry or date.min, al.right or "",
+        al.strike if al.strike is not None else Decimal(0), al.richtung, al.menge,
+        al.schluessel.open_exec_id, al.schluessel.close_exec_id or "",
+    )
+
+
+def _struktur_endschluessel(s) -> tuple:
+    return tuple(sorted((k.open_exec_id, k.close_exec_id or "") for k in s.leg_schluessel))
+
+
 def _datum(zeit) -> date:
     return zeit.date() if isinstance(zeit, datetime) else zeit
 
@@ -247,6 +260,10 @@ def bilde_structures(
             )
         )
 
+    # Vollständiger Sortierschlüssel (AP-17f, R06): das Ergebnis darf nicht von der Reihenfolge der
+    # Eingabe abhängen, auch nicht bei gleichen Zeitstempeln.
+    arbeits_legs.sort(key=_leg_sortierschluessel)
+
     gruppen: dict[tuple, list[_ArbeitsLeg]] = {}
     methode_je_gruppe: dict[tuple, str] = {}
     ohne_schluessel: list[_ArbeitsLeg] = []
@@ -274,7 +291,7 @@ def bilde_structures(
         _structure_bilden(cluster, methode_je_gruppe[schluessel], exec_je_id)
         for schluessel, cluster in gruppen.items()
     ]
-    structures.sort(key=lambda s: (s.eroeffnet_am, s.underlying))
+    structures.sort(key=lambda s: (s.eroeffnet_am, s.underlying, _struktur_endschluessel(s)))
 
     return StrukturErgebnis(
         structures=tuple(structures), nicht_strukturiert=tuple(nicht_strukturiert)
@@ -303,10 +320,15 @@ def _zeitfenster_clustern(legs: list[_ArbeitsLeg]) -> list[list[_ArbeitsLeg]]:
 
     alle_cluster: list[list[_ArbeitsLeg]] = []
     for gruppe in je_underlying_expiry.values():
-        gruppe.sort(key=lambda al: al.handelszeit)
+        gruppe.sort(key=_leg_sortierschluessel)
         offene_cluster: list[list[_ArbeitsLeg]] = []
         for al in gruppe:
+            # Mehrdeutigkeit (AP-17f, R06): passen mehrere Cluster, bekommt das Bein den Cluster
+            # mit den wenigsten Beinen seiner eigenen Richtung (zwei Short + zwei Long ergeben so
+            # zwei Paare statt 3 + 1); bei Gleichstand der frühere. Der Ersatzweg bleibt
+            # ohnehin ein Vorschlag (erkennung = heuristik).
             ziel = None
+            beste_zahl = None
             for cluster in offene_cluster:
                 anker = cluster[0]
                 if (
@@ -314,8 +336,9 @@ def _zeitfenster_clustern(legs: list[_ArbeitsLeg]) -> list[list[_ArbeitsLeg]]:
                     and al.handelszeit - anker.handelszeit <= ZEITFENSTER
                     and mengen_vergleichbar(al.menge, anker.menge)
                 ):
-                    ziel = cluster
-                    break
+                    gleiche = sum(1 for x in cluster if x.richtung == al.richtung)
+                    if beste_zahl is None or gleiche < beste_zahl:
+                        ziel, beste_zahl = cluster, gleiche
             if ziel is None:
                 offene_cluster.append([al])
             else:
