@@ -84,8 +84,8 @@ def _instrument(conid, *, asset_class, underlying, expiry=None, strike=None, rig
 
 
 def test_oa_referenz_gruppiert_zwei_legs_zu_einer_structure():
-    """Trade+Order-Paar identisch → eine Structure, BCS (long niedriger, short
-    höherer Strike, beide Calls)."""
+    """Trade+Order-Paar identisch → eine Structure, Vertical (Bull Call Debit: long
+    niedriger, short höherer Strike, beide Calls; BCS ist der Call-Credit-Spread, AP-17b)."""
     instrumente = {
         601: _instrument(601, asset_class="OPT", underlying="SPX", expiry=date(2026, 9, 18),
                           strike="5000", right="C"),
@@ -105,7 +105,7 @@ def test_oa_referenz_gruppiert_zwei_legs_zu_einer_structure():
     assert len(ergebnis.structures) == 1
     structure = ergebnis.structures[0]
     assert structure.methode == "oa"
-    assert structure.typ == "BCS"
+    assert structure.typ == "Vertical"
     assert structure.underlying == "SPX"
     assert structure.short_strike == Decimal("5050")
     assert structure.long_strike == Decimal("5000")

@@ -447,8 +447,8 @@ def _structure_bilden(
 def _typ_klassifizieren(
     cluster: list[_ArbeitsLeg],
 ) -> tuple[str, Decimal | None, Decimal | None, Decimal | None, date | None]:
-    """Ordnet eine Structure ihrem Typ zu — BCS/BPS nur für den genauen
-    Zwei-Bein-Fall, sonst Vertical/Custom/Single/Stock/Future.
+    """Ordnet eine Structure ihrem Typ zu — BCS (Call-Credit) und BPS (Put-Credit) nur für den
+    genauen Zwei-Bein-Fall, sonst Vertical/Custom/Single/Stock/Future.
 
     Kein Rateversuch bei mehr als zwei distinkten Instrumenten: Iron Condors
     und andere Mehrbein-Gebilde sind ``Custom``, nicht auf zwei Legs
@@ -476,7 +476,9 @@ def _typ_klassifizieren(
             short_al = next(al for al in cluster if al.richtung == -1)
             breite = abs(short_al.strike - long_al.strike)
             recht = next(iter(rechte))
-            if recht == "C" and long_al.strike < short_al.strike:
+            # Credit-Spreads: Put-Credit (BPS) hat den Short am höheren, Call-Credit (BCS) den Short
+            # am niedrigeren Strike; Debit-Spreads beider Arten bleiben Vertical (AP-17b, R05).
+            if recht == "C" and long_al.strike > short_al.strike:
                 typ = "BCS"
             elif recht == "P" and long_al.strike < short_al.strike:
                 typ = "BPS"
