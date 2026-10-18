@@ -44,14 +44,16 @@ def betrag(kap, name):
     return kap["posten"][name]["betrag"]
 
 
-def test_variante_a_rueckkauf_ist_kein_verlust_und_zeilen_stimmen():
+def test_variante_a_rueckkauf_ist_im_saldo_und_als_verlust_in_zeile_22():
+    # AP-10e (BMF 14.05.2025, Rn. 25): der Rückkauf 200 steht im Saldo (Zeile 19) UND als enthaltener Verlust (Zeile 22).
     kap = welt().jahre()[2025]["kap"]
     assert kap["variante"] == "zufluss"
     assert betrag(kap, "ausl_kapitalertraege_saldo") == D("240")
     assert betrag(kap, "aktiengewinne") == D("50")
-    assert betrag(kap, "verluste_ohne_aktien") == D("100")          # nur das Termingeschäft, nicht der Rückkauf 200
+    assert betrag(kap, "verluste_ohne_aktien") == D("300")          # Termingeschäft 100 + Rückkauf 200
+    assert kap["alternativen"][0]["betrag"] == D("100")             # Vergleichsrechnung ohne Rückkäufe
     assert betrag(kap, "aktienverluste") == D("20")
-    assert kap["posten"]["aktienverluste"]["zeile"] == 23 and kap["status"] == "laut_berater_antwort"
+    assert kap["posten"]["aktienverluste"]["zeile"] == 23 and kap["status"] == "amtlich_belegt"
     assert kap["zusammensetzung"]["Stillhalter (Prämien abzüglich Rückkäufe)"] == D("300")
 
 
@@ -71,9 +73,10 @@ def test_variante_b_ib_methode_aus_den_ib_zahlen():
     assert kap["zusammensetzung"]["Dividenden"] == D("10")
 
 
-def test_negativer_stillhaltersaldo_zaehlt_als_verlust_ohne_aktien():
+def test_negativer_stillhaltersaldo_ist_im_saldo_und_die_rueckkaeufe_stehen_in_zeile_22():
     e1 = ex("O", 1, "SELL", 1, "1.00", "1", date(2025, 3, 3), waehrung="EUR")
     e2 = ex("C", 1, "BUY", 1, "4.00", "1", date(2025, 4, 3), waehrung="EUR")
     kap = lauf([leg(1, 1, "O", "C", "-1")], [e1, e2], [PUT100]).jahre()[2025]["kap"]
     assert betrag(kap, "ausl_kapitalertraege_saldo") == D("-300")     # 100 − 400
-    assert betrag(kap, "verluste_ohne_aktien") == D("300")
+    assert betrag(kap, "verluste_ohne_aktien") == D("400")            # der Rückkauf 400 als enthaltener Verlust
+    assert kap["alternativen"][0]["betrag"] == D("300")               # nur der negative Saldo

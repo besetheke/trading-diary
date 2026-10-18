@@ -18,7 +18,8 @@ def test_steuer_auswertung_leer_hat_methode_und_warnung(klient):
     d = klient.get("/steuer-auswertung").json()
     assert d["jahre"] == [] and d["datenluecken"] == [] and d["regeln_offen"] == []
     assert d["methode"]["kursquelle"] == "IB fxRateToBase je Ausführung"
-    assert d["methode"]["pruefstatus"] == "ungeprueft"
+    assert d["methode"]["pruefstatus"] == "regelweise"
+    assert d["methode"]["regeln"] and d["methode"]["quellenhierarchie"][0] == "Gesetz"
     assert any("Anfangsbestand" in w for w in d["warnungen"])
 
 

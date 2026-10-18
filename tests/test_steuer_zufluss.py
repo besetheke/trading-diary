@@ -197,7 +197,9 @@ def test_9_quellensteuer_vorlaeufige_obergrenze_in_drei_zustaenden():
     assert q["ungeklaert"] == D("10")                          # Land ohne Satz: nicht berechnet
 
 
-def test_10_ersatzzahlung_nicht_automatisch_anrechenbar_und_nie_steuerfrei():
+def test_10_ersatzzahlung_standardbehandlung_anlage_so():
+    # AP-10e: Ersatzzahlungen sind Anlage SO (§ 22 Nr. 3 EStG), nicht mehr „Einordnung offen“; die Quellensteuer darauf
+    # bleibt außerhalb von Zeile 41, die Freigrenze steht als Zahl (22 € < 256 € → nicht überschritten).
     c = [cash("Payment In Lieu Of Dividends", "22", "1", date(2025, 7, 7), symbol="GPK", beschr="GPK(US2) PAYMENT IN LIEU OF DIVIDEND (Ordinary Dividend)"),
          cash("Withholding Tax", "-3.30", "1", date(2025, 7, 7), symbol="GPK", beschr="GPK(US2) PAYMENT IN LIEU OF DIVIDEND - US TAX")]
     erg = lauf([], [], [], c)
@@ -205,17 +207,18 @@ def test_10_ersatzzahlung_nicht_automatisch_anrechenbar_und_nie_steuerfrei():
     assert j["quellensteuer"]["vorlaeufig_anrechenbar"] == 0
     assert j["quellensteuer"]["ersatzzahlung_zu_pruefen"] == D("3.30")
     assert j["toepfe"]["so_kandidat"]["saldo"] == D("22")
+    assert j["so"]["summe"] == D("22") and j["so"]["freigrenze_ueberschritten"] is False
     offen = [r for r in erg.regeln_offen if r.art == "ersatzzahlung"]
-    assert offen and "Einordnung offen" in offen[0].text and "Freigrenze nicht abschließend geprüft" in offen[0].text
+    assert offen and "Anlage SO" in offen[0].text and "256" in offen[0].text
     assert not any("steuerfrei" in r.text.lower() for r in erg.regeln_offen)
 
 
 def test_11_kap_zeilen_je_formularjahr():
     z25 = kap_zeilen(2025)
-    assert z25["status"] == "laut_berater_antwort"
-    assert z25["zeilen"] == {"ausl_kapitalertraege_saldo": 19, "aktiengewinne": 20, "verluste_ohne_aktien": 22,
-                             "aktienverluste": 23, "anrechenbare_quellensteuer": 41}
-    assert kap_zeilen(2026)["status"] == "ungeprueft"
+    assert z25["status"] == "amtlich_belegt"  # amtlicher Vordruck 2025
+    assert z25["zeilen"] == {"inl_kapitalertraege_saldo": 18, "ausl_kapitalertraege_saldo": 19, "aktiengewinne": 20,
+                             "verluste_ohne_aktien": 22, "aktienverluste": 23, "anrechenbare_quellensteuer": 41}
+    assert kap_zeilen(2026)["status"] == "vorsichtige_standardbehandlung"  # Vordruck 2026 liegt nicht vor
 
 
 def test_12_offene_short_position_zaehlt_im_zuflussjahr():
@@ -280,7 +283,10 @@ def test_17_ungeklaerte_basis_braucht_einen_anfangsbestand():
 def test_18_ausgabe_nennt_methode_und_warnt_ohne_anfangsbestand():
     erg = lauf([], [], [])
     m = erg.methode
-    assert m["kursquelle"] == "IB fxRateToBase je Ausführung" and m["pruefstatus"] == "ungeprueft"
+    assert m["kursquelle"] == "IB fxRateToBase je Ausführung" and m["pruefstatus"] == "regelweise"
     assert m["datumsregeln"]["stillhalterpraemie"]["steuerdatum"] == "settleDateTarget"
     assert m["datumsregeln"]["wertpapierverkauf"]["steuerdatum"] == "tradeDate"
+    assert m["quellenhierarchie"][0] == "Gesetz" and "BMF" in m["quellenhierarchie"][1]
+    assert {r["marker"] for r in m["regeln"]} <= {"amtlich_belegt", "aus_daten_belegt", "vorsichtige_standardbehandlung"}
+    assert all(r["quelle"] and r["text"] for r in m["regeln"])
     assert any("Anfangsbestand" in w for w in erg.warnungen)

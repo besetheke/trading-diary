@@ -31,7 +31,10 @@ from decimal import ROUND_HALF_UP, Decimal
 from analytics.steuer_konfig import (
     FELD_ABRECHNUNG,
     FELD_HANDEL,
+    QUELLENHIERARCHIE,
+    REGELN,
     STANDARD_KONFIG,
+    VORSICHTIG,
     Konfig,
     kap_zeilen,
 )
@@ -46,7 +49,9 @@ TOPF_AKTIEN = "aktien"
 TOPF_DIVIDENDEN = "dividenden"
 TOPF_ZINSEN = "zinsen"
 TOPF_NICHT_ABZIEHBAR = "nicht_abziehbar"
-TOPF_SO = "so_kandidat"
+TOPF_SO = "so_kandidat"  # Ersatzzahlungen (PIL) abzüglich Stornos: Anlage SO, § 22 Nr. 3
+TOPF_SO_SYEP = "so_syep"  # laufende SYEP-Vergütung: Anlage SO, getrennt ausgewiesen
+TOPF_SO_BELASTUNG = "so_belastung"  # gezahlte Kompensation aus Leerverkauf: nicht saldiert, nicht angesetzt
 TOPF_QUELLENSTEUER = "quellensteuer"
 
 _QUELLENSTEUER_SCHLUESSEL = {
@@ -142,7 +147,7 @@ class SteuerZuflussErgebnis:
                 b["kurs_abweichend"][1] += abs(s.betrag_eur)
             if s.topf == TOPF_STILLHALTER and s.vorgang == "glattstellung" and s.betrag_eur < _NULL:
                 b["rueckkaeufe"] += -s.betrag_eur
-            if s.land == "DE" and s.topf != TOPF_QUELLENSTEUER:
+            if s.land == "DE" and s.topf in (TOPF_AKTIEN, TOPF_DIVIDENDEN):
                 b["de_saldo"] += s.betrag_eur
             if s.topf == TOPF_QUELLENSTEUER:
                 b["quellensteuer"][_QUELLENSTEUER_SCHLUESSEL[s.vorgang]] += s.betrag_eur
@@ -157,33 +162,70 @@ class SteuerZuflussErgebnis:
             t["saldo"] += s.betrag_eur
             t["anzahl"] += 1
         for j, b in jahre.items():
+            b["so"] = _so_block(b)
             b["kap"] = _kap_vorschau(j, b, self.konfig)
             b["deklarationsstatus"] = self._deklarationsstatus(j, b)
         return dict(sorted(jahre.items()))
 
     def _deklarationsstatus(self, jahr: int, b: dict) -> dict:
-        """Je Jahr: ob die Zahlen als Grundlage der Steuererklärung taugen — und wenn nicht, warum. Solange auch nur
-        ein Grund besteht, ist das Jahr „nicht deklarationsfähig“; die Beträge bleiben sichtbar (Arbeitsstand)."""
-        gruende = []
-        if self.konfig.pruefstatus != "bestaetigt":
-            gruende.append("Regeln des Steuerberaters noch nicht bestätigt (Prüfstatus „ungeprüft“).")
-        if b["kap"]["status"] == "ungeprueft":
-            gruende.append(f"KAP-Zeilen {b['kap']['formularjahr']} ungeprüft (amtlicher Vordruck liegt nicht vor).")
+        """Je Jahr: ob die Zahlen mit einer Erläuterung als Grundlage der Steuererklärung taugen.
+
+        ``gruende`` sind blockierend (Datenlücken, nicht zugeordnete Fälle wie ETF-Anteile oder Optionskosten ohne
+        Lieferung); solange eine besteht, ist das Jahr „nicht deklarationsfähig“. Ohne blockierenden Grund gilt
+        „deklarierbar mit Erläuterung“: Berechnung und kurze Erläuterung unter „Ergänzende Angaben zur
+        Steuererklärung“ (§ 150 Abs. 7 AO) einreichen. ``hinweise`` sind nicht blockierend."""
+        gruende, hinweise = [], []
         if self.datenluecken:
             gruende.append(f"{len(self.datenluecken)} Datenlücken (fehlender Kurs, Datum oder Ausführung).")
         for r in self.regeln_offen:
-            gruende.append(f"Offene Regel „{r.art}“: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) nicht zugeordnet.")
+            if r.art in _BLOCKIEREND:
+                gruende.append(f"{r.art}: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) nicht zugeordnet.")
+            else:
+                hinweise.append(f"{r.art}: {r.anzahl} Fälle ({_geld(r.betrag_eur)} EUR) in der Standardbehandlung.")
+        vorsichtig = [r["id"] for r in REGELN if r["marker"] == VORSICHTIG]
+        hinweise.append(
+            f"{len(vorsichtig)} Regeln als vorsichtige Standardbehandlung markiert (Tabelle „Regeln und Grundlage“); "
+            "mit Erläuterung unter „Ergänzende Angaben zur Steuererklärung“ einreichen (§ 150 Abs. 7 AO)."
+        )
+        if b["kap"]["status"] == VORSICHTIG:
+            hinweise.append(f"KAP-Zeilen {b['kap']['formularjahr']}: Vordruck liegt nicht vor, Zeilen wie 2025 angenommen.")
         n, summe = b["kurs_abweichend"]
         if n:
-            gruende.append(
+            hinweise.append(
                 f"{n} Zahlungsströme mit Kursdatum ≠ Regeldatum (Summe der Beträge {_geld(summe)} EUR; der IB-Kurs "
                 "gehört zum Handelstag, die Regel verlangt teils den Abrechnungstag)."
             )
-        gruende.append("Verlustvorträge und Verlustverrechnung nicht berücksichtigt (Sache des Steuerberaters).")
-        return {"status": "nicht_deklarationsfaehig", "gruende": gruende}
+        hinweise.append("Verlustvorträge und Verlustverrechnung nicht berücksichtigt (Veranlagung).")
+        status = "nicht_deklarationsfaehig" if gruende else "deklarierbar_mit_erlaeuterung"
+        return {"status": status, "gruende": gruende, "hinweise": hinweise}
+
+# Fälle, die ein Jahr blockieren: ohne diese Zuordnung stimmt eine Zahl der Vorschau nicht.
+_BLOCKIEREND = frozenset({"etf_investmentsteuer", "basis_ungeklaert", "optionskosten_ohne_lieferung"})
+
+
+def _so_block(b: dict) -> dict:
+    """Anlage SO (§ 22 Nr. 3 EStG): empfangene Ersatzzahlungen (netto nach Stornos) und SYEP-Vergütung getrennt, die
+    Summe gegen die Freigrenze von 256 € (für alle Einkünfte dieser Kategorie zusammen; ab 256 € überschritten),
+    die nicht saldierte Belastung aus dem Leerverkauf und die Quellensteuer auf die Ersatzzahlungen."""
+    t = b["toepfe"]
+
+    def saldo(topf: str) -> Decimal:
+        return t.get(topf, {}).get("saldo", _NULL)
+
+    pil, syep = saldo(TOPF_SO), saldo(TOPF_SO_SYEP)
+    return {
+        "ersatzzahlungen_netto": pil,
+        "syep_verguetung": syep,
+        "summe": pil + syep,
+        "freigrenze": Decimal("256"),
+        "freigrenze_ueberschritten": (pil + syep) >= Decimal("256"),
+        "belastung_nicht_saldiert": saldo(TOPF_SO_BELASTUNG),
+        "pil_quellensteuer": b["quellensteuer"]["ersatzzahlung_zu_pruefen"],
+    }
 
 
 KAP_POSTEN = (
+    "inl_kapitalertraege_saldo",
     "ausl_kapitalertraege_saldo",
     "aktiengewinne",
     "verluste_ohne_aktien",
@@ -204,13 +246,15 @@ def kap_block(
     quellensteuer: Decimal,
     alternativen: list[dict] | None = None,
     hinweise: list[str] | None = None,
+    inland: Decimal = _NULL,
 ) -> dict:
     """Eine KAP-Vorschau (**vorläufig, nicht verrechnet**). ``teile`` sind die Bestandteile des Saldos der
     ausländischen Kapitalerträge (Zeile 19); ``verluste_ohne_aktien`` und ``aktienverluste`` sind positive
     Beträge (die „davon“-Zeilen 22 und 23). Zeilen und Status kommen aus der Konfiguration je Formularjahr."""
     z = kap_zeilen(formularjahr)
     werte = {
-        "ausl_kapitalertraege_saldo": sum(teile.values(), _NULL),
+        "inl_kapitalertraege_saldo": inland,
+        "ausl_kapitalertraege_saldo": sum(teile.values(), _NULL) - inland,
         "aktiengewinne": aktiengewinne,
         "verluste_ohne_aktien": verluste_ohne_aktien,
         "aktienverluste": aktienverluste,
@@ -234,9 +278,10 @@ def _kap_vorschau(formularjahr: int, block: dict, konfig: Konfig = STANDARD_KONF
     """Variante A: Zufluss je Zahlungsstrom, Stillhalterprämie separat (Arbeitsstand des Steuerberaters).
 
     Stillhalterprämien und Rückkäufe sind **Einnahmen und negative Einnahmen derselben Art** und werden zu einem
-    Saldo zusammengefasst — ein Rückkauf ist kein „Verlust“ für Zeile 22. Verluste ohne Aktien sind die Verluste
-    der Termingeschäfte (gekaufte Optionen, Barausgleich, Futures); ist der Stillhaltersaldo eines Jahres negativ,
-    zählt er ebenfalls dazu."""
+    Saldo zusammengefasst (Zeile 19). Nach BMF 14.05.2025, Rn. 25, ist die gezahlte Rückkaufprämie zugleich ein
+    **enthaltener Verlust** (Zeile 22, Standard ``rueckkauf_als_verlust``); der Vergleich ohne Rückkäufe bleibt als
+    Alternative sichtbar. Verluste ohne Aktien sind außerdem die Verluste der Termingeschäfte (gekaufte Optionen,
+    Barausgleich, Futures)."""
     t = block["toepfe"]
 
     def feld(topf: str, name: str) -> Decimal:
@@ -248,20 +293,22 @@ def _kap_vorschau(formularjahr: int, block: dict, konfig: Konfig = STANDARD_KONF
     mit_rueckkaeufen = termin_verluste + block["rueckkaeufe"]
     if konfig.rueckkauf_als_verlust:
         verluste_ohne_aktien, andere, andere_text = (
-            mit_rueckkaeufen, nur_saldo, "Zeile 22 ohne die Rückkäufe (nur im Saldo der Stillhalter)")
+            mit_rueckkaeufen, nur_saldo,
+            "Vergleichsrechnung: Zeile 22 ohne die Rückkäufe (nur im Saldo der Stillhalter, nicht die BMF-Behandlung)")
     else:
         verluste_ohne_aktien, andere, andere_text = (
             nur_saldo, mit_rueckkaeufen,
-            "Zeile 22, wenn gezahlte Rückkaufprämien als enthaltener Verlust gelten (Frage an den Steuerberater)")
+            "Vergleichsrechnung: Zeile 22, wenn Rückkäufe nur im Saldo stehen (nicht die BMF-Behandlung)")
     hinweise = []
     if block["de_saldo"]:
         hinweise.append(
-            f"Darunter {_geld(block['de_saldo'])} EUR aus Aktien deutscher Emittenten (ISIN DE): Zeile 18 oder 19 "
-            "klärt der Steuerberater (auszahlende Stelle, nicht Emittent, ist maßgeblich?).")
+            f"Zeile 18: {_geld(block['de_saldo'])} EUR aus Aktien deutscher Emittenten (ISIN DE, ohne deutschen "
+            "Steuerabzug, § 34d EStG); Zeile 20 enthält den Aktiengewinn weiterhin, Zeile 18 und 19 zusammen "
+            "bleiben unverändert.")
     return kap_block(
         formularjahr, "zufluss", "Zufluss, Prämie separat",
-        "Arbeitsstand des Steuerberaters: Stillhalterprämie im Zuflussjahr, Rückkauf im Zahlungsjahr, Aktie zum "
-        "Strike; offene Positionen sind enthalten.",
+        "Stillhalterprämie im Zuflussjahr, Rückkauf im Zahlungsjahr, Aktie zum Strike (BMF 14.05.2025); offene "
+        "Positionen sind enthalten.",
         {
             "Aktien": feld(TOPF_AKTIEN, "saldo"),
             "Stillhalter (Prämien abzüglich Rückkäufe)": still,
@@ -271,6 +318,7 @@ def _kap_vorschau(formularjahr: int, block: dict, konfig: Konfig = STANDARD_KONF
         },
         feld(TOPF_AKTIEN, "gewinne"), verluste_ohne_aktien, -feld(TOPF_AKTIEN, "verluste"),
         block["quellensteuer"]["vorlaeufig_anrechenbar"],
+        inland=block["de_saldo"],
         alternativen=[{"posten": "verluste_ohne_aktien", "zeile": kap_zeilen(formularjahr)["zeilen"]["verluste_ohne_aktien"],
                        "name": andere_text, "betrag": andere}],
         hinweise=hinweise,
@@ -448,6 +496,8 @@ def steuer_zufluss(
             "kursquelle": konfig.kursquelle,
             "kursdatum_feld": konfig.kursdatum_feld,
             "pruefstatus": konfig.pruefstatus,
+            "quellenhierarchie": list(QUELLENHIERARCHIE),
+            "regeln": [dict(r) for r in REGELN],
             "datumsregeln": {k: dict(v) for k, v in konfig.regeln.items()},
         },
         konfig=konfig,
@@ -665,7 +715,8 @@ _RE_KLAMMER = re.compile(r"\s*\([^()]*\)\s*$")
 
 def _basis_beschreibung(text: str, steuer: bool) -> str:
     text = (text or "").strip()
-    return _RE_STEUER.sub("", text) if steuer else _RE_KLAMMER.sub("", text)
+    text = _RE_STEUER.sub("", text) if steuer else _RE_KLAMMER.sub("", text)
+    return text.replace(" - REVERSAL", "")  # Storno und Original gehören zur selben Zahlung
 
 
 def _cash(s: _Sammler, cash_zeilen) -> None:
@@ -683,12 +734,21 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
         eur = c["betrag"] * c["kurs"]
         if typ in ("Dividends", "Payment In Lieu Of Dividends"):
             ersatz = typ.startswith("Payment")
-            _cash_strom(s, c, "ersatzzahlung" if ersatz else "dividende", "dividende",
-                        TOPF_SO if ersatz else TOPF_DIVIDENDEN, eur)
+            vorgang, topf = ("dividende", TOPF_DIVIDENDEN)
+            if ersatz:
+                if "REVERSAL" in (c.get("beschreibung") or "").upper():
+                    vorgang, topf = "ersatzzahlung_storno", TOPF_SO  # mindert die empfangenen Ersatzzahlungen
+                elif eur < _NULL:
+                    vorgang, topf = "ersatzzahlung_belastung", TOPF_SO_BELASTUNG  # Kompensation aus Leerverkauf
+                else:
+                    vorgang, topf = "ersatzzahlung", TOPF_SO
+            _cash_strom(s, c, vorgang, "dividende", topf, eur)
             if ersatz:
                 s.regel_offen("ersatzzahlung",
-                              "Ersatzzahlungen (Wertpapierleihe/SYEP): Einordnung offen (SO-Kandidat, § 22 Nr. 3 EStG vorbehaltlich Bestätigung); "
-                              "Freigrenze nicht abschließend geprüft; Ursache je Buchung ungeklärt.", eur,
+                              "Ersatzzahlungen (PIL) und SYEP-Vergütung: Standardbehandlung Anlage SO, § 22 Nr. 3 EStG "
+                              "(vorsichtige Standardbehandlung), getrennt ausgewiesen; Freigrenze 256 € für alle "
+                              "Einkünfte dieser Kategorie zusammen; Nachweis der Leihe über das Activity Statement "
+                              "(Securities Lent Activity, Fee Details).", eur,
                               detail={"datum": tag.isoformat(), "symbol": c.get("symbol") or "", "betrag_eur": eur,
                                       "waehrung": c.get("waehrung") or "", "beschreibung": c.get("beschreibung") or ""})
             key = (c.get("symbol"), _basis_beschreibung(c.get("beschreibung"), False), tag, ersatz)
@@ -696,6 +756,8 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
             g["brutto"] += eur
         elif typ == "Withholding Tax":
             steuer_zeilen.append({**c, "_eur": eur, "_tag": tag})
+        elif typ == "Broker Interest Received" and "(SYEP)" in (c.get("beschreibung") or "").upper():
+            _cash_strom(s, c, "syep_verguetung", "zins", TOPF_SO_SYEP, eur)  # laufende Vergütung der Wertpapierleihe
         elif typ == "Broker Interest Received":
             _cash_strom(s, c, "habenzinsen", "zins", TOPF_ZINSEN, eur)
         elif typ == "Broker Interest Paid":
@@ -710,6 +772,9 @@ def _cash(s: _Sammler, cash_zeilen) -> None:
         beschr = z.get("beschreibung") or ""
         if "CREDIT INT" in beschr.upper():  # Zinsquellensteuer (Irland): nicht anrechenbar
             _cash_strom(s, z, "zinsquellensteuer_nicht_anrechenbar", "zins", TOPF_NICHT_ABZIEHBAR, z["_eur"])
+            continue
+        if "PAYMENT IN LIEU" in beschr.upper():  # Steuer auf Ersatzzahlungen (auch Erstattungen): nie in Zeile 41
+            _cash_strom(s, z, "quellensteuer_ersatzzahlung", "dividende", TOPF_QUELLENSTEUER, -z["_eur"])
             continue
         basis = _basis_beschreibung(beschr, True)
         passend = [k for k in brutto_gruppen if k[0] == z.get("symbol") and k[1] == basis and k[2] == z["_tag"]]
@@ -774,7 +839,7 @@ def als_csv(ergebnis: SteuerZuflussErgebnis, jahr: int | None = None) -> str:
     m = ergebnis.methode
     zeilen = [
         "# Steuer nach Zufluss je Zahlungsstrom — Aufbereitung für den Steuerberater, keine Steuerberatung, "
-        "keine Verlustverrechnung; Arbeitsstand, Prüfstatus: " + m["pruefstatus"],
+        "keine Verlustverrechnung; Marker je Regel (amtlich_belegt, aus_daten_belegt, vorsichtige_standardbehandlung)",
         f"# Kursquelle: {m['kursquelle']} (Kursdatum: {m['kursdatum_feld']}); Datumsregeln: "
         + ", ".join(f"{k}={v['steuerdatum']}/{v['fx']}" for k, v in m["datumsregeln"].items()),
         "abschnitt;jahr;topf;gewinne;verluste;saldo;anzahl;zustand;betrag;steuerdatum;fx_datum;pruefstatus;"

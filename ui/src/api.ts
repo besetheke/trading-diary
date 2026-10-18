@@ -1324,7 +1324,16 @@ export interface SteuerJahr {
   toepfe: SteuerTopf[]
   quellensteuer: Record<string, string>
   betroffen: number
-  deklarationsstatus: { status: string; gruende: string[] }
+  deklarationsstatus: { status: string; gruende: string[]; hinweise: string[] }
+  so: {
+    ersatzzahlungen_netto: string
+    syep_verguetung: string
+    summe: string
+    freigrenze: string
+    freigrenze_ueberschritten: boolean
+    belastung_nicht_saldiert: string
+    pil_quellensteuer: string
+  }
   kap_varianten: SteuerKap[]
 }
 
@@ -1335,6 +1344,8 @@ export interface SteuerAntwort {
     kursdatum_feld: string
     pruefstatus: string
     datumsregeln: Record<string, { steuerdatum: string; fx: string }>
+    quellenhierarchie: string[]
+    regeln: { id: string; marker: string; text: string; quelle: string }[]
     kursdatum_abweichend: number
     stroeme: number
   }

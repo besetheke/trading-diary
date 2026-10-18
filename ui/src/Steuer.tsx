@@ -4,8 +4,8 @@ import type { SteuerAntwort } from './api'
 import Betrag from './Betrag'
 
 // Steuer nach Zufluss je Zahlungsstrom (AP-10c): reines Durchreichen der Aufbereitung aus GET /steuer-auswertung.
-// Nichts wird hier gerechnet, verrechnet oder umgerechnet. Arbeitsstand des Steuerberaters (OF-92/OF-93), ungeprüft:
-// keine Steuerberatung, keine Verlustverrechnung.
+// Nichts wird hier gerechnet, verrechnet oder umgerechnet. Keine Steuerberatung, keine Verlustverrechnung. Jede Regel
+// steht mit Marker und Grundlage in der Tabelle „Regeln und Grundlage“ (Quellenhierarchie, OF-99).
 
 const TOPF_NAME: Record<string, string> = {
   aktien: 'Aktien',
@@ -14,9 +14,11 @@ const TOPF_NAME: Record<string, string> = {
   dividenden: 'Dividenden',
   zinsen: 'Habenzinsen',
   nicht_abziehbar: 'nicht abziehbar (Sollzinsen, Gebühren)',
-  so_kandidat: 'Ersatzzahlungen (SO-Kandidat, Einordnung offen)',
+  so_kandidat: 'Ersatzzahlungen PIL (Anlage SO)',
+  so_syep: 'SYEP-Vergütung (Anlage SO)',
+  so_belastung: 'PIL-Belastung Leerverkauf (nicht saldiert)',
 }
-const TOPF_REIHENFOLGE = ['aktien', 'stillhalter', 'termingeschaefte', 'dividenden', 'zinsen', 'so_kandidat', 'nicht_abziehbar']
+const TOPF_REIHENFOLGE = ['aktien', 'stillhalter', 'termingeschaefte', 'dividenden', 'zinsen', 'so_kandidat', 'so_syep', 'so_belastung', 'nicht_abziehbar']
 
 const QST_NAME: Record<string, string> = {
   vorlaeufig_anrechenbar: 'vorläufig anrechenbar',
@@ -26,6 +28,7 @@ const QST_NAME: Record<string, string> = {
 }
 
 const KAP_NAME: Record<string, string> = {
+  inl_kapitalertraege_saldo: 'Saldo inländische Kapitalerträge ohne Steuerabzug (deutsche Emittenten)',
   ausl_kapitalertraege_saldo: 'Saldo ausländische Kapitalerträge',
   aktiengewinne: 'davon Aktiengewinne',
   verluste_ohne_aktien: 'davon Verluste ohne Aktien',
@@ -66,14 +69,18 @@ export default function Steuer(): JSX.Element {
     <section>
       <h2>Steuer — Zufluss je Zahlungsstrom</h2>
       <p className="hinweis">
-        <strong>Arbeitsstand, ungeprüft — keine Steuerberatung, keine Verlustverrechnung.</strong> Die Regeln stammen aus
-        der Antwort des Steuerberaters (OF-92) und sind von ihm zu bestätigen. Stillhalterprämien zählen im Zuflussjahr,
-        Rückkäufe im Zahlungsjahr, Spreads je Bein; Aktien zum Strike mit Erwerbs- und Veräußerungskosten;
-        Fremdwährung je Zahlungsstrom. Offene Positionen sind enthalten.
+        <strong>Aufbereitung, keine Steuerberatung und keine Verlustverrechnung.</strong> Grundlage ist die
+        Quellenhierarchie {daten.methode.quellenhierarchie.map((q, i) => `${i + 1}. ${q}`).join(' · ')}. Jede Regel trägt
+        einen Marker (amtlich belegt, aus Daten belegt, vorsichtige Standardbehandlung), siehe unten. Verbindlich ist nur
+        die Entscheidung des Finanzamts oder eines Gerichts; für Vorgänge, die schon verwirklicht sind, gibt es keine
+        verbindliche Auskunft (§ 89 Abs. 2 AO) — die Berechnung wird mit einer kurzen Erläuterung unter „Ergänzende
+        Angaben zur Steuererklärung“ eingereicht (§ 150 Abs. 7 AO). Stillhalterprämien zählen im Zuflussjahr, Rückkäufe im
+        Zahlungsjahr, Spreads je Bein; Aktien zum Strike; Fremdwährung je Zahlungsstrom; offene Positionen sind
+        enthalten.
       </p>
       <p className="sicht">
-        Kursquelle: {daten.methode.kursquelle} (Kursdatum: {daten.methode.kursdatum_feld}); Prüfstatus:{' '}
-        {daten.methode.pruefstatus}. Datumsregeln je Vorgang (Steuerdatum / Kursdatum):{' '}
+        Kursquelle: {daten.methode.kursquelle} (Kursdatum: {daten.methode.kursdatum_feld}); Prüfung:{' '}
+        {daten.methode.pruefstatus} (Marker je Regel). Datumsregeln je Vorgang (Steuerdatum / Kursdatum):{' '}
         {Object.entries(daten.methode.datumsregeln)
           .map(([k, v]) => `${k} ${v.steuerdatum}/${v.fx}`)
           .join(', ')}
@@ -203,23 +210,53 @@ export default function Steuer(): JSX.Element {
               {gewaehlt.jahr}:{' '}
               {gewaehlt.deklarationsstatus.status === 'nicht_deklarationsfaehig'
                 ? 'nicht deklarationsfähig'
-                : 'zur Prüfung durch den Steuerberater'}
-            </strong>{' '}
-            — die Beträge unten sind Arbeitsstand. Gründe:
+                : 'deklarierbar mit Erläuterung'}
+            </strong>
+            {gewaehlt.deklarationsstatus.gruende.length > 0 && (
+              <>
+                {' '}
+                — blockierend:
+                <ul>
+                  {gewaehlt.deklarationsstatus.gruende.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            Hinweise (nicht blockierend):
             <ul>
-              {gewaehlt.deklarationsstatus.gruende.map((g) => (
-                <li key={g}>{g}</li>
+              {gewaehlt.deklarationsstatus.hinweise.map((h) => (
+                <li key={h}>{h}</li>
               ))}
             </ul>
+          </div>
+
+          <h3>{gewaehlt.jahr}: Anlage SO — Ersatzzahlungen und SYEP (§ 22 Nr. 3 EStG), EUR</h3>
+          <div className="tabelle-rahmen">
+            <table className="positionen dichte-kompakt">
+              <tbody>
+                <tr><td>Empfangene Ersatzzahlungen (PIL, abzüglich Stornos)</td><td className="zahl"><Betrag wert={gewaehlt.so.ersatzzahlungen_netto} /></td></tr>
+                <tr><td>Laufende SYEP-Vergütung (getrennt ausgewiesen)</td><td className="zahl"><Betrag wert={gewaehlt.so.syep_verguetung} /></td></tr>
+                <tr className="summe"><td><strong>Summe vor zusammenhängenden Kosten</strong></td><td className="zahl"><strong><Betrag wert={gewaehlt.so.summe} /></strong></td></tr>
+                <tr>
+                  <td>Freigrenze {gewaehlt.so.freigrenze} € (für alle Einkünfte dieser Kategorie zusammen)</td>
+                  <td className="zahl">{gewaehlt.so.freigrenze_ueberschritten ? 'überschritten' : 'nicht überschritten'}</td>
+                </tr>
+                <tr><td>PIL-Belastung aus Leerverkauf (nicht saldiert, nicht als abzugsfähig angesetzt)</td><td className="zahl"><Betrag wert={gewaehlt.so.belastung_nicht_saldiert} /></td></tr>
+                <tr><td>Quellensteuer auf Ersatzzahlungen (nicht in Zeile 41; Anlage AUS bzw. Erstattung gesondert prüfen)</td><td className="zahl"><Betrag wert={gewaehlt.so.pil_quellensteuer} /></td></tr>
+              </tbody>
+            </table>
           </div>
           <h3>
             {gewaehlt.jahr}: Vorschau Anlage KAP in zwei Varianten (vorläufig, nicht verrechnet) — Zeilen{' '}
             {gewaehlt.kap_varianten[0].formularjahr}:{' '}
-            {gewaehlt.kap_varianten[0].status === 'ungeprueft' ? 'ungeprüft' : 'laut Antwort des Steuerberaters'}
+            {gewaehlt.kap_varianten[0].status === 'amtlich_belegt'
+              ? 'laut amtlichem Vordruck'
+              : 'Vordruck liegt nicht vor, wie 2025 angenommen'}
           </h3>
           <p className="sicht">
-            <strong>Zeile 19</strong> ist der Saldo aller ausländischen Kapitalerträge (Aktien, Optionen, Stillhalter,
-            Dividenden, Habenzinsen); <strong>Zeile 20</strong> die darin enthaltenen Aktiengewinne,{' '}
+            <strong>Zeile 19</strong> ist der Saldo der ausländischen Kapitalerträge (Aktien, Optionen, Stillhalter,
+            Dividenden, Habenzinsen), <strong>Zeile 18</strong> der Teil aus Aktien deutscher Emittenten; <strong>Zeile 20</strong> die darin enthaltenen Aktiengewinne,{' '}
             <strong>Zeile 22</strong> die Bruttoverluste ohne Aktien (einzelne Optionsgeschäfte, Barausgleich, Futures —
             bei hohem Umschlag sehr große Zahlen) und <strong>Zeile 23</strong> die Aktienverluste. Der Saldo steht in
             Zeile 19; die Zeilen 20, 22 und 23 sind „davon“-Beträge und werden nicht voneinander abgezogen. Welche
@@ -406,13 +443,43 @@ export default function Steuer(): JSX.Element {
         </ul>
       )}
 
-      <h3>Offene Fragen für den Steuerberater</h3>
+      <h3>Regeln und Grundlage</h3>
+      <div className="tabelle-rahmen">
+        <table className="positionen dichte-kompakt">
+          <thead>
+            <tr>
+              <th>Regel</th>
+              <th>Marker</th>
+              <th>Grundlage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {daten.methode.regeln.map((r) => (
+              <tr key={r.id}>
+                <td>{r.text}</td>
+                <td>
+                  {r.marker === 'amtlich_belegt'
+                    ? 'amtlich belegt'
+                    : r.marker === 'aus_daten_belegt'
+                      ? 'aus Daten belegt'
+                      : 'vorsichtige Standardbehandlung'}
+                </td>
+                <td>{r.quelle}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="sicht">
+        Rechtsquellen und Randnummern sind nicht von der Software geprüft; sie stehen als Hinweis zum Nachlesen da.
+      </p>
+
+      <h3>Offene Punkte</h3>
       <ol>
-        <li>Datumsfeld je Vorgang (Handels- oder Abrechnungstag) und Kursquelle (IB oder EZB) bestätigen — der IB-Kurs
-          gehört zum Handelstag; wo die Regel den Abrechnungstag verlangt, steht „kursdatum_abweichend“.</li>
-        <li>Ersatzzahlungen und SYEP: Einordnung (§ 22 Nr. 3 oder § 20), Ursache je Buchung, Quellensteuer.</li>
-        <li>ETF/ETN/ETP (Investmentsteuergesetz) und gekaufte Optionen mit Lieferung (Long Call/Put) prüfen.</li>
-        <li>USD-Konto: Verzinsung und Funktion (§ 20 oder § 23), Anfangsbestände und Verlustvorträge.</li>
+        <li>Quellensteuer auf Ersatzzahlungen: Entlastung (Anlage AUS bzw. ausländische Erstattung) gesondert prüfen.</li>
+        <li>Gezahlte Kompensation aus Leerverkäufen: mögliche Abziehbarkeit, bis dahin nicht angesetzt.</li>
+        <li>ETF/ETN/ETP (Investmentsteuergesetz) und Zeilen der Anlage KAP 2026 (Vordruck liegt nicht vor).</li>
+        <li>USD-Sollsaldo: Einordnung der Kurseffekte (§ 20 oder § 23), Verlustvorträge, Verlustverrechnung.</li>
       </ol>
     </section>
   )

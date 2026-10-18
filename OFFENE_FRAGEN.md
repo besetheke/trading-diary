@@ -3804,3 +3804,16 @@ geprüft. Vorschläge des Kollegen, die bei Wiederaufnahme anstehen:
    SYEP-Verschiebung nach SO auf etwa 80.021,61 € sinken. Keine Dividenden deutscher Emittenten 2025.
 5. **Offen bleiben:** Behandlung der 70,17 € ausländischer Steuer auf PIL (Anlage AUS bzw. Erstattung) und eine
    mögliche Abziehbarkeit der 187,06 € Kompensationszahlung.
+
+## OF-100 · Steuer: Rückmeldung OF-99 umgesetzt (AP-10e, 18.10.2026)
+
+Umgesetzt und am Echtbestand 2025 geprüft (alle Zahlen stimmen mit der Rückmeldung überein): Anlage SO (PIL 758,48 EUR,
+SYEP 238,86, Summe 997,34, Freigrenze überschritten, PIL-Belastung −187,06 nicht saldiert, PIL-Quellensteuer 70,17),
+Rückkäufe als enthaltener Verlust (Zeile 22: 2.367.907,87 statt 803.595,03; Zeile 19 unverändert), deutsche Emittenten
+in Zeile 18 (164,29; Zeile 19: 80.021,61). Statt „Bestätigung durch den Steuerberater“ gilt die Quellenhierarchie mit
+Markern je Regel; der Deklarationsstatus kennt jetzt „deklarierbar mit Erläuterung“ (Erläuterung unter „Ergänzende
+Angaben zur Steuererklärung“, § 150 Abs. 7 AO). **Blockiert bleibt 2025 allein durch die 43 ETF-Beine** (Investmentsteuer).
+Rechtsquellen und Randnummern stehen als Hinweis auf der Seite und sind von der Software nicht geprüft.
+
+**Noch offen:** Quellensteuer auf PIL (70,17 EUR; Anlage AUS bzw. Erstattung), Abziehbarkeit der PIL-Belastung
+(187,06 EUR), ETF/ETN/ETP, KAP-Zeilen 2026, USD-Sollsaldo und Verlustverrechnung.

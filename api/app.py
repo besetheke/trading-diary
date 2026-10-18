@@ -1119,6 +1119,19 @@ class SteuerKapAlternativeAntwort(BaseModel):
 class SteuerDeklarationAntwort(BaseModel):
     status: str
     gruende: list[str]
+    hinweise: list[str] = []
+
+
+class SteuerSoAntwort(BaseModel):
+    """Anlage SO (§ 22 Nr. 3 EStG): Ersatzzahlungen, SYEP, Freigrenze, nicht saldierte Belastung."""
+
+    ersatzzahlungen_netto: str
+    syep_verguetung: str
+    summe: str
+    freigrenze: str
+    freigrenze_ueberschritten: bool
+    belastung_nicht_saldiert: str
+    pil_quellensteuer: str
 
 
 class SteuerKapAntwort(BaseModel):
@@ -1140,6 +1153,7 @@ class SteuerJahrAntwort(BaseModel):
     quellensteuer: dict[str, str]
     betroffen: int
     deklarationsstatus: SteuerDeklarationAntwort
+    so: SteuerSoAntwort
     kap_varianten: list[SteuerKapAntwort]
 
 
@@ -3829,6 +3843,9 @@ def erzeuge_app(
                     quellensteuer={k: _als_text(v) for k, v in b["quellensteuer"].items()},
                     betroffen=b["betroffen"],
                     deklarationsstatus=SteuerDeklarationAntwort(**b["deklarationsstatus"]),
+                    so=SteuerSoAntwort(**{
+                        k: (v if isinstance(v, bool) else _als_text(v)) for k, v in b["so"].items()
+                    }),
                     kap_varianten=kap_varianten(j, b),
                 )
                 for j, b in ergebnis.jahre().items()

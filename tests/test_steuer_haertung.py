@@ -106,37 +106,47 @@ def test_5_etf_kategorie_je_instrument():
     assert any("ohne IB-Kategorie" in w and "ZZZ" in w for w in erg.warnungen)  # … aber nicht still
 
 
-def test_6_deklarationsstatus_nennt_die_gruende():
+def test_6_deklarationsstatus_nennt_gruende_und_hinweise():
+    # AP-10e: ohne blockierenden Grund „deklarierbar mit Erläuterung“ (§ 150 Abs. 7 AO), die Hinweise bleiben sichtbar.
     e = ex("O", 1, "SELL", 1, "3.00", "1", date(2025, 3, 3), settle=date(2025, 3, 5), waehrung="EUR")
     erg = lauf([leg(1, 1, "O", None, "-1")], [e], [PUT100])
     st = erg.jahre()[2025]["deklarationsstatus"]
-    assert st["status"] == "nicht_deklarationsfaehig"
-    text = " ".join(st["gruende"])
-    assert "nicht bestätigt" in text and "Kursdatum" in text and "Verlustvorträge" in text
+    assert st["status"] == "deklarierbar_mit_erlaeuterung" and st["gruende"] == []
+    text = " ".join(st["hinweise"])
+    assert "vorsichtige Standardbehandlung" in text and "Kursdatum" in text and "Verlustvorträge" in text
+    assert "Ergänzende Angaben" in text
+    # Ein blockierender Grund (Datenlücke: Rückkauf ohne Kurs) macht das Jahr „nicht deklarationsfähig“.
+    e1 = ex("O2", 1, "SELL", 1, "3.00", "1", date(2025, 3, 3), waehrung="EUR")
+    e2 = ex("C2", 1, "BUY", 1, "1.00", None, date(2025, 4, 3), waehrung="EUR")
+    blockiert = lauf([leg(1, 1, "O2", "C2", "-1")], [e1, e2], [PUT100]).jahre()[2025]["deklarationsstatus"]
+    assert blockiert["status"] == "nicht_deklarationsfaehig" and "Datenlücken" in " ".join(blockiert["gruende"])
 
 
-def test_7_zeile_22_mit_und_ohne_rueckkaeufe_zeile_19_bleibt():
+def test_7_zeile_22_standard_mit_rueckkaeufen_vergleich_ohne():
     e1 = ex("O", 1, "SELL", 1, "5.00", "1", date(2025, 3, 3), waehrung="EUR")
     e2 = ex("C", 1, "BUY", 1, "2.00", "1", date(2025, 4, 3), waehrung="EUR")
     welt = ([leg(1, 1, "O", "C", "-1")], [e1, e2], [PUT100])
-    kap = lauf(*welt).jahre()[2025]["kap"]
-    assert kap["posten"]["verluste_ohne_aktien"]["betrag"] == 0
-    assert kap["alternativen"][0]["betrag"] == D("200") and kap["alternativen"][0]["zeile"] == 22
-    umgekehrt = lauf(*welt, konfig=replace(STANDARD_KONFIG, rueckkauf_als_verlust=True)).jahre()[2025]["kap"]
-    assert umgekehrt["posten"]["verluste_ohne_aktien"]["betrag"] == D("200") and umgekehrt["alternativen"][0]["betrag"] == 0
-    for k in (kap, umgekehrt):
+    kap = lauf(*welt).jahre()[2025]["kap"]                              # Standard: BMF-Behandlung
+    assert kap["posten"]["verluste_ohne_aktien"]["betrag"] == D("200")
+    assert kap["alternativen"][0]["betrag"] == 0 and kap["alternativen"][0]["zeile"] == 22
+    assert "Vergleichsrechnung" in kap["alternativen"][0]["name"]
+    nur_saldo = lauf(*welt, konfig=replace(STANDARD_KONFIG, rueckkauf_als_verlust=False)).jahre()[2025]["kap"]
+    assert nur_saldo["posten"]["verluste_ohne_aktien"]["betrag"] == 0 and nur_saldo["alternativen"][0]["betrag"] == D("200")
+    for k in (kap, nur_saldo):
         assert k["posten"]["ausl_kapitalertraege_saldo"]["betrag"] == D("300")
 
 
-def test_8_aktien_deutscher_emittenten_bekommen_einen_hinweis():
+def test_8_aktien_deutscher_emittenten_stehen_in_zeile_18():
     de = inst(20, "STK", symbol="HNR1", underlying=None, waehrung="EUR")
     de["land"] = "DE"
     de["unterkategorie"] = "COMMON"
     execs = [ex("A", 20, "BUY", 1, "100", "1", date(2025, 1, 5), waehrung="EUR"),
              ex("B", 20, "SELL", 1, "150", "1", date(2025, 2, 5), waehrung="EUR")]
     kap = lauf([leg(1, 20, "A", "B", "1")], execs, [de]).jahre()[2025]["kap"]
-    assert kap["posten"]["ausl_kapitalertraege_saldo"]["betrag"] == D("50")
-    assert any("deutscher Emittenten" in h and "50.00" in h for h in kap["hinweise"])
+    assert kap["posten"]["inl_kapitalertraege_saldo"]["betrag"] == D("50")       # Zeile 18
+    assert kap["posten"]["ausl_kapitalertraege_saldo"]["betrag"] == 0           # Zeile 19 ohne HNR1
+    assert kap["posten"]["aktiengewinne"]["betrag"] == D("50")                   # Zeile 20 bleibt
+    assert any("Zeile 18" in h and "50.00" in h for h in kap["hinweise"])
 
 
 def test_9_cash_mit_abweichendem_abrechnungsdatum_ist_kursdatum_abweichend():
