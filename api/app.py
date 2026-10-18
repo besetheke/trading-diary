@@ -43,7 +43,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, and_, delete, exists, func, insert, or_, select, update
@@ -602,6 +602,35 @@ def _hole_roller_status(port: int) -> dict | None:
             return json.loads(antwort.read().decode("utf-8"))
     except (OSError, ValueError):
         return None
+
+
+# --- Trading-Steuerung: Schutz vor fremden Aufrufern (AP-17c, R01) ---------------------------
+# Die Befehle an den Roller und der Momentum-Schalter lösen Handlungen aus. Der Server hört nur auf
+# 127.0.0.1; das schützt aber nicht vor einer Webseite im Browser desselben Rechners (einfaches
+# Formular-POST, DNS-Rebinding). Deshalb prüft jeder dieser Aufrufe VOR der Handlung: Host,
+# eigener Header der Station (den ein fremder Aufrufer ohne Vorabfrage nicht senden darf), gleiche
+# Herkunft laut Origin und Sec-Fetch-Site.
+STATION_HEADER = "x-trading-station"
+ERLAUBTE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def pruefe_station_aufruf(request: Request) -> None:
+    """Lässt nur Aufrufe der Station durch; sonst ``HTTPException(403)`` — bevor etwas geschieht."""
+    from urllib.parse import urlsplit
+
+    host_kopf = request.headers.get("host", "")
+    hostname = (urlsplit("//" + host_kopf).hostname or "").lower()
+    extra = {h.strip().lower() for h in os.environ.get("STATION_ERLAUBTE_HOSTS", "").split(",")
+             if h.strip()}
+    if hostname not in ERLAUBTE_HOSTS | extra:
+        raise HTTPException(status_code=403, detail="Host nicht erlaubt (nur über die Station)")
+    if request.headers.get(STATION_HEADER) != "1":
+        raise HTTPException(status_code=403, detail="Befehl nur aus der Station (Header fehlt)")
+    herkunft = request.headers.get("origin")
+    if herkunft is not None and urlsplit(herkunft).netloc.lower() != host_kopf.lower():
+        raise HTTPException(status_code=403, detail="Fremde Herkunft")
+    if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
+        raise HTTPException(status_code=403, detail="Fremde Herkunft")
 
 
 ROLLER_BEFEHLE = (
@@ -3948,14 +3977,15 @@ def erzeuge_app(
     if mit_journal:
 
         @applikation.post("/journal/roller-befehl/{name}")
-        def roller_befehl(name: str, kette: str | None = None,
+        def roller_befehl(name: str, request: Request, kette: str | None = None,
                           strategie: str | None = None) -> dict:
             """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` (``kette``)
             führt den vorbereiteten Roll aus, ``oeffnen`` (``strategie``) eröffnet
             eine Strategie, ``kette-aufnehmen`` (``kette``) nimmt eine angehaltene Kette
             wieder auf, ``auto-an``/``auto-aus`` schaltet die Automatik (aus = Not-Aus),
             ``strategie-pruefen`` rechnet neu. Nur diese Namen;
-            Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst."""
+            Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst; vorab Schutzprüfung."""
+            pruefe_station_aufruf(request)
             if name not in ROLLER_BEFEHLE:
                 raise HTTPException(status_code=404, detail="unbekannter Befehl")
             if roller_port is None:
@@ -3969,10 +3999,11 @@ def erzeuge_app(
             return antwort
 
         @applikation.post("/journal/momentum/{aktion}")
-        def momentum_steuern(aktion: str) -> dict:
+        def momentum_steuern(aktion: str, request: Request) -> dict:
             """Momentum Lab ein- oder ausschalten (Schalter der Station): ``start`` oder ``stop``.
             Beendet wird nur Momentum Lab selbst (api/momentum_steuerung.py)."""
             from api import momentum_steuerung
+            pruefe_station_aufruf(request)
             if aktion not in ("start", "stop"):
                 raise HTTPException(status_code=404, detail="unbekannte Aktion")
             ok, text = (momentum_steuerung.starten() if aktion == "start"

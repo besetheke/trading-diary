@@ -20,8 +20,10 @@ from api.app import erzeuge_app  # noqa: E402
 
 
 def _klient(db, sender, **kw):
+    # AP-17c: ein Aufruf der Station — lokale Adresse und Header der Station
     return TestClient(erzeuge_app(db, mit_journal=True, roller_port=8600,
-                                  sende_roller_befehl=sender, **kw))
+                                  sende_roller_befehl=sender, **kw),
+                      base_url="http://localhost", headers={"X-Trading-Station": "1"})
 
 
 def test_befehl_wird_durchgereicht(migrated_db):

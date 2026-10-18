@@ -19,7 +19,8 @@ def test_kette_aufnehmen_reicht_parameter_durch(migrated_db):
         gerufen.append((port, ziel))
         return 200, {"ok": True, "kette": "K003"}
     klient = TestClient(erzeuge_app(migrated_db, mit_journal=True, roller_port=8600,
-                                    sende_roller_befehl=sender))
+                                    sende_roller_befehl=sender),
+                        base_url="http://localhost", headers={"X-Trading-Station": "1"})  # AP-17c
     r = klient.post("/journal/roller-befehl/kette-aufnehmen?kette=K003")
     assert r.status_code == 200 and r.json() == {"ok": True, "kette": "K003"}
     assert gerufen == [(8600, "kette-aufnehmen?kette=K003")]
@@ -28,6 +29,7 @@ def test_kette_aufnehmen_reicht_parameter_durch(migrated_db):
 def test_ablehnung_des_dienstes_kommt_mit_begruendung(migrated_db):
     klient = TestClient(erzeuge_app(
         migrated_db, mit_journal=True, roller_port=8600,
-        sende_roller_befehl=lambda p, z: (409, {"fehler": "Bestand passt weiterhin nicht"})))
+        sende_roller_befehl=lambda p, z: (409, {"fehler": "Bestand passt weiterhin nicht"})),
+        base_url="http://localhost", headers={"X-Trading-Station": "1"})  # AP-17c
     r = klient.post("/journal/roller-befehl/kette-aufnehmen?kette=K003")
     assert r.status_code == 409 and "weiterhin nicht" in r.json()["detail"]

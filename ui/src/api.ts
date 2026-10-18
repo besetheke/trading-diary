@@ -147,10 +147,12 @@ async function schicke(methode: string, pfad: string, koerper?: unknown): Promis
   try {
     antwort = await fetch(pfad, {
       method: methode,
+      // X-Trading-Station: Die Trading-Befehle verlangen diesen Header (AP-17c); ein fremder Aufrufer darf ihn
+      // ohne Vorabfrage nicht senden. Für alle Schreibaufrufe der Station gesetzt.
       headers:
         koerper === undefined
-          ? { Accept: 'application/json' }
-          : { Accept: 'application/json', 'Content-Type': 'application/json' },
+          ? { Accept: 'application/json', 'X-Trading-Station': '1' }
+          : { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Trading-Station': '1' },
       body: koerper === undefined ? undefined : JSON.stringify(koerper),
     })
   } catch (ursache) {
