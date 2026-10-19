@@ -3836,8 +3836,8 @@ oder als eigene Seite mit Filter erscheinen?
 ## OF-103 · DAX Synthetic: Erkennungsmerkmale (19.10.2026)
 
 Annahme im Code (`analytics/dax_synthetic.py`): Schutz-Put = gekaufter DAX-Put mit mindestens 180 Tagen Restlaufzeit bei Eröffnung
-(Notiz: 1,5 Jahre „theoretisch frei wählbar“), Short-Call = verkaufter DAX-Call mit höchstens 14 Tagen. Long-Future = jeder gekaufte
+(Notiz: 1,5 Jahre „theoretisch frei wählbar“), Short-Call = nackter (Struktur Single) verkaufter DAX-Call mit höchstens 14 Tagen (Spread-Beine anderer Strategien zählen nicht). Long-Future = jeder gekaufte
 FDAX. Die Zuordnung ist ein Vorschlag (`heuristik`); die Seite „DAX Synthetic“ zeigt realisiertes Netto je Baustein und je Schutz-Put.
 Offen: Gehören die Short-Calls und Futures einer bestimmten Put-Einheit an, wenn mehrere Puts laufen (heute nur zeitlich zugeordnet)?
-Und: Soll die Notiz (Vola > 10 %, Rolle 2 Tage vor Verfall, 4a–4d) als Strategie im Roller umgesetzt werden? Dafür fehlen die
-Quelle der Volatilität (VDAX? historische?), der Ablauf der Future-Rolle und die Freigabe, Futures am Paper-Konto zu handeln.
+Der Roller-Teil (ohne Vola, Roll nur horizontal) ist zurückgestellt: siehe auftraege/TODO-dax-synthetic-roller.md. Offen dort: Freigabe Paper-Futures,
+Ablauf der Future-Rolle, Auswahl von Schutz-Put und Short-Call, Theta-Regel 4b.

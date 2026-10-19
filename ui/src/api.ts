@@ -1428,6 +1428,20 @@ export interface DaxSyntheticAntwort {
   aktiv_bis: string | null
   sonstige: number
   bausteine: { art: string; anzahl: number; offen: number; kontrakte: string; brutto: string; kommission: string; netto: string }[]
+  trades: {
+    leg_id: number
+    baustein: string
+    eroeffnet: string
+    beendet: string | null
+    art: string
+    recht: string | null
+    strike: string | null
+    verfall: string | null
+    menge: string | null
+    brutto: string | null
+    kommission: string | null
+    netto: string | null
+  }[]
   einheiten: {
     put_leg_id: number
     strike: string

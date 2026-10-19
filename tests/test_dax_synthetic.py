@@ -95,3 +95,10 @@ def test_api_liefert_die_auswertung(migrated_db):
     d = TestClient(erzeuge_app(migrated_db, mit_journal=True)).get("/dax-synthetic-auswertung").json()
     assert d["erkennung"] == "heuristik" and [b["art"] for b in d["bausteine"]] == ["future", "schutz_put", "short_call"]
     assert d["regeln"] == {"schutz_put_min_dte": 180, "short_call_max_dte": 14}
+
+
+def test_trades_einzeln_nach_eroeffnung_sortiert_mit_baustein():
+    erg = dax_synthetic_auswertung(LEGS, STICHTAG)
+    # zugeordnet sind F1, F2, P1, C1, C2, C3 (X1, X2 und der Spread-Short nicht)
+    assert [(x["leg_id"], x["baustein"]) for x in erg.trades] == [
+        (1, "future"), (3, "schutz_put"), (4, "short_call"), (5, "short_call"), (2, "future"), (6, "short_call")]

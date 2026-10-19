@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fehlerText, holeDaxSynthetic } from './api'
 import type { DaxSyntheticAntwort } from './api'
 import { betrag, datumDe, geldDe, vorzeichen } from './format'
@@ -15,9 +15,14 @@ const NAMEN: Record<string, string> = {
 export default function DaxSynthetic(): JSX.Element {
   const [daten, setzeDaten] = useState<DaxSyntheticAntwort | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
+  const [filter, setzeFilter] = useState('alle')
   useEffect(() => {
     holeDaxSynthetic().then(setzeDaten).catch((e) => setzeFehler(fehlerText(e)))
   }, [])
+  const trades = useMemo(
+    () => (daten?.trades ?? []).filter((x) => filter === 'alle' || x.baustein === filter),
+    [daten, filter],
+  )
   if (fehler) return <p className="fehler">{fehler}</p>
   if (!daten) return <p className="laedt">Lade DAX Synthetic …</p>
   const summe = daten.bausteine.reduce((s, b) => s + Number(b.netto), 0)
@@ -66,6 +71,37 @@ export default function DaxSynthetic(): JSX.Element {
               </tr>
             )
           })}
+        </tbody>
+      </table>
+      <h3>Alle Trades einzeln</h3>
+      <p className="sicht">
+        Zeigen:{' '}
+        <select value={filter} onChange={(e) => setzeFilter(e.target.value)}>
+          <option value="alle">alle Bausteine</option>
+          {Object.entries(NAMEN).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+        </select>{' '}
+        · {trades.length} Trades, jüngste zuerst
+      </p>
+      <table className="positionen dichte-kompakt">
+        <thead>
+          <tr><th>Baustein</th><th>Eröffnet</th><th>Geschlossen</th><th>Kontrakt</th><th>Menge</th><th>Brutto</th><th>Kommission</th><th>Netto</th></tr>
+        </thead>
+        <tbody>
+          {[...trades].reverse().map((x) => (
+            <tr key={x.leg_id}>
+              <td>{NAMEN[x.baustein] ?? x.baustein}</td>
+              <td>{datumDe(x.eroeffnet)}</td>
+              <td>{x.beendet ? datumDe(x.beendet) : 'offen'}</td>
+              <td>
+                {x.art === 'FUT' ? `Future ${x.verfall ? datumDe(x.verfall) : ''}`
+                  : `${x.recht === 'P' ? 'Put' : 'Call'} ${x.strike ? betrag(x.strike).replace(',00', '') : ''} · ${x.verfall ? datumDe(x.verfall) : ''}`}
+              </td>
+              <td>{x.menge}</td>
+              <td className={vorzeichen(x.brutto)}>{x.brutto === null ? '—' : betrag(x.brutto)}</td>
+              <td className={vorzeichen(x.kommission)}>{x.kommission === null ? '—' : betrag(x.kommission)}</td>
+              <td className={vorzeichen(x.netto)}>{x.netto === null ? '—' : betrag(x.netto)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </section>

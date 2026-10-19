@@ -55,6 +55,7 @@ class SyntheticErgebnis:
     aktiv_von: datetime | None        # erster Zeitpunkt mit Long-Future UND Schutz-Put gleichzeitig
     aktiv_bis: datetime | None        # None = bis heute
     sonstige: int
+    trades: tuple[dict, ...] = ()     # jedes zugeordnete Leg einzeln, nach Eröffnung sortiert (Feld ``baustein``)
 
 
 def klassifiziere(leg: dict) -> str | None:
@@ -120,7 +121,11 @@ def dax_synthetic_auswertung(legs: list[dict], stichtag: datetime) -> SyntheticE
     aktiv_von = min((a for a, _ in aktiv), default=None)
     offen = any(f["beendet"] is None for f in je_art["future"]) and any(p["beendet"] is None for p in je_art["schutz_put"])
     aktiv_bis = None if offen else max((b for _, b in aktiv), default=None)
-    return SyntheticErgebnis(bausteine, tuple(einheiten), aktiv_von, aktiv_bis, sonstige)
+    trades = tuple(
+        {**x, "baustein": a} for a in BAUSTEINE for x in je_art[a]
+    )
+    trades = tuple(sorted(trades, key=lambda x: (x["eroeffnet"], x["leg_id"])))
+    return SyntheticErgebnis(bausteine, tuple(einheiten), aktiv_von, aktiv_bis, sonstige, trades)
 
 
 def dax_synthetic_bericht(db_pfad, stichtag: datetime) -> SyntheticErgebnis:
