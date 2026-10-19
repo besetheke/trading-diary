@@ -23,8 +23,8 @@ from decimal import Decimal as D
 from analytics.dax_synthetic import dax_synthetic_auswertung, klassifiziere
 
 
-def leg(i, ac, right, side, auf, bis, expiry=None, strike=None, brutto=None, komm=None):
-    return dict(leg_id=i, asset_class=ac, right=right, side=side, eroeffnet=auf, beendet=bis, expiry=expiry,
+def leg(i, ac, right, side, auf, bis, expiry=None, strike=None, brutto=None, komm=None, typ="Single", menge="1"):
+    return dict(struktur_typ=typ, menge=D(menge), leg_id=i, asset_class=ac, right=right, side=side, eroeffnet=auf, beendet=bis, expiry=expiry,
                 strike=D(strike) if strike else None, brutto=D(brutto) if brutto is not None else None,
                 kommission=D(komm) if komm is not None else None)
 
@@ -39,6 +39,8 @@ LEGS = [
     leg(6, "OPT", "C", "SELL", T(2026, 1, 5, 10), T(2026, 1, 9, 10), date(2026, 1, 9), "25000", "60", "-2"),
     leg(7, "OPT", "P", "SELL", T(2025, 10, 6, 10), T(2025, 10, 7, 10), date(2026, 1, 16), "24000", "10", "-1"),
     leg(8, "OPT", "C", "BUY", T(2025, 10, 6, 10), T(2025, 10, 7, 10), date(2025, 10, 10), "25000", "5", "-1"),
+    # Short-Call als Teil eines Bear-Call-Spreads mit 10 Kontrakten: andere Strategie, kein Baustein
+    leg(10, "OPT", "C", "SELL", T(2025, 10, 6, 10), T(2025, 10, 10, 10), date(2025, 10, 10), "24500", "900", "-20", typ="BCS", menge="10"),
 ]
 STICHTAG = T(2026, 10, 19, 12)
 
@@ -49,7 +51,8 @@ def test_bausteine_und_summen():
     assert (b["future"].anzahl, b["future"].offen, b["future"].brutto, b["future"].kommission) == (2, 1, D("1000"), D("-5"))
     assert (b["schutz_put"].anzahl, b["schutz_put"].netto) == (1, D("-303"))
     assert (b["short_call"].anzahl, b["short_call"].brutto, b["short_call"].kommission) == (3, D("140"), D("-6"))
-    assert erg.sonstige == 2
+    assert erg.sonstige == 3          # X1, X2 und der Spread-Short
+    assert (b["short_call"].kontrakte, b["future"].kontrakte) == (D("3"), D("2"))
 
 
 def test_einheit_des_schutzputs():

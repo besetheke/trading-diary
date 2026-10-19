@@ -16,7 +16,7 @@ def dax_synthetic_aufbauen(db_pfad: str | pathlib.Path) -> dict:
         "erkennung": "heuristik",
         "regeln": {"schutz_put_min_dte": SCHUTZ_PUT_MIN_DTE, "short_call_max_dte": SHORT_CALL_MAX_DTE},
         "aktiv_von": _t(erg.aktiv_von), "aktiv_bis": _t(erg.aktiv_bis), "sonstige": erg.sonstige,
-        "bausteine": [{"art": b.art, "anzahl": b.anzahl, "offen": b.offen, "brutto": _t(b.brutto),
+        "bausteine": [{"art": b.art, "anzahl": b.anzahl, "offen": b.offen, "kontrakte": _t(b.kontrakte), "brutto": _t(b.brutto),
                        "kommission": _t(b.kommission), "netto": _t(b.netto)} for b in erg.bausteine],
         "einheiten": [{"put_leg_id": e.put_leg_id, "strike": _t(e.strike), "verfall": str(e.verfall),
                        "eroeffnet": _t(e.eroeffnet), "beendet": _t(e.beendet),

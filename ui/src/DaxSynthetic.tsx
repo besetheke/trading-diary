@@ -26,23 +26,23 @@ export default function DaxSynthetic(): JSX.Element {
       <h2>DAX Synthetic</h2>
       <p className="sicht">
         Vorschlag nach festen Merkmalen: Schutz-Put = gekaufter Put mit mindestens {daten.regeln.schutz_put_min_dte} Tagen
-        Restlaufzeit, Short-Call = verkaufter Call mit höchstens {daten.regeln.short_call_max_dte} Tagen. Andere DAX-Legs
+        Restlaufzeit, Short-Call = nackter (einzelner) verkaufter Call mit höchstens {daten.regeln.short_call_max_dte} Tagen. Andere DAX-Legs
         ({daten.sonstige}) zählen nicht mit. Aktiv (Future und Schutz-Put zugleich): {datumDe(daten.aktiv_von)} bis{' '}
         {daten.aktiv_bis ? datumDe(daten.aktiv_bis) : 'heute'}.
       </p>
       <h3>Bausteine</h3>
       <table className="positionen dichte-kompakt">
-        <thead><tr><th>Baustein</th><th>Legs</th><th>offen</th><th>Brutto</th><th>Kommission</th><th>Netto</th></tr></thead>
+        <thead><tr><th>Baustein</th><th>Legs</th><th>Kontrakte</th><th>offen</th><th>Brutto</th><th>Kommission</th><th>Netto</th></tr></thead>
         <tbody>
           {daten.bausteine.map((b) => (
             <tr key={b.art}>
-              <td>{NAMEN[b.art] ?? b.art}</td><td>{b.anzahl}</td><td>{b.offen || ''}</td>
+              <td>{NAMEN[b.art] ?? b.art}</td><td>{b.anzahl}</td><td>{b.kontrakte}</td><td>{b.offen || ''}</td>
               <td className={vorzeichen(b.brutto)}>{betrag(b.brutto)}</td>
               <td className={vorzeichen(b.kommission)}>{betrag(b.kommission)}</td>
               <td className={vorzeichen(b.netto)}>{betrag(b.netto)}</td>
             </tr>
           ))}
-          <tr><td><strong>Summe (realisiert)</strong></td><td colSpan={4}></td><td><strong>{geldDe(String(summe))}</strong></td></tr>
+          <tr><td><strong>Summe (realisiert)</strong></td><td colSpan={5}></td><td><strong>{geldDe(String(summe))}</strong></td></tr>
         </tbody>
       </table>
       <h3>Je Schutz-Put</h3>

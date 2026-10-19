@@ -9,8 +9,9 @@ Future + Long-Put ist synthetisch ein Long-Call, der Short-Call darauf ergibt ei
 
 **Erkennung ist ein Vorschlag, keine Tatsache** (Regel 7): sie arbeitet auf Legs der Kontosicht und ordnet nach festen
 Merkmalen zu (Annahmen, OF-103): Schutz-Put = gekaufter Put mit mindestens ``SCHUTZ_PUT_MIN_DTE`` Tagen Restlaufzeit bei
-Eröffnung; Short-Call = verkaufter Call mit höchstens ``SHORT_CALL_MAX_DTE`` Tagen Restlaufzeit. Alles andere auf dem DAX
-bleibt ``sonstige`` und fließt nicht ein. Rein: keine Datenbank, keine Uhr (der Stichtag kommt als Parameter).
+Eröffnung; Short-Call = **nackter** (Struktur ``Single``) verkaufter Call mit höchstens ``SHORT_CALL_MAX_DTE`` Tagen
+Restlaufzeit — Short-Beine von Spreads und Condors anderer Strategien (BCS, Custom, Vertical) gehören nicht dazu.
+Alles andere auf dem DAX bleibt ``sonstige`` und fließt nicht ein. Rein: keine Datenbank, keine Uhr (der Stichtag kommt als Parameter).
 """
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -27,6 +28,7 @@ class Baustein:
     art: str
     anzahl: int = 0
     offen: int = 0
+    kontrakte: Decimal = Decimal(0)     # Summe der Mengen aller Legs
     brutto: Decimal = Decimal(0)
     kommission: Decimal = Decimal(0)
 
@@ -64,7 +66,8 @@ def klassifiziere(leg: dict) -> str | None:
         return None
     if leg["right"] == "P" and leg["side"] == "BUY" and dte >= SCHUTZ_PUT_MIN_DTE:
         return "schutz_put"
-    if leg["right"] == "C" and leg["side"] == "SELL" and dte <= SHORT_CALL_MAX_DTE:
+    if (leg["right"] == "C" and leg["side"] == "SELL" and dte <= SHORT_CALL_MAX_DTE
+            and leg.get("struktur_typ") == "Single"):
         return "short_call"
     return None
 
@@ -88,6 +91,7 @@ def dax_synthetic_auswertung(legs: list[dict], stichtag: datetime) -> SyntheticE
     bausteine = tuple(
         Baustein(
             art=a, anzahl=len(ls), offen=sum(1 for x in ls if x["beendet"] is None),
+            kontrakte=sum((x.get("menge") or Decimal(0) for x in ls), Decimal(0)),
             brutto=sum((x["brutto"] or Decimal(0) for x in ls), Decimal(0)),
             kommission=sum((x["kommission"] or Decimal(0) for x in ls), Decimal(0)),
         )
@@ -125,14 +129,15 @@ def dax_synthetic_bericht(db_pfad, stichtag: datetime) -> SyntheticErgebnis:
     from sqlalchemy.orm import aliased
 
     from journal.db import create_db_engine
-    from journal.schema import executions, instruments, legs
+    from journal.schema import executions, instruments, legs, structures
 
     eo, ec = aliased(executions), aliased(executions)
     engine = create_db_engine(db_pfad)
     with engine.connect() as v:
         zeilen = v.execute(
             select(
-                legs.c.leg_id, instruments.c.asset_class, instruments.c.right, instruments.c.expiry,
+                legs.c.leg_id, legs.c.menge, structures.c.typ.label("struktur_typ"),
+                instruments.c.asset_class, instruments.c.right, instruments.c.expiry,
                 instruments.c.strike, eo.c.side, eo.c.handelszeit.label("eroeffnet"),
                 ec.c.handelszeit.label("beendet"), legs.c.brutto_pnl.label("brutto"),
                 legs.c.kommission_gesamt.label("kommission"),
@@ -140,6 +145,7 @@ def dax_synthetic_bericht(db_pfad, stichtag: datetime) -> SyntheticErgebnis:
             .join(eo, eo.c.exec_id == legs.c.open_exec_id)
             .join(instruments, instruments.c.conid == legs.c.conid)
             .outerjoin(ec, ec.c.exec_id == legs.c.close_exec_id)
+            .outerjoin(structures, structures.c.structure_id == legs.c.structure_id)
             .where(legs.c.sicht == "konto", instruments.c.underlying == "DAX")
         ).mappings().all()
     return dax_synthetic_auswertung([dict(z) for z in zeilen], stichtag)

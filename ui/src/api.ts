@@ -1427,7 +1427,7 @@ export interface DaxSyntheticAntwort {
   aktiv_von: string | null
   aktiv_bis: string | null
   sonstige: number
-  bausteine: { art: string; anzahl: number; offen: number; brutto: string; kommission: string; netto: string }[]
+  bausteine: { art: string; anzahl: number; offen: number; kontrakte: string; brutto: string; kommission: string; netto: string }[]
   einheiten: {
     put_leg_id: number
     strike: string
