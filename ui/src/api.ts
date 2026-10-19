@@ -1373,3 +1373,48 @@ export interface SteuerAntwort {
 export function holeSteuer(): Promise<SteuerAntwort> {
   return hole('/steuer-auswertung') as Promise<SteuerAntwort>
 }
+
+// AP-17g (M01): Roll-Kosten und Kommissionsattribution aus den vorhandenen Rechenkernen.
+export interface RollKostenKommission {
+  dimension: string
+  schluessel: string
+  anzahl_ketten: number
+  anzahl_ketten_abgeschlossen: number
+  anzahl_ketten_kurs_fehlt: number
+  brutto_eur: string | null
+  kommission_eur: string | null
+  netto_eur: string | null
+  kommissionsanteil: string | null
+}
+
+export interface RollKostenDegradation {
+  modus: string
+  roll_gruppe: string
+  anzahl_ketten: number
+  summe_netto_eur: string | null
+  durchschnitt_netto_eur: string | null
+  trefferquote: string | null
+  anzahl_ketten_kurs_fehlt: number
+}
+
+export interface RollKostenAbdeckung {
+  modus: string
+  ketten_abgeschlossen: number
+  ketten_ausgewertet: number
+  abdeckung_ketten: string | null
+  rollverknuepfungen: number
+  offene_kandidaten: number | null
+  abdeckung_rollverknuepfungen: string | null
+}
+
+export interface RollKostenAntwort {
+  sicht: string
+  anzahl_ketten_gesamt: number
+  kommission: RollKostenKommission[]
+  degradation: RollKostenDegradation[] | null
+  degradation_abdeckung: RollKostenAbdeckung[]
+}
+
+export function holeRollKosten(sicht: string, nurA: boolean): Promise<RollKostenAntwort> {
+  return hole(`/roll-kosten-auswertung?sicht=${sicht}&nur_a=${nurA}`) as Promise<RollKostenAntwort>
+}

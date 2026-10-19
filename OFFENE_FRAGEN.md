@@ -3825,3 +3825,10 @@ Reihenfolge (Zeit, Basiswert, Verfall, Recht, Strike, …) sortiert; ein Bein ge
 seiner Richtung. Das macht das Ergebnis reproduzierbar, beweist aber nicht die richtige Paarung (z. B. Long 90/Short 100 und
 Long 95/Short 105 gegen Long 90/Short 105 und Long 95/Short 100). Frage: Soll bei mehr als einer möglichen Paarung eine
 Rückfrage in der Oberfläche (M04) erscheinen, oder genügt der Vorschlagsstatus `heuristik`?
+
+## OF-102 · Drilldown der Roll-Kosten auf Ketten (AP-17g, M01, 18.10.2026)
+
+Die Seite „Roll-Kosten“ zeigt Summen je Gruppe, aber noch keine Liste der gezählten Ketten. Annahme: Die Rechenkerne
+(`kommission.py`, `degradation.py`) bekommen je Gruppe die Ketten-IDs zurück (Erweiterung der Ergebnisklassen, bestehende
+Tests bleiben unverändert), die Oberfläche verlinkt auf die Kettendetails. Frage: Soll die Liste je Gruppe aufklappbar sein
+oder als eigene Seite mit Filter erscheinen?

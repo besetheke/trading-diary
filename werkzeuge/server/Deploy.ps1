@@ -137,7 +137,9 @@ Tu "venv + requirements" {
                 & ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check "C:\TWS\source\pythonclient"
             } else { throw "ibapi fehlt: TWS API 'Latest' nach C:\TWS installieren" }
         }
-        & ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+        # Festgeschriebener Stand (AP-17g, M08), sonst die offenen Mindestversionen
+        $anforderungen = if (Test-Path "requirements-lock.txt") { "requirements-lock.txt" } else { "requirements.txt" }
+        & ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r $anforderungen
     } finally { Pop-Location }
 }
 if (-not (Test-Path "$roller\config.json")) {

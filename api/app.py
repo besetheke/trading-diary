@@ -3521,6 +3521,16 @@ def erzeuge_app(
         _datumspaar_pruefen(von, bis, "von", "bis")
         return _titel_aufbauen(db_pfad, von, bis)
 
+    @applikation.get("/roll-kosten-auswertung")
+    def roll_kosten_auswertung(
+        sicht: Literal["kette", "konto"] = "kette", nur_a: bool = False
+    ) -> dict:
+        """Kommissionsattribution (Index, Anlageklasse, Strategie, Roll-Anzahl) und Roll-Degradation
+        (0/1/2/3+ Rolls mit Netto, Trefferquote, Abdeckung) aus den vorhandenen Rechenkernen (M01).
+        Nur lesend. Die Degradation gibt es nur in der Kettensicht."""
+        from api.roll_kosten import roll_kosten_aufbauen
+        return roll_kosten_aufbauen(db_pfad, sicht, nur_a)
+
     @applikation.get("/depot/einkauf", response_model=AktienEinkaufListeAntwort)
     def depot_einkauf() -> AktienEinkaufListeAntwort:
         """Einkaufskurs der gehaltenen Aktien laut Journal (Kauf- oder Zuteilungspreis)
