@@ -593,6 +593,7 @@ export interface RollerStrategie {
   grund: string
   daten?: { art: string; seit: string | null }
   profil?: string
+  verlauf_live?: { zeit: string; art: string; text: string }[]
   statistik?: Record<string, RollerStatistikZeile>
   abgeschlossen?: RollerAbgeschlossen[]
   tagesprogramm?: { strategien: string[]; ab_min: number; heute_eroeffnet: string[]; aktiv: boolean }

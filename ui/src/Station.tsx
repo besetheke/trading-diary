@@ -250,6 +250,31 @@ function KettenVerlauf({ k }: { k: RollerKetteStand }): JSX.Element | null {
   );
 }
 
+// Lesbarer Verlauf der laufenden und letzten Orders (aus dem Betriebsprotokoll des Rollers, jüngste zuletzt).
+function OrderVerlauf({ eintraege, laeuft }: { eintraege: { zeit: string; art: string; text: string }[]; laeuft: boolean }): JSX.Element | null {
+  if (eintraege.length === 0) return null;
+  const letzte = eintraege.slice(-14);
+  const ende = letzte[letzte.length - 1];
+  const fertig = /^(GEFUELLT|Abbruch|Grenze|Order \d+ beendet|Roll \S+ (gefuellt|NICHT))/.test(ende.text);
+  return (
+    <details open={laeuft || !fertig} className="verlauf-live">
+      <summary>
+        Verlauf: <strong>{laeuft && !fertig ? "läuft" : fertig ? "beendet" : "zuletzt"}</strong> — {ende.zeit} {ende.text}
+      </summary>
+      <table className="positionen dichte-kompakt">
+        <tbody>
+          {letzte.map((e, i) => (
+            <tr key={`${e.zeit}-${i}`} className={e.art === "order_ende" || e.art === "roll_ergebnis" ? "hervor" : ""}>
+              <td>{e.zeit}</td>
+              <td>{e.text}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
 function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
@@ -264,7 +289,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
       .then((a) => {
         const r = a as { gestartet?: boolean };
         setzeMeldung(name === "strategie-pruefen" ? "Neu geprüft."
-          : r && r.gestartet ? "Gestartet — läuft im Hintergrund (das Limit wird nachgezogen, das kann Minuten dauern). Das Ergebnis steht unten bei „Aktion“ und in den Meldungen."
+          : r && r.gestartet ? "Auftrag angenommen — was gerade passiert, zeigt der Verlauf darunter (Limit nachziehen kann Minuten dauern)."
           : `Ergebnis: ${JSON.stringify(a)}`);
       })
       .catch((e) => setzeMeldung(fehlerText(e)))
@@ -287,6 +312,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
           {!s.aktion.laeuft && s.aktion.ergebnis ? `: ${JSON.stringify(s.aktion.ergebnis)}` : ""}
         </p>
       )}
+      <OrderVerlauf eintraege={s.verlauf_live ?? []} laeuft={Boolean(s.aktion?.laeuft)} />
       {s.auto && (
         <p className={s.auto.an ? "warnung" : "sicht"}>
           <strong>Automatik: {s.auto.an ? "AN" : "AUS"}</strong> — {s.auto.an
