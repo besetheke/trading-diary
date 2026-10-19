@@ -1419,3 +1419,25 @@ export interface RollKostenAntwort {
 export function holeRollKosten(sicht: string, nurA: boolean): Promise<RollKostenAntwort> {
   return hole(`/roll-kosten-auswertung?sicht=${sicht}&nur_a=${nurA}`) as Promise<RollKostenAntwort>
 }
+
+// DAX Synthetic: Long-Future + Schutz-Put + Short-Call, als Vorschlag erkannt.
+export interface DaxSyntheticAntwort {
+  erkennung: string
+  regeln: { schutz_put_min_dte: number; short_call_max_dte: number }
+  aktiv_von: string | null
+  aktiv_bis: string | null
+  sonstige: number
+  bausteine: { art: string; anzahl: number; offen: number; brutto: string; kommission: string; netto: string }[]
+  einheiten: {
+    put_leg_id: number
+    strike: string
+    verfall: string
+    eroeffnet: string
+    beendet: string | null
+    ergebnis: Record<string, string | null>
+  }[]
+}
+
+export function holeDaxSynthetic(): Promise<DaxSyntheticAntwort> {
+  return hole('/dax-synthetic-auswertung') as Promise<DaxSyntheticAntwort>
+}

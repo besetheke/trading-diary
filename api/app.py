@@ -3521,6 +3521,13 @@ def erzeuge_app(
         _datumspaar_pruefen(von, bis, "von", "bis")
         return _titel_aufbauen(db_pfad, von, bis)
 
+    @applikation.get("/dax-synthetic-auswertung")
+    def dax_synthetic_auswertung() -> dict:
+        """DAX Synthetic (Long-Future, Schutz-Put, Short-Call auf eine Woche) als Vorschlag aus den
+        Legs der Kontosicht erkannt: Ergebnis je Baustein und je Schutz-Put (EUR). Nur lesend."""
+        from api.dax_synthetic import dax_synthetic_aufbauen
+        return dax_synthetic_aufbauen(db_pfad)
+
     @applikation.get("/roll-kosten-auswertung")
     def roll_kosten_auswertung(
         sicht: Literal["kette", "konto"] = "kette", nur_a: bool = False

@@ -5,6 +5,7 @@ import Dashboard from './Dashboard'
 import Depot from './Depot'
 import Titel from './Titel'
 import RollKosten from './RollKosten'
+import DaxSynthetic from './DaxSynthetic'
 import Zeitraumwahl from './Zeitraumwahl'
 import { useZeitraum, zeitraumSuche } from './zeitraum'
 import Kalender from './Kalender'
@@ -83,6 +84,7 @@ function Kopf(): JSX.Element {
           <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
           <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
           <Link to="/roll-kosten">Roll-Kosten</Link>
+          <Link to="/dax-synthetic">DAX Synthetic</Link>
           <Link to="/steuer">Steuer</Link>
           <Link to={`/monat${mit}`}>Kalender</Link>
           <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
@@ -139,6 +141,7 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             <Route path="/titel" element={<Titel />} />
             {/* AP-17g (M01): Roll-Kosten und Kommission; API-Weg ist /roll-kosten-auswertung. */}
             <Route path="/roll-kosten" element={<RollKosten />} />
+            <Route path="/dax-synthetic" element={<DaxSynthetic />} />
             {/* AP-08j2: /kalender ist der API-Endpunkt (AP-07t). Die Seite
                 heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
                 erreichen und nicht den JSON-Fehler 422 des Endpunkts. */}
