@@ -1,6 +1,6 @@
 # ToDo · DAX Synthetic im Options Roller (zurückgestellt, 19.10.2026)
 
-**Status:** zurückgestellt. Erst muss das Journal die Strategie sauber erkennen und auswerten (Tab „DAX Synthetic“,
+**Status:** komplett zurückgestellt (20.10.2026) – auch im Journal: der Tab ist aus dem Menü genommen, die Seite bleibt unter `/dax-synthetic` erreichbar, Code und Tests bleiben. Erst muss das Journal die Strategie sauber erkennen und auswerten (Tab „DAX Synthetic“,
 `analytics/dax_synthetic.py`). Der Roller-Teil wird erst nach Abnahme der Journal-Seite begonnen.
 
 ## Strategie (Nutzernotiz, mit Korrekturen vom 19.10.2026)

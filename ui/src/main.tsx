@@ -84,7 +84,7 @@ function Kopf(): JSX.Element {
           <Link to={`/kampagnenliste${mit}`}>Kampagnen</Link>
           <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
           <Link to="/roll-kosten">Roll-Kosten</Link>
-          <Link to="/dax-synthetic">DAX Synthetic</Link>
+          {/* DAX Synthetic ist zurückgestellt (20.10.2026): Seite bleibt unter /dax-synthetic erreichbar, nicht im Menü. */}
           <Link to="/steuer">Steuer</Link>
           <Link to={`/monat${mit}`}>Kalender</Link>
           <Link to={`/tag/${heuteDatum()}${mit}`}>Heute</Link>
