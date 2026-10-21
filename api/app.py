@@ -3373,6 +3373,16 @@ def erzeuge_app(
                 pass
         return RollerAntwort(erreichbar=status is not None, status=status)
 
+    @applikation.get("/echtgeld-reife")
+    def echtgeld_reife() -> dict:
+        """Messbare Kriterien fuer den Schritt auf Echtgeld aus dem Roller-Status plus manuelle
+        Abnahmen. Entscheidungshilfe, keine Freigabe. Nur lesend."""
+        from datetime import date as _heute
+
+        from api.echtgeld_reife import bewerte
+        status = hole_roller_status(roller_port) if roller_port is not None else None
+        return bewerte(status, _heute.today())
+
     @applikation.get("/backtests", response_model=BacktestsAntwort)
     def backtests(von: date | None = None, bis: date | None = None) -> BacktestsAntwort:
         """Option-Omega-Backtests (AP-12a): Zuordnung OO-Strategie →

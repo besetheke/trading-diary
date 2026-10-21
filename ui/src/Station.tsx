@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
-import { fehlerText, holeBreakout, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
-import type { BreakoutStand, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
+import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
+import type { BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -271,6 +271,62 @@ function OrderVerlauf({ eintraege, laeuft }: { eintraege: { zeit: string; art: s
           ))}
         </tbody>
       </table>
+    </details>
+  );
+}
+
+// Echtgeld-Reife: gemessene Kriterien (aus dem Roller-Status) und manuelle Abnahmen, die der Nutzer selbst abhakt
+// (nur in diesem Browser gemerkt). Entscheidungshilfe, keine Freigabe.
+function EchtgeldReife(): JSX.Element | null {
+  const [d, setzeD] = useState<EchtgeldReifeDaten | null>(null);
+  const [haken, setzeHaken] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("echtgeld-haken") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    holeEchtgeldReife().then(setzeD).catch(() => setzeD(null));
+  }, []);
+  if (!d || !d.erreichbar) return null;
+  const umschalten = (id: string) => {
+    const neu = { ...haken, [id]: !haken[id] };
+    setzeHaken(neu);
+    try {
+      window.localStorage.setItem("echtgeld-haken", JSON.stringify(neu));
+    } catch {
+      /* nur eine Bequemlichkeit */
+    }
+  };
+  const manuellOffen = d.manuell.filter((m) => !haken[m.id]).length;
+  return (
+    <details className="echtgeld">
+      <summary>
+        Echtgeld-Reife: {d.automatisch_erfuellt ? "gemessene Kriterien erfüllt" : "gemessene Kriterien noch nicht erfüllt"}
+        {manuellOffen > 0 ? `, ${manuellOffen} manuelle Abnahme(n) offen` : ", alle manuellen Abnahmen abgehakt"}
+      </summary>
+      <p className="sicht">Entscheidungshilfe, keine Freigabe. Gemessen wird aus dem Roller-Status; Schwellen sind Annahmen (OF-104).</p>
+      <table className="positionen dichte-kompakt">
+        <thead><tr><th></th><th>Kriterium</th><th>Ist</th><th>Soll</th></tr></thead>
+        <tbody>
+          {d.kriterien.map((k) => (
+            <tr key={k.id}>
+              <td>{k.ok ? "✔" : "✘"}</td><td>{k.text}</td><td>{String(k.ist ?? "—")}</td><td>{k.soll}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="sicht">Manuelle Abnahmen:</p>
+      <ul className="liste-ohne-punkt">
+        {d.manuell.map((m) => (
+          <li key={m.id}>
+            <label>
+              <input type="checkbox" checked={Boolean(haken[m.id])} onChange={() => umschalten(m.id)} /> {m.text}
+            </label>
+          </li>
+        ))}
+      </ul>
     </details>
   );
 }
@@ -551,6 +607,7 @@ export function RollerSeite(): JSX.Element {
       </p>
 
       {s.strategie && <StrategieKarte s={s.strategie} />}
+      {s.strategie && <EchtgeldReife />}
 
       <h3>Breaches ({s.breaches.length})</h3>
       {s.breaches.length === 0 ? (

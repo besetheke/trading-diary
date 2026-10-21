@@ -1455,3 +1455,15 @@ export interface DaxSyntheticAntwort {
 export function holeDaxSynthetic(): Promise<DaxSyntheticAntwort> {
   return hole('/dax-synthetic-auswertung') as Promise<DaxSyntheticAntwort>
 }
+
+// Echtgeld-Reife des Rollers: gemessene Kriterien und manuelle Abnahmen (Entscheidungshilfe, keine Freigabe).
+export interface EchtgeldReife {
+  erreichbar: boolean
+  automatisch_erfuellt: boolean
+  kriterien: { id: string; text: string; ist: string | number | null; soll: string; ok: boolean | null }[]
+  manuell: { id: string; text: string }[]
+}
+
+export function holeEchtgeldReife(): Promise<EchtgeldReife> {
+  return hole('/echtgeld-reife') as Promise<EchtgeldReife>
+}

@@ -34,6 +34,7 @@ export default defineConfig({
       // Titel und Steuer (AP-16, AP-10c): API-Wege; die Seiten heißen /titel und /steuer.
       '/titel-auswertung': 'http://localhost:8000',
       '/roll-kosten-auswertung': 'http://localhost:8000',
+      '/echtgeld-reife': 'http://localhost:8000',
       '/dax-synthetic-auswertung': 'http://localhost:8000',
       '/steuer-auswertung': 'http://localhost:8000',
       '/steuer-csv': 'http://localhost:8000',

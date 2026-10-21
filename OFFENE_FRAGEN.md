@@ -3841,3 +3841,10 @@ FDAX. Die Zuordnung ist ein Vorschlag (`heuristik`); die Seite „DAX Synthetic�
 Offen: Gehören die Short-Calls und Futures einer bestimmten Put-Einheit an, wenn mehrere Puts laufen (heute nur zeitlich zugeordnet)?
 Der Roller-Teil (ohne Vola, Roll nur horizontal) ist zurückgestellt: siehe auftraege/TODO-dax-synthetic-roller.md. Offen dort: Freigabe Paper-Futures,
 Ablauf der Future-Rolle, Auswahl von Schutz-Put und Short-Call, Theta-Regel 4b.
+
+## OF-104 · Schwellen der Echtgeld-Reife (22.10.2026)
+
+Annahmen in `api/echtgeld_reife.py`: Datenquelle live seit mindestens 5 Tagen, mindestens 10 Rolls, mindestens 30 geschlossene Ketten,
+keine angehaltene Kette, keine Meldung „Bestand ohne Kette“. Die Zahlen sind geschätzt, nicht aus dem Bestand abgeleitet. Frage:
+Welche Schwellen hältst du für angemessen (mehr Tage? mehr Rolls je Strategie statt insgesamt?)? Die Karte ist eine
+Entscheidungshilfe und gibt nichts frei.
