@@ -3849,14 +3849,14 @@ keine angehaltene Kette, keine Meldung „Bestand ohne Kette“. Die Zahlen sind
 Welche Schwellen hältst du für angemessen (mehr Tage? mehr Rolls je Strategie statt insgesamt?)? Die Karte ist eine
 Entscheidungshilfe und gibt nichts frei.
 
-## OF-105 · DAX-Tagesprogramm: Uhrzeit und Zeitzone (22.10.2026)
+## OF-105 · DAX-Tagesprogramm: Uhrzeit, Profil (23.10.2026, ersetzt die Fassung vom 22.10.)
 
-Der Nutzer wünscht jeden Handelstag um „10:00 ET“ je einen DAX-BPS und einen DAX-BCS (Verfall nächster Freitag, höchstens 7 DTE).
-Annahme im Code (`roller/strategie.py`, `TAEGLICH_ZEITEN`): 10:00 **Berliner Ortszeit** (Eurex 9:00–17:30). „ET“ könnte auch Eastern Time
-(New York) heißen, das wären 16:00 Berlin, 90 Minuten vor Handelsende; dann Zeit und Zone dort ändern. Verwendet werden die
-bestehenden Strategien „DAX: BPS/BCS D10 W300 Freitag“ (ODAX, Delta 0,10, Breite 300). Das Tagesprogramm läuft nur bei eingeschalteter
-Automatik; eine Server-`config.json` mit eigener `taeglich`-Liste muss die beiden DAX-Namen enthalten. Im Live-Modus zusätzlich
-`live.tagesprogramm_erlaubt` und `live.strategien`.
+Der Nutzer wünscht täglich um **4:00 ET** (New Yorker Zeit) je einen DAX-BPS und einen DAX-BCS, auch auf Paper, unter den **normalen**
+Bedingungen. Umgesetzt (`roller/strategie.py`): `TAEGLICH_ZEITEN` = 04:00 America/New_York, das sind 10:00 Berlin, in den Wochen mit
+verschobener Zeitumstellung (USA nach EU, in diesem Jahr 25.10.–1.11.) 9:00 Berlin; `PROFIL_JE_STRATEGIE_STANDARD` setzt die beiden
+Strategien „DAX: BPS/BCS D10 W300 Freitag“ auf `normal`, der Rest bleibt im Betriebsprofil (Server: `test`). Der Verfall ist der nächste
+Freitag, höchstens 7 DTE. Das Tagesprogramm läuft nur bei eingeschalteter Automatik; die DAX-Namen werden auch einer eigenen `taeglich`-Liste
+der Server-`config.json` zugefügt (abschaltbar: `"taeglich_dax": false`), `dienst.profil_je_strategie` überschreibt die Profilzuordnung.
 
 ## OF-106 · Live-Modus: Grenzwerte (22.10.2026)
 

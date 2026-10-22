@@ -608,6 +608,7 @@ export interface RollerStrategie {
   grund: string
   daten?: { art: string; seit: string | null }
   profil?: string
+  profil_je_strategie?: Record<string, string>
   verlauf_live?: { zeit: string; art: string; text: string }[]
   statistik?: Record<string, RollerStatistikZeile>
   abgeschlossen?: RollerAbgeschlossen[]

@@ -373,7 +373,9 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
           Automatik {s.live.automatik_erlaubt ? "erlaubt" : "gesperrt"} · Tagesprogramm {s.live.tagesprogramm_erlaubt ? "erlaubt" : "gesperrt"}
         </p>
       )}
-      {s.profil && <p className="sicht">Betriebsprofil: <strong>{s.profil}</strong>{s.profil === "test" ? " — niedrigere Roll-Schwellen, größerer Debit-Rahmen (mehr Rolls zum Testen)" : ""}</p>}
+      {s.profil && <p className="sicht">Betriebsprofil: <strong>{s.profil}</strong>{s.profil === "test" ? " — niedrigere Roll-Schwellen, größerer Debit-Rahmen (mehr Rolls zum Testen)" : ""}
+        {s.profil_je_strategie && Object.keys(s.profil_je_strategie).length > 0
+          ? ` · Ausnahmen: ${Object.entries(s.profil_je_strategie).map(([n, p]) => `${n} → ${p}`).join(", ")}` : ""}</p>}
       {s.aktion && (
         <p className={s.aktion.laeuft ? "warnung" : "sicht"}>
           Aktion „{s.aktion.name}“ {s.aktion.laeuft ? `läuft seit ${zeitDe(s.aktion.seit)} …` : `beendet ${s.aktion.ende ? zeitDe(s.aktion.ende) : ""}`}
