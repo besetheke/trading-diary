@@ -587,8 +587,23 @@ export interface RollerAbgeschlossen {
   erstkredit: number | null; rolls: number; punkte: number; geld: number; waehrung: string; schluss: string | null
 }
 
+export interface RollerLiveGrenzen {
+  konto: string
+  strategien: string[]
+  max_kontrakte: number
+  max_offene_ketten: number
+  max_eroeffnungen_pro_tag: number
+  max_tagesverlust: Record<string, number>
+  max_margin_aenderung: number
+  automatik_erlaubt: boolean
+  tagesprogramm_erlaubt: boolean
+  tagesverlust: Record<string, number>
+}
+
 export interface RollerStrategie {
   paper: boolean
+  modus?: 'paper' | 'live'
+  live?: RollerLiveGrenzen
   letzte_pruefung: string | null
   grund: string
   daten?: { art: string; seit: string | null }

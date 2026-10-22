@@ -356,11 +356,23 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
     <>
       <h3>Strategien (Paper)</h3>
       <p className="sicht">
-        {s.paper ? "Paper-Konto verbunden" : "kein Paper-Konto — Orders gesperrt"} · {s.grund}
+        {s.modus === "live"
+          ? (s.paper ? `LIVE-Konto ${s.live?.konto ?? ""} verbunden` : "Live-Konto nicht verbunden — Orders gesperrt")
+          : (s.paper ? "Paper-Konto verbunden" : "kein Paper-Konto — Orders gesperrt")} · {s.grund}
         {s.daten ? ` · Kurse: ${s.daten.art === "live" ? "live" : s.daten.art === "verzoegert" ? "VERZÖGERT (Balken)" : "unbekannt"}` : ""}
         {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
         <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
+      {s.modus === "live" && s.live && (
+        <p className="warnung">
+          <strong>ECHTGELD-MODUS</strong> · Konto {s.live.konto} · erlaubt: {s.live.strategien.join(", ")} · höchstens{" "}
+          {s.live.max_kontrakte} Kontrakt(e) je Order, {s.live.max_offene_ketten} offene Ketten, {s.live.max_eroeffnungen_pro_tag}{" "}
+          Eröffnungen je Tag, Margin-Anstieg höchstens {s.live.max_margin_aenderung} je Eröffnung, Tagesverlust höchstens{" "}
+          {Object.entries(s.live.max_tagesverlust).map(([w, b]) => `${b} ${w}`).join(", ") || "—"} (heute:{" "}
+          {Object.entries(s.live.tagesverlust).map(([w, b]) => `${b.toFixed(2)} ${w}`).join(", ") || "kein Verlust"}) ·
+          Automatik {s.live.automatik_erlaubt ? "erlaubt" : "gesperrt"} · Tagesprogramm {s.live.tagesprogramm_erlaubt ? "erlaubt" : "gesperrt"}
+        </p>
+      )}
       {s.profil && <p className="sicht">Betriebsprofil: <strong>{s.profil}</strong>{s.profil === "test" ? " — niedrigere Roll-Schwellen, größerer Debit-Rahmen (mehr Rolls zum Testen)" : ""}</p>}
       {s.aktion && (
         <p className={s.aktion.laeuft ? "warnung" : "sicht"}>

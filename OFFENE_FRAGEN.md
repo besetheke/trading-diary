@@ -3848,3 +3848,18 @@ Annahmen in `api/echtgeld_reife.py`: Datenquelle live seit mindestens 5 Tagen, m
 keine angehaltene Kette, keine Meldung „Bestand ohne Kette“. Die Zahlen sind geschätzt, nicht aus dem Bestand abgeleitet. Frage:
 Welche Schwellen hältst du für angemessen (mehr Tage? mehr Rolls je Strategie statt insgesamt?)? Die Karte ist eine
 Entscheidungshilfe und gibt nichts frei.
+
+## OF-105 · DAX-Tagesprogramm: Uhrzeit und Zeitzone (22.10.2026)
+
+Der Nutzer wünscht jeden Handelstag um „10:00 ET“ je einen DAX-BPS und einen DAX-BCS (Verfall nächster Freitag, höchstens 7 DTE).
+Annahme im Code (`roller/strategie.py`, `TAEGLICH_ZEITEN`): 10:00 **Berliner Ortszeit** (Eurex 9:00–17:30). „ET“ könnte auch Eastern Time
+(New York) heißen, das wären 16:00 Berlin, 90 Minuten vor Handelsende; dann Zeit und Zone dort ändern. Verwendet werden die
+bestehenden Strategien „DAX: BPS/BCS D10 W300 Freitag“ (ODAX, Delta 0,10, Breite 300). Das Tagesprogramm läuft nur bei eingeschalteter
+Automatik; eine Server-`config.json` mit eigener `taeglich`-Liste muss die beiden DAX-Namen enthalten. Im Live-Modus zusätzlich
+`live.tagesprogramm_erlaubt` und `live.strategien`.
+
+## OF-106 · Live-Modus: Grenzwerte (22.10.2026)
+
+Vorgaben in `config.beispiel.json` (Abschnitt `live`) sind Annahmen: 1 Kontrakt, 12 offene Ketten, 4 Eröffnungen je Tag, Tagesverlust
+300 EUR, Margin-Anstieg höchstens 5000 je Eröffnung. Bei täglich zwei DAX-Eröffnungen und einer Laufzeit bis Freitag sind bis zu
+10 gleichzeitig offene Ketten plus Rolls möglich. Welche Grenzen soll der Nutzer für den ersten Live-Betrieb festlegen?
