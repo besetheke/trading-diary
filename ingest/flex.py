@@ -987,6 +987,25 @@ def nachtragen_realisiert(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib
     return nachher - vorher
 
 
+def _fremdes_konto_ablehnen(verbindung, inhalt: "_DateiInhalt", datei: pathlib.Path) -> None:
+    """Einzelkonto-Grenze schon am Import (AP-17e, R04): Kennt die Datenbank ein Konto, wird eine Datei eines
+    anderen Kontos (z. B. Paper, DU...) abgelehnt, bevor etwas geschrieben wird. Ein gemischter Bestand
+    verfälscht Matching, NAV und Steuer; ein anderes Konto braucht eine eigene Datenbank."""
+    listen = (
+        inhalt.executions, inhalt.open_positions, inhalt.cash_transactions, inhalt.corporate_actions,
+        inhalt.transfers, inhalt.nav_tage, inhalt.change_in_nav, inhalt.cash_report, inhalt.ib_realized,
+    )
+    in_datei = {zeile["konto"] for liste in listen for zeile in liste}
+    bekannt = {z[0] for z in verbindung.execute(select(executions.c.konto).distinct()) if z[0]}
+    fremd = sorted(in_datei - bekannt) if bekannt else []
+    if fremd:
+        raise ValueError(
+            f"{datei.name}: Konto {', '.join(fremd)} gehört nicht zu dieser Datenbank "
+            f"(bekannt: {', '.join(sorted(bekannt))}) — nicht importiert. Ein zweites Konto (z. B. Paper) "
+            "braucht eine eigene Datenbank (Einzelkonto-Grenze, AP-17e)."
+        )
+
+
 def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path) -> ImportErgebnis:
     """Importiert eine Flex-XML-Datei idempotent in die Datenbank (AP-02).
 
@@ -1004,6 +1023,7 @@ def import_flex_file(db_pfad: str | pathlib.Path, datei_pfad: str | pathlib.Path
 
     engine = create_db_engine(db_pfad)
     with engine.begin() as verbindung:
+        _fremdes_konto_ablehnen(verbindung, inhalt, datei)
         bekannter_lauf = verbindung.execute(
             select(import_runs.c.id).where(import_runs.c.datei_hash == datei_hash)
         ).first()
