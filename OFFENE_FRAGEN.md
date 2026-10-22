@@ -3860,6 +3860,6 @@ Automatik; eine Server-`config.json` mit eigener `taeglich`-Liste muss die beide
 
 ## OF-106 · Live-Modus: Grenzwerte (22.10.2026)
 
-Vorgaben in `config.beispiel.json` (Abschnitt `live`) sind Annahmen: 1 Kontrakt, 12 offene Ketten, 4 Eröffnungen je Tag, Tagesverlust
-300 EUR, Margin-Anstieg höchstens 5000 je Eröffnung. Bei täglich zwei DAX-Eröffnungen und einer Laufzeit bis Freitag sind bis zu
-10 gleichzeitig offene Ketten plus Rolls möglich. Welche Grenzen soll der Nutzer für den ersten Live-Betrieb festlegen?
+Vorgaben in `config.beispiel.json` (Abschnitt `live`) sind Annahmen: 1 Kontrakt, 4 offene Ketten, 2 Eröffnungen je Tag, Tagesverlust
+300 EUR, Margin-Anstieg höchstens 5000 je Eröffnung. Das tägliche Doppelprogramm (zwei DAX-Trades je Tag) ist nur für Paper gedacht,
+im Live-Betrieb eröffnet der Nutzer deutlich weniger. Welche Grenzen soll der Nutzer für den ersten Live-Betrieb festlegen?
