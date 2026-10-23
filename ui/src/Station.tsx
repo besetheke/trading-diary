@@ -424,7 +424,10 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
                 <th className="zahl">Short/Long</th>
                 <th className="zahl">|Δ| Short</th>
                 <th className="zahl">Schwelle</th>
-                <th className="zahl" title="Summe aller Kredite minus Debits der Kette">Netto</th>
+                <th className="zahl" title="Summe aller Kredite minus Debits der Kette (Cash-Flow, kein Gewinn)">Netto</th>
+                <th className="zahl" title="Ergebnis, wenn die Kette jetzt geschlossen würde: Mittelkurs (natürlicher Preis); alle 10 Minuten neu">
+                  Wert jetzt
+                </th>
                 <th className="zahl">Rolls</th>
                 <th className="zahl" title="Rückkauf-Limit des Profit-Targets">PT</th>
                 <th>Lage</th>
@@ -441,6 +444,11 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
                   <td className="zahl">{k.short_delta === null || k.short_delta === undefined ? "—" : Math.abs(k.short_delta).toFixed(3)}</td>
                   <td className="zahl">{zahl(k.schwelle)}</td>
                   <td className="zahl">{zahl(k.netto)}</td>
+                  <td className="zahl" title={k.wert ? `Stand ${zeitDe(k.wert.zeit)}` : "noch keine Bewertung"}>
+                    {k.wert && k.wert.geld_mitte !== null
+                      ? `${k.wert.geld_mitte.toFixed(0)} (${k.wert.geld_natuerlich === null ? "—" : k.wert.geld_natuerlich.toFixed(0)}) ${k.wert.waehrung}`
+                      : "—"}
+                  </td>
                   <td className="zahl">{k.rolls}</td>
                   <td className="zahl">{zahl(k.pt_limit)}</td>
                   <td>

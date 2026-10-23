@@ -553,8 +553,20 @@ export interface RollerRollPlan {
   erstellt: string
 }
 
+export interface RollerKettenWert {
+  debit_mitte: number | null
+  debit_natuerlich: number | null
+  ergebnis_mitte: number | null
+  ergebnis_natuerlich: number | null
+  geld_mitte: number | null
+  geld_natuerlich: number | null
+  zeit: string
+  waehrung: string
+}
+
 export interface RollerKetteStand {
   kette_id: string
+  wert?: RollerKettenWert | null
   status?: string
   warnung?: string | null
   strategie: string
