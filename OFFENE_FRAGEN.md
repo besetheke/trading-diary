@@ -3845,7 +3845,7 @@ Ablauf der Future-Rolle, Auswahl von Schutz-Put und Short-Call, Theta-Regel 4b.
 ## OF-104 · Schwellen der Echtgeld-Reife (22.10.2026)
 
 Annahmen in `api/echtgeld_reife.py`: Datenquelle live seit mindestens 5 Tagen, mindestens 10 Rolls, mindestens 30 geschlossene Ketten,
-keine angehaltene Kette, keine Meldung „Bestand ohne Kette“. Die Zahlen sind geschätzt, nicht aus dem Bestand abgeleitet. Frage:
+keine angehaltene Kette, keine Meldung „Bestand ohne Kette“. Seit 23.10.2026 zählen Rolls und geschlossene Ketten **nur Strategien mit Laufzeit über einen Tag** (ohne 0DTE). Die Zahlen sind geschätzt, nicht aus dem Bestand abgeleitet. Frage:
 Welche Schwellen hältst du für angemessen (mehr Tage? mehr Rolls je Strategie statt insgesamt?)? Die Karte ist eine
 Entscheidungshilfe und gibt nichts frei.
 
@@ -3863,3 +3863,11 @@ der Server-`config.json` zugefügt (abschaltbar: `"taeglich_dax": false`), `dien
 Vorgaben in `config.beispiel.json` (Abschnitt `live`) sind Annahmen: 1 Kontrakt, 4 offene Ketten, 2 Eröffnungen je Tag, Tagesverlust
 300 EUR, Margin-Anstieg höchstens 5000 je Eröffnung. Das tägliche Doppelprogramm (zwei DAX-Trades je Tag) ist nur für Paper gedacht,
 im Live-Betrieb eröffnet der Nutzer deutlich weniger. Welche Grenzen soll der Nutzer für den ersten Live-Betrieb festlegen?
+
+## OF-107 · Tagesprogramm 7DTE und Schrittvorgabe (23.10.2026)
+
+Annahmen: Das 7DTE-Tagesprogramm nutzt die vorhandenen Testprofil-Strategien „T SPX BPS/BCS D20 W25 7DTE“ und „T RUT BPS/BCS D20 W10 7DTE“
+(neu: T RUT BCS), Eröffnung SPX 10:33 ET, RUT 11:03 ET, Delta 0,20, Breite 25 bzw. 10, Laufzeit 7 Tage, ohne Tagesende-Schließen.
+Standard für das Nachziehen aller Strategien ohne Anteilsvorgabe: Strecke geteilt durch 8 Schritte (mindestens ein Tick), Takt 20 s
+(`nachzieh_ziel_schritte`); das Profil `oa` bleibt bei einem Tick je 5 s. Bei 10 und mehr Eröffnungen je Tag können sich viele offene
+Ketten ansammeln, das ist auf Paper gewollt.

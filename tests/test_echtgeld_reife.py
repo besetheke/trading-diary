@@ -62,3 +62,18 @@ def test_roller_nicht_erreichbar_und_manuelle_liste():
 
 def test_status_mit_strategie_schluessel():
     assert ok(bewerte({"strategie": status()}, HEUTE))["live_daten"] is True
+
+
+def test_0dte_ketten_zaehlen_nicht(monkeypatch=None):
+    """Tagesstrategien (0DTE) zählen weder bei Rolls noch bei geschlossenen Ketten (23.10.2026):
+    dieselben 32 Ketten und 10 Rolls wie oben, dazu 100 geschlossene 0DTE-Ketten und eine offene 0DTE-Kette mit 5 Rolls
+    ändern nichts; eine angehaltene 0DTE-Kette zählt weiter als Problem."""
+    stat = status()
+    stat["statistik"]["SPX: BPS D10 W25 0DTE"] = {"n": 100, "rolls_summe": 40}
+    stat["ketten"] = stat["ketten"] + [{"strategie": "RUT: BCS D10 W10 0DTE", "rolls": 5, "status": "offen"}]
+    erg = bewerte(stat, HEUTE)
+    ist = {k["id"]: k["ist"] for k in erg["kriterien"]}
+    assert (ist["ketten"], ist["rolls"]) == (32, 10)
+    assert ok(erg)["angehalten"] is True
+    stat["ketten"] = stat["ketten"] + [{"strategie": "SPX: BPS D10 W25 0DTE", "rolls": 0, "status": "pruefen"}]
+    assert ok(bewerte(stat, HEUTE))["angehalten"] is False
