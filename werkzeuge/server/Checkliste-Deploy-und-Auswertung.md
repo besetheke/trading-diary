@@ -1,14 +1,34 @@
 # Server: Deploy und Auswertung der Roller-Läufe
 
-Für den Server (nur Deploy, keine Entwicklung). Stand 17.10.2026: Roller `cc55049` (IB-Preisschutz, Kostenbremse,
-gruppiertes Fehlerprotokoll, Auswertungsskript), Journal mit Kettenliste, Titel-Dividenden, Steuer-Seite und
-Momentum-Schalter.
+Für den Server (nur Deploy, keine Entwicklung). Stand 24.10.2026.
+
+## 0. Was sich seit dem Stand vom 17.10. geändert hat
+
+**Roller** (Repo options-roller):
+- **Profile:** `normal` (Regeln des Nutzers), `test` (Server-Vorgabe), neu `oa` (Eröffnung wie OptionApp). Die DAX-Freitags-Strategien
+  laufen auch im Betriebsprofil `test` **unter `normal`** (`dienst.profil_je_strategie`, leeres Objekt `{}` schaltet es ab).
+- **Tagesprogramm** (nur bei eingeschalteter Automatik):
+  - 0DTE wie bisher (20 Minuten nach Handelsbeginn); 0DTE rollt nicht mehr, nach Handelsende am Verfallstag kein neues Profit-Target.
+  - **DAX** BPS und BCS „Freitag“: täglich 4:00 New Yorker Zeit (meist 10:00 Berlin), 1 Kontrakt (`dienst.taeglich_dax: false` schaltet ab).
+  - **7DTE** BPS und BCS: SPX 10:33 ET, RUT 11:03 ET, Delta 0,20 (`dienst.taeglich_7dte: false` schaltet ab). Neue Strategie „T RUT: BCS D20 W10 7DTE“.
+  - Die Namen werden auch einer eigenen `taeglich`-Liste der `config.json` zugefügt.
+- **Orders:** Schrittvorgabe Standard: Strecke ÷ 8 Schritte, Takt 20 s. Bricht die IB-Vorabprüfung (whatIf) hart ab (201, 200, 203, 321,
+  103–110), wird nicht gesendet; ein offenes Profit-Target auf derselben Option verhindert eine neue Eröffnung (K050). Ohne Marktdaten sofort
+  „Datenquelle unbekannt, keine Kurse seit …“; mehrere Handelsklassen zu einem Verfall: „Kontrakt uneindeutig“; DAX fest `ODAX`.
+- **Beobachtung:** lesbarer Orderverlauf (`verlauf_live`), Bewertung offener Ketten („Wert jetzt“, alle 10 Minuten), je Wartebereich Indexstand
+  und Beinkurse im Protokoll, IBs Kombi-Quote, IB-Rauschen je Quelle, Tagesbericht mit Eröffnungsanalyse.
+- **Live-Modus** (nur mit `--live-orders`, siehe `Anleitung-Live-Betrieb.md`): bleibt aus, solange nichts konfiguriert ist.
+- `requirements-lock.txt` (feste Versionen), Deploy installiert diesen Stand.
+
+**Journal:** Station (Orderverlauf, Echtgeld-Reife, Profil-Ausnahmen, Live-Banner, Wert jetzt), Seite „Roll-Kosten“, Momentum-Schalter öffnet in
+neuem Tab, Import lehnt ein fremdes Konto ab (z. B. Paper DU…), `requirements-lock.txt`, Rebuild mit Einzelkonto-Grenze.
 
 ## 1. Vorher (2 Minuten)
 
 - [ ] TWS Paper läuft und ist angemeldet (Port 7497), API-Zugriff erlaubt.
 - [ ] Keine Position, die der Roller gerade verwaltet, steht mitten in einer Aktion (Station: „beschäftigt“ leer).
 - [ ] Automatik-Zustand notieren (Station, Roller): AN oder AUS. Das Deploy ändert `auto.json` nicht.
+- [ ] Läuft die Station über einen Rechnernamen statt `localhost`: Umgebungsvariable `STATION_ERLAUBTE_HOSTS` setzen (AP-17c).
 
 ## 2. Deploy
 
@@ -18,43 +38,43 @@ cd C:\10_Coding\trading-diary
 .\werkzeuge\server\Deploy.ps1               # aktualisieren, migrieren, neu starten, prüfen
 ```
 
-Erwartet: Pull ohne Konflikt, Roller-Tests grün (362), Journal-Rauchtest grün, danach starten beide Dienste.
+Erwartet: Pull ohne Konflikt, Roller-Tests grün (Zahl steigt mit jedem Stand), Journal-Rauchtest grün, danach starten beide Dienste.
 Wenn sich `Deploy.ps1` selbst geändert hat, ruft es sich mit `-Neustart` neu auf — das ist normal.
 
 ## 3. Nach dem Deploy prüfen
 
-- [ ] Station → Roller: Verbindung grün, Profil (normal/test) wie vorher, Automatik wie notiert.
-- [ ] Journal öffnet, Seite „Steuer“ lädt (sie braucht die Flex-Daten des Servers; leere Tabellen sind kein Fehler).
-- [ ] `python -m roller.pruefung` meldet keine Fehler (macht das Deploy schon, bei Zweifel von Hand).
+- [ ] Station → Roller: Verbindung grün, Profil wie vorher, **Betriebsprofil-Zeile nennt die Ausnahme „DAX … → normal“**, Automatik wie notiert.
+- [ ] Datenquelle „live“ (Zeile „Kurse“); der Zähler der Echtgeld-Reife beginnt, wenn die Quelle wechselt.
+- [ ] Journal öffnet, Seiten „Steuer“ und „Roll-Kosten“ laden (leere Tabellen sind kein Fehler).
+- [ ] `python -m roller.pruefung` meldet keine Fehler.
 - [ ] Mail: Testmail aus der Station oder `python -m roller.mailtest` kommt bei nbillinger@gmx.de an.
+- [ ] Am nächsten Handelstag: DAX-Eröffnung um 4:00 ET (Station: Verlauf zeigt Start-Limit, Wartebereiche, Fill), 7DTE-Eröffnungen 10:33/11:03 ET.
 
 ## 4. Nach einem Handelstag auswerten
 
 ```
 cd C:\10_Coding\options-roller
-.venv\Scripts\python.exe -m roller.auswertung --tage 1
+.venv\Scripts\python.exe -m roller.auswertung --tage 1                       # Läufe, Quoten, Quellen des Rauschens
+.venv\Scripts\python.exe -m roller.auswertung --tage 10 --eroeffnungen --csv eroeffnungen.csv
 ```
 
-Für mehrere Tage `--tage 5`. Die Ausgabe zeigt je Art (Eröffnung, Roll, Schließen) und je Strategie:
-
-| Spalte | Bedeutung | Worauf achten |
+| Bericht | Was er zeigt | Worauf achten |
 |---|---|---|
-| Läufe / gefüllt / Quote | Orders, davon gefüllt | Quote sehr niedrig → Startanteil oder Grenze zu eng |
-| Dauer (Median) | Sekunden bis zum Fill | wächst sie stark, zieht der Roller zu langsam nach |
-| Weg (Ø, max) | Anteil der Strecke Startpreis → Grenze, bei dem gefüllt wurde (0 = zum Startpreis, 1 = an der Grenze) | Ø nahe 1: der Start (Anteil 0,25) ist zu optimistisch; Ø nahe 0: man könnte höher starten |
-| 202 / 2161 | IB-Preisschutz / Deckel | viele 202: Startpreis zu aggressiv für verzögerte Quoten; 2161: IB deckelt still |
-| Storno@G | an der Grenze storniert | zeigt, dass die Grenze greift |
-| PreSub | am Ende `PreSubmitted` | SPX-0DTE-Rätsel: unten steht dann `whyHeld` |
+| Läufe / gefüllt / Quote | Orders, davon gefüllt | sehr niedrig: Start oder Grenze zu eng |
+| Dauer (Median), Weg (Ø) | Sekunden bis zum Fill, Anteil Strecke Start→Grenze | Weg nahe 1: Start zu optimistisch |
+| 202 / 2161 / Storno@G / PreSub | Preisschutz, Deckel, Storno an der Grenze, `PreSubmitted` | viele 202: Startpreis zu aggressiv |
+| Je Datenquelle | Füllquote nach live / verzögert | verzögert deutlich schlechter: Marktdaten sind die Ursache |
+| **Eröffnungsanalyse** | je Order: Mittel, natürlich, Fill, `vs_mittel`, `erfassung`, Spot±, Markt± | Erfassung 1 = Mittelkurs, 0 = natürlicher Preis |
+| **IB-Meldungen je Quelle** | Code | Zweck der Anfrage, z. B. `200|Indexkurs` | die größten Quellen zuerst untersuchen |
 
-Darunter: Kostenbremse (Zahl der Fälle mit Zahlen), gruppierte IB-Meldungen, Datenquellenwechsel
-(live/verzögert), Automatik-Pausen und die nicht gefüllten Läufe mit Status, Start, Grenze und IB-Codes.
+Der Tagesbericht (Mail) enthält denselben Kern: Eröffnungen mit Fill gegen Mittel, Dauer und Marktbewegung, dazu das Rauschen.
 
 ## 5. Was an den Server-Betreuer zurückgemeldet werden soll
 
-1. Die komplette Ausgabe von `python -m roller.auswertung --tage 1` (enthält keine Kontodaten außer Kettennummern).
-2. Bei `PreSubmitted`: die Zeilen „whyHeld“ und ob die TWS dort eine Meldung zeigt (Screenshot ohne Konto).
-3. Bei Kostenbremse: ob die gemeldeten Zahlen zum Eindruck passen (zu früh oder zu spät gebremst).
-4. Auffälligkeiten der Station (z. B. Verbindungsabbrüche mit Uhrzeit).
+1. Die Ausgabe von `python -m roller.auswertung --tage 1` und der Abschnitt „IB-Meldungen je Quelle“.
+2. Die CSV `eroeffnungen.csv` (enthält keine Kontodaten außer Kettennummern).
+3. Bei `PreSubmitted`: die Zeilen „whyHeld“ und die TWS-Meldung dazu (Screenshot ohne Konto).
+4. Auffälligkeiten der Station (Verbindungsabbrüche mit Uhrzeit, Dienstneustarts).
 
-Die Annahmen, die mit diesen Zahlen geprüft werden, stehen in `OFFENE_FRAGEN.md` (OF-90): Startanteil 0,25,
-Kostenbremse 40 % (normal) und 60 % (test), gruppierte Fehlercodes.
+Die Annahmen stehen in `OFFENE_FRAGEN.md`: OF-90 (Startanteil, Kostenbremse), OF-104 (Schwellen der Echtgeld-Reife), OF-105 (DAX-Zeit und Profil),
+OF-106 (Live-Grenzen), OF-107 (7DTE-Programm, Schrittvorgabe).
