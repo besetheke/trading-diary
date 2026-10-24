@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Smoke-Test (AP-17g, M08): alle Seiten und lesenden API-Wege der Oberfläche antworten mit 200."""
 import importlib.util
 import pathlib

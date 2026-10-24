@@ -14,7 +14,7 @@ Rückgabewert 0 nur, wenn alles antwortet. Ohne Browser: geprüft wird Erreichba
 import pathlib
 import re
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 WURZEL = pathlib.Path(__file__).resolve().parents[1]
 
