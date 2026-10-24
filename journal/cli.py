@@ -317,8 +317,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="SQLite-Datei (Default: Umgebungsvariable JOURNAL_DB, sonst journal.db)",
     )
+    probe = unterbefehle.add_parser(
+        "restore-probe",
+        help="Sicherung in temporärer Kopie prüfen: Integrität, Migration, Rebuild (M08)",
+    )
+    probe.add_argument("sicherung", type=pathlib.Path, help="Sicherungsdatei (journal-*.db)")
+    probe.add_argument("--rebuild", action="store_true", help="zusätzlich vollständiger Neuaufbau")
     argumente = parser.parse_args(argv)
 
+    if argumente.befehl == "restore-probe":
+        from journal.restore_probe import main as probe_main
+        return probe_main([str(argumente.sicherung)] + (["--rebuild"] if argumente.rebuild else []))
     if argumente.befehl == "import":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         try:

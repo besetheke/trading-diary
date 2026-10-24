@@ -79,6 +79,34 @@ foreach ($datei in $erwartet) {
     }
 }
 
+# ------------------------------------------------------------------ 1b. Vorabpruefung der Downloads
+# Alle festgeschriebenen Abhaengigkeiten des NEUEN Stands muessen ladbar sein, BEVOR die Dienste angehalten werden
+# (AP-17g, M08): sonst bliebe bei einem Netzfehler mitten im Deploy alles aus. Die Lock-Datei kommt aus dem Remote-Stand
+# (fetch), geladen wird nur in einen Temp-Ordner. Bei Fehler bricht das Skript ab, die Dienste laufen weiter.
+Schritt "Vorabpruefung: Abhaengigkeiten ladbar (Dienste laufen noch)"
+Tu "requirements-lock.txt des Remote-Stands mit pip download pruefen" {
+    foreach ($name in @("trading-diary", "options-roller")) {
+        $ordner = Join-Path $Basis $name
+        if (-not (Test-Path (Join-Path $ordner ".git"))) { continue }
+        git -C $ordner fetch --quiet
+        if ($LASTEXITCODE -ne 0) { throw "$name`: git fetch fehlgeschlagen - Abbruch, Dienste laufen weiter" }
+        $lock = $null
+        try { $lock = git -C $ordner show "@{u}:requirements-lock.txt" } catch { $lock = $null }
+        if ($LASTEXITCODE -ne 0 -or -not $lock) { $global:LASTEXITCODE = 0; Write-Host "    ${name}: keine requirements-lock.txt im Remote-Stand (uebersprungen)"; continue }
+        $tmp = Join-Path $env:TEMP "deploy-pruefung-$name"
+        Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        $datei = Join-Path $tmp "requirements-lock.txt"
+        $lock | Set-Content -Path $datei -Encoding ASCII
+        & python -m pip download --disable-pip-version-check --no-deps -q -r $datei -d $tmp
+        $code = $LASTEXITCODE
+        Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+        if ($code -ne 0) { throw "${name}: Abhaengigkeiten nicht ladbar (pip download, Code $code) - Abbruch, Dienste laufen weiter" }
+        Write-Host "    ${name}: alle festgeschriebenen Pakete ladbar"
+    }
+    $global:LASTEXITCODE = 0
+}
+
 # ------------------------------------------------------------------ 2. Anhalten
 Schritt "Dienste anhalten"
 Tu "Roller-Dienst beenden" { if (Test-Path "$roller\Beenden-Dienst.ps1") { & "$roller\Beenden-Dienst.ps1" } }
@@ -178,6 +206,12 @@ Tu "Journal-Server starten" {
     Start-Sleep -Seconds 5
 }
 Tu "Roller-Pruefung" { Push-Location $roller; try { & ".venv\Scripts\python.exe" -m roller.pruefung } finally { Pop-Location } }
+# Smoke-Test (AP-17g, M08): jede Seite und jeder API-Weg der Oberflaeche antwortet. Ein Befund stoppt den Deploy nicht
+# (die Dienste laufen), wird aber laut gemeldet.
+Tu "Smoke-Test der Oberflaeche" {
+    & "$journal\.venv\Scripts\python.exe" "$journal\werkzeuge\smoke.py" "http://127.0.0.1:8000"
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Smoke-Test meldet Befunde (siehe oben) - Oberflaeche pruefen"; $global:LASTEXITCODE = 0 }
+}
 
 Schritt "Fertig"
 Write-Host "  Station: http://127.0.0.1:8000/start"

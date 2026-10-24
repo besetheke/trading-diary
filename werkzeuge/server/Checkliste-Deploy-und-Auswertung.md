@@ -47,6 +47,9 @@ Wenn sich `Deploy.ps1` selbst geändert hat, ruft es sich mit `-Neustart` neu au
 - [ ] Datenquelle „live“ (Zeile „Kurse“); der Zähler der Echtgeld-Reife beginnt, wenn die Quelle wechselt.
 - [ ] Journal öffnet, Seiten „Steuer“ und „Roll-Kosten“ laden (leere Tabellen sind kein Fehler).
 - [ ] `python -m roller.pruefung` meldet keine Fehler.
+- [ ] Smoke-Test: `python werkzeuge\smoke.py http://127.0.0.1:8000` meldet „48 von 48 Wegen antworten mit 200“ (das Deploy ruft ihn selbst auf).
+- [ ] Restore-Probe der letzten Sicherung (einmal im Monat und vor größeren Änderungen):
+  `python -m journal restore-probe C:\Trading\backup\journal-<Datum>.db` (optional `--rebuild`): Integrität ok, Migration ok, Zeilenzahlen plausibel.
 - [ ] Mail: Testmail aus der Station oder `python -m roller.mailtest` kommt bei nbillinger@gmx.de an.
 - [ ] Am nächsten Handelstag: DAX-Eröffnung um 4:00 ET (Station: Verlauf zeigt Start-Limit, Wartebereiche, Fill), 7DTE-Eröffnungen 10:33/11:03 ET.
 
