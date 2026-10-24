@@ -97,6 +97,9 @@ class DegradationsGruppe:
     durchschnitt_netto_eur: Decimal | None  # zwei Stellen HALF_UP; None ohne Ketten
     trefferquote: Decimal | None  # Anteil netto > 0, vier Stellen (Tranche I E5)
     anzahl_ketten_kurs_fehlt: int  # zugelassen, aber ohne vollständigen Kurs
+    # Drilldown (AP-17g, M01): die Ketten hinter Summe und Durchschnitt bzw. ohne Kurs, sortiert.
+    ketten_ids: tuple = ()
+    ketten_ids_kurs_fehlt: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -208,6 +211,9 @@ def degradations_auswertung(
                         len(mit_kurs),
                     ),
                     anzahl_ketten_kurs_fehlt=len(in_gruppe) - len(mit_kurs),
+                    ketten_ids=tuple(sorted(k.chain_id for k in mit_kurs)),
+                    ketten_ids_kurs_fehlt=tuple(sorted(
+                        k.chain_id for k in in_gruppe if k.netto_eur_wirtschaftlich is None)),
                 )
             )
         rollverknuepfungen = sum(

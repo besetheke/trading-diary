@@ -42,3 +42,34 @@ def test_kontosicht_hat_keine_degradation(klient):
 def test_unbekannte_sicht_ist_422(klient):
     c, _ = klient
     assert c.get("/roll-kosten-auswertung", params={"sicht": "x"}).status_code == 422
+
+
+def test_drilldown_ids_und_betraege_je_kette(klient):
+    """Jede Summe ist bis zur Kette prüfbar: die IDs je Gruppe stimmen mit den Anzahlen überein, jede ID hat Beträge,
+    und die Beträge der Ketten ergeben die Summe der Gruppe (Brutto, Kommission)."""
+    from decimal import Decimal
+
+    c, _ = klient
+    d = c.get("/roll-kosten-auswertung").json()
+    ketten = d["ketten"]
+    for g in d["kommission"]:
+        assert len(g["ketten_ids"]) == g["anzahl_ketten"]
+        assert len(g["ketten_ids_kurs_fehlt"]) == g["anzahl_ketten_kurs_fehlt"]
+        for cid in g["ketten_ids"]:
+            assert str(cid) in ketten and ketten[str(cid)]["brutto_eur"] is not None
+        assert sum((Decimal(ketten[str(i)]["brutto_eur"]) for i in g["ketten_ids"]), Decimal(0)) == Decimal(g["brutto_eur"])
+        assert sum((Decimal(ketten[str(i)]["kommission_eur"]) for i in g["ketten_ids"]), Decimal(0)) == Decimal(g["kommission_eur"])
+    for k in ketten.values():
+        if k["brutto_eur"] is not None:
+            assert Decimal(k["netto_eur"]) == Decimal(k["brutto_eur"]) + Decimal(k["kommission_eur"])
+    for g in d["degradation"] or []:
+        assert len(g["ketten_ids"]) == g["anzahl_ketten"]
+        assert len(g["ketten_ids_kurs_fehlt"]) == g["anzahl_ketten_kurs_fehlt"]
+
+
+def test_kerne_liefern_ketten_ids(klient):
+    _, db = klient
+    kern = kommissions_bericht(db, sicht="kette")
+    assert kern.ketten_summen and all(len(z) == 3 for z in kern.ketten_summen)
+    for g in kern.gruppen:
+        assert tuple(sorted(g.ketten_ids)) == g.ketten_ids

@@ -22,8 +22,14 @@ Ergebnis nach 0/1/2/3+ Rolls (Anzahl, Summe, Ø netto, Trefferquote, Ketten ohne
 `belegt_bestaetigt`), Abdeckung samt offenen Rollkandidaten, Kommission nach Roll-Anzahl, Strategie, Basiswert, Anlageklasse;
 beide Sichten ausdrücklich benannt. Test: `tests/test_api_roll_kosten.py`.
 
-## Offen (OF-102)
+## M01 Drilldown (24.10.2026, erledigt)
 
-Drilldown von jeder Zeile auf die gezählten Ketten/Positionen: die Rechenkerne liefern bisher nur Summen, keine Kettenlisten.
-Dafür müssten sie die Ketten-IDs je Gruppe mitgeben (eigener Auftrag). Außerdem Browser-Smoke-Test und Restore-Probe (M08),
+Jede Zeile der Seite „Roll-Kosten“ (Ergebnis nach Rolls, Kommission nach Gruppe) klappt auf die gezählten Ketten auf: Link zur Position,
+Basiswert, Strategie, Zeitraum, Rolls, Brutto, Kommission und Netto in EUR; Ketten ohne Kurs sind markiert. Die Rechenkerne geben dafür
+`ketten_ids` je Gruppe und `ketten_summen` zurück (neue Felder mit Vorgabe, bestehende Tests unverändert). Test: `tests/test_api_roll_kosten.py`
+(IDs stimmen mit Anzahlen überein, Beträge der Ketten ergeben die Gruppensumme).
+
+## Offen (ohne OF-102)
+
+Browser-Smoke-Test und Restore-Probe (M08),
 Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M02–M07 folgen.

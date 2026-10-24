@@ -63,6 +63,9 @@ class KommissionsGruppe:
     kommissionsanteil: Decimal | None  # |kommission|/|brutto|, 4 Stellen HALF_UP
     anzahl_ketten_kurs_fehlt: int  # abgeschlossen ohne vollständigen Kurs
     anzahl_ketten_abgeschlossen: int  # anzahl_ketten + anzahl_ketten_kurs_fehlt
+    # Drilldown (AP-17g, M01): genau die Ketten hinter den Summen und die ohne Kurs, sortiert.
+    ketten_ids: tuple = ()
+    ketten_ids_kurs_fehlt: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,8 @@ class KommissionsErgebnis:
     sicht: str
     gruppen: tuple[KommissionsGruppe, ...]  # sortiert nach (dimension, schluessel)
     anzahl_ketten_gesamt: int  # inklusive offener und mangelbehafteter Ketten
+    # Je abgeschlossener Kette (chain_id, brutto_eur, kommission_eur); None ohne vollständigen Kurs.
+    ketten_summen: tuple = ()
 
 
 def _beteiligt(
@@ -188,6 +193,7 @@ def kommissions_attribution(
         legs_je_struktur.setdefault(leg["structure_id"], []).append(leg)
 
     gruppen_acc: dict[tuple[str, str], dict[str, object]] = {}
+    ketten_summen: list[tuple] = []
     anzahl_ketten_gesamt = 0
     for chain_id in sorted(kette_je_id):
         zeile = kette_je_id[chain_id]
@@ -209,6 +215,9 @@ def kommissions_attribution(
             # Regel 2: offene Ketten haben noch keine endgültige Kommission.
             continue
         teile = _eur_teile(ketten_legs, exec_je_id, mult_je_conid)
+        ketten_summen.append(
+            (chain_id, None, None) if teile is None else (chain_id, teile[0], teile[1])
+        )
         # Regel 4: dieselbe Kette zählt in allen vier Dimensionen.
         schluessel_je_dimension = (
             ("index", zeile["underlying"]),
@@ -225,13 +234,17 @@ def kommissions_attribution(
                     "brutto": _NULL,
                     "kurs_fehlt": 0,
                     "abgeschlossen": 0,
+                    "ids": [],
+                    "ids_ohne_kurs": [],
                 },
             )
             eintrag["abgeschlossen"] += 1
             if teile is None:
                 # Regel 3: kein Wert, keine Summe, kein stiller Kurs 1.
                 eintrag["kurs_fehlt"] += 1
+                eintrag["ids_ohne_kurs"].append(chain_id)
                 continue
+            eintrag["ids"].append(chain_id)
             eintrag["anzahl"] += 1
             eintrag["brutto"] += teile[0]
             eintrag["kommission"] += teile[1]
@@ -255,6 +268,8 @@ def kommissions_attribution(
             ),
             anzahl_ketten_kurs_fehlt=eintrag["kurs_fehlt"],
             anzahl_ketten_abgeschlossen=eintrag["abgeschlossen"],
+            ketten_ids=tuple(sorted(eintrag["ids"])),
+            ketten_ids_kurs_fehlt=tuple(sorted(eintrag["ids_ohne_kurs"])),
         )
         for (dimension, schluessel_text), eintrag in sorted(gruppen_acc.items())
     )
@@ -262,6 +277,7 @@ def kommissions_attribution(
         sicht=sicht,
         gruppen=gruppen,
         anzahl_ketten_gesamt=anzahl_ketten_gesamt,
+        ketten_summen=tuple(ketten_summen),
     )
 
 

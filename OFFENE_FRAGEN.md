@@ -3826,7 +3826,7 @@ seiner Richtung. Das macht das Ergebnis reproduzierbar, beweist aber nicht die r
 Long 95/Short 105 gegen Long 90/Short 105 und Long 95/Short 100). Frage: Soll bei mehr als einer möglichen Paarung eine
 Rückfrage in der Oberfläche (M04) erscheinen, oder genügt der Vorschlagsstatus `heuristik`?
 
-## OF-102 · Drilldown der Roll-Kosten auf Ketten (AP-17g, M01, 18.10.2026)
+## OF-102 · Drilldown der Roll-Kosten auf Ketten (AP-17g, M01, 18.10.2026) — umgesetzt am 24.10.2026 als aufklappbare Zeilen
 
 Die Seite „Roll-Kosten“ zeigt Summen je Gruppe, aber noch keine Liste der gezählten Ketten. Annahme: Die Rechenkerne
 (`kommission.py`, `degradation.py`) bekommen je Gruppe die Ketten-IDs zurück (Erweiterung der Ergebnisklassen, bestehende

@@ -1414,6 +1414,20 @@ export interface RollKostenKommission {
   kommission_eur: string | null
   netto_eur: string | null
   kommissionsanteil: string | null
+  ketten_ids: number[]
+  ketten_ids_kurs_fehlt: number[]
+}
+
+export interface RollKostenKette {
+  basiswert: string
+  anlageklasse: string
+  strategie: string | null
+  eroeffnet_am: string
+  beendet_am: string | null
+  rolls: number
+  brutto_eur: string | null
+  kommission_eur: string | null
+  netto_eur: string | null
 }
 
 export interface RollKostenDegradation {
@@ -1424,6 +1438,8 @@ export interface RollKostenDegradation {
   durchschnitt_netto_eur: string | null
   trefferquote: string | null
   anzahl_ketten_kurs_fehlt: number
+  ketten_ids: number[]
+  ketten_ids_kurs_fehlt: number[]
 }
 
 export interface RollKostenAbdeckung {
@@ -1442,6 +1458,7 @@ export interface RollKostenAntwort {
   kommission: RollKostenKommission[]
   degradation: RollKostenDegradation[] | null
   degradation_abdeckung: RollKostenAbdeckung[]
+  ketten: Record<string, RollKostenKette>
 }
 
 export function holeRollKosten(sicht: string, nurA: boolean): Promise<RollKostenAntwort> {
