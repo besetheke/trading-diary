@@ -45,7 +45,7 @@ def test_readme_nennt_die_einzelkonto_grenze_und_dass_der_nutzer_das_flex_konto_
 
 
 def test_projektverzeichnis_ist_die_repo_wurzel_drei_ebenen_ueber_dem_skript():
-    """Die Skripte liegen in werkzeuge\paper: bis zur Wurzel sind es drei Ebenen (Fehler beim ersten Lauf am 24.10.2026)."""
+    """Die Skripte liegen in werkzeuge/paper: bis zur Wurzel sind es drei Ebenen (Fehler beim ersten Lauf am 24.10.2026)."""
     for name in ("Einrichten-Paper.ps1", "Schnellstart-Paper.ps1"):
         assert "Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))" in code(name), name
     assert (ORDNER.parents[1] / ".venv").exists() or (ORDNER.parents[1] / "pyproject.toml").exists()
