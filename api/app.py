@@ -4297,6 +4297,8 @@ def erzeuge_app(
 app = erzeuge_app(
     os.environ.get("JOURNAL_DB", "journal.db"),
     mit_journal=True,
+    # Optional: Bauordner der Oberfläche (Paper-Journal, Datenbank außerhalb des Projekts, OF-45).
+    ui_verzeichnis=os.environ.get("JOURNAL_UI") or None,
     # AP-14b: Statusport des Roller-Dienstes; 0 schaltet die Anbindung ab.
     roller_port=int(os.environ.get("ROLLER_STATUS_PORT", "8600")) or None,
     # AP-14c: Ordner der BO Research Suite (nur lesend).

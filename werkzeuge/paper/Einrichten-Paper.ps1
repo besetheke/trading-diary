@@ -6,7 +6,7 @@
 #
 # Danach: %USERPROFILE%\.trading-journal\paper\flex-paper.cmd ausfuellen (Token und Query-ID der Flex-Abfrage fuer
 # das Paper-Konto DU...), dann Schnellstart-Paper.ps1 und nachtlauf-paper.cmd (Aufgabenplanung).
-$projekt = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$projekt = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))   # Repo-Wurzel (das Skript liegt in werkzeuge, Unterordner paper)
 Set-Location $projekt
 
 $stamm = Join-Path $env:USERPROFILE ".trading-journal\paper"

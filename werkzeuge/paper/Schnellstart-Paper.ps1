@@ -2,7 +2,7 @@
 # (Port 8000, journal.db) laeuft unabhaengig daneben. Die Roller-Anbindung zeigt den Roller-Dienst auf Port 8600.
 # Vorher einmal: Einrichten-Paper.ps1
 Add-Type -AssemblyName System.Windows.Forms
-$projekt = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$projekt = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))   # Repo-Wurzel (das Skript liegt in werkzeuge, Unterordner paper)
 Set-Location $projekt
 
 $stamm = Join-Path $env:USERPROFILE ".trading-journal\paper"
@@ -19,6 +19,7 @@ if (Test-Laeuft) { Start-Process "http://127.0.0.1:$port/start"; return }
 
 $env:JOURNAL_DB = $db
 $env:ROLLER_STATUS_PORT = "8600"
+$env:JOURNAL_UI = Join-Path $projekt "ui\dist"     # Oberflaeche aus dem Projekt (die Datenbank liegt ausserhalb)
 $logs = Join-Path $stamm "logs"
 Start-Process -FilePath ".venv\Scripts\pythonw.exe" `
     -ArgumentList "-m", "uvicorn", "api.app:app", "--host", "127.0.0.1", "--port", "$port" `
