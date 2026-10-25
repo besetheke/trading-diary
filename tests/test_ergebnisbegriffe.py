@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """M06 (erste Stufe): einheitliche Ergebnisbegriffe und ausdrücklicher Bewertungsstichtag in allen Ergebnisansichten."""
 import pathlib
 
