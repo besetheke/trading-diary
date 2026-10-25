@@ -81,7 +81,7 @@ und jeder API-Weg antwortet; das Deploy ruft ihn auf), Vorabprüfung der Downloa
 ## Offen (ohne OF-102)
 
 Browser-Smoke-Test und Restore-Probe (M08),
-Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M06 zweite Stufe, M07 Rest folgen.
+Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M07 Rest folgt.
 
 ## M02 Kampagnen wirtschaftlich (25.10.2026, erste Stufe erledigt)
 
@@ -100,3 +100,10 @@ Kandidaten werden in der Kampagnenseite entschieden: `GET /kampagnen-kandidaten`
 hängen an Kontosicht-Ketten und überleben den Rebuild. **Rücknahme:** Eine Bestätigung wird nicht gelöscht (keine Verknüpfung entfällt, Regel 4); eine
 Verwerfung wird nur durch ausdrückliches „doch bestätigen“ ersetzt (wie `--ueberschreiben` der Rundreise). Eine echte Rücknahme mit Zeitstempel bräuchte
 eine Migration der Tabellen `campaign_ablehnungen`/`campaign_links` — nicht umgesetzt. Tests: `tests/test_kampagnen_entscheidung.py` (4).
+
+### M06, zweite Stufe (25.10.2026, erledigt)
+
+Historische Bewertung: Liegt der Endtag vor dem jüngsten Bestand, bewertet `/auswertung` Unrealisiertes zum jüngsten gespeicherten Bestand bis dahin
+(höchstens 7 Tage davor, sonst leer) mit den Beinen, die an jenem Stichtag offen waren; der Stichtag steht in der Antwort. Annahmen in OF-108.
+Test: `tests/test_bewertung_historisch.py` (4, von Hand gerechnet). Der Baustein `ErgebnisBegriffe` beschreibt das. Nicht Teil: Überleitung in
+Kampagnen.

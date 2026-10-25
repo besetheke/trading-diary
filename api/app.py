@@ -2186,25 +2186,65 @@ def _ueberleitung_aufbauen(engine, db_pfad: str | pathlib.Path) -> UeberleitungA
     )
 
 
+# M06 (zweite Stufe): Liegt der Endtag vor dem letzten Bestand, gilt der jüngste gespeicherte
+# Bestand davor, aber nur, wenn er höchstens so viele Tage zurückliegt. Ein älterer Bestand
+# wäre keine Bewertung "zum Endtag" mehr (Annahme, OF-108).
+HISTORISCHER_BESTAND_MAX_TAGE = 7
+
+
+def _bewertungsstichtag(verbindung: Connection, bis: date | None) -> tuple[date | None, bool]:
+    """(Stichtag, historisch): aktueller Bestand, bei früherem Endtag der jüngste Bestand
+    bis dahin (höchstens ``HISTORISCHER_BESTAND_MAX_TAGE`` davor), sonst ``None``."""
+    aktuell = aktueller_depot_stichtag(verbindung)
+    if aktuell is None or bis is None or bis >= aktuell:
+        return aktuell, False
+    frueh = bis - timedelta(days=HISTORISCHER_BESTAND_MAX_TAGE)
+    historisch = verbindung.execute(
+        select(func.max(flex_open_positions.c.stichtag)).where(
+            flex_open_positions.c.stichtag <= bis, flex_open_positions.c.stichtag >= frueh)
+    ).scalar()
+    return historisch, historisch is not None
+
+
 def _offene_legs_der_auswahl(
     verbindung: Connection,
     ketten_ids: frozenset[int] | None,
     lose_legs: "LoseLegFilter | None | Literal[False]",
+    zum_stichtag: date | None = None,
 ) -> list[dict]:
     """AP-07fu: offene Legs der Kontosicht, die zur Auswahl gehören — dieselbe
     Regel wie für das realisierte Ergebnis (AP-07f): Ketten der Auswahl; lose
     Legs nur, wenn kein Filter sie ausschließt, und dann nach den Werten, die ein
     offenes Leg kennt (Basiswert, Klasse, Währung und Tag der Eröffnung). Ein
-    Schließungsfilter schließt offene lose Legs aus (sie sind nicht geschlossen)."""
-    zeilen = [
-        dict(z)
-        for z in verbindung.execute(
+    Schließungsfilter schließt offene lose Legs aus (sie sind nicht geschlossen).
+
+    Mit ``zum_stichtag`` (historische Bewertung, M06): die Legs, die an diesem Tag offen
+    waren, also am Tag oder davor eröffnet und erst danach (oder noch nicht) geschlossen.
+    Die Kommission ist die Gesamtkommission des Legs (Annahme, OF-108)."""
+    if zum_stichtag is None:
+        bedingung = [legs.c.sicht == SICHT, legs.c.close_exec_id.is_(None)]
+        grundabfrage = select(
+            legs.c.structure_id, legs.c.conid, legs.c.open_exec_id, legs.c.menge,
+            legs.c.kommission_gesamt, legs.c.open_faktor,
+        ).where(*bedingung)
+    else:
+        eroeffnung = executions.alias("eroeffnung")
+        schliessung = executions.alias("schliessung")
+        ende = datetime.combine(zum_stichtag + timedelta(days=1), datetime.min.time())
+        grundabfrage = (
             select(
                 legs.c.structure_id, legs.c.conid, legs.c.open_exec_id, legs.c.menge,
                 legs.c.kommission_gesamt, legs.c.open_faktor,
-            ).where(legs.c.sicht == SICHT, legs.c.close_exec_id.is_(None))
-        ).mappings()
-    ]
+            )
+            .join(eroeffnung, eroeffnung.c.exec_id == legs.c.open_exec_id)
+            .outerjoin(schliessung, schliessung.c.exec_id == legs.c.close_exec_id)
+            .where(
+                legs.c.sicht == SICHT,
+                eroeffnung.c.handelszeit < ende,
+                (legs.c.close_exec_id.is_(None)) | (schliessung.c.handelszeit >= ende),
+            )
+        )
+    zeilen = [dict(z) for z in verbindung.execute(grundabfrage).mappings()]
     if ketten_ids is None and lose_legs is None:
         return zeilen
     kette_je_struktur = {
@@ -2263,7 +2303,8 @@ def _unrealisiert_der_auswahl(
     verbindung: Connection, offene: list[dict], bis: date | None
 ) -> AuswertungUnrealisiertAntwort:
     """AP-07fu: bewertet die offenen Legs mit dem jüngsten Bestand laut IB. Liegt
-    ``bis`` vor dem Stichtag, gibt es keinen passenden Bestand — dann nichts."""
+    ``bis`` vor dem Stichtag, gilt der jüngste Bestand davor (M06, höchstens 7 Tage),
+    sonst nichts."""
     stichtag, bestand, exec_je_id, mult = _bewertungsgrundlage(verbindung, offene, bis)
     e = unrealisiert_auswertung(offene, exec_je_id, mult, bestand, stichtag)
     return AuswertungUnrealisiertAntwort(
@@ -2275,9 +2316,7 @@ def _unrealisiert_der_auswahl(
 def _bewertungsgrundlage(verbindung: Connection, offene: list[dict], bis: date | None):
     """Bestand laut IB (jüngster Stichtag, nicht nach ``bis``), Eröffnungen und
     Multiplikatoren für ``unrealisiert_auswertung`` (AP-07fu, AP-07ku)."""
-    stichtag = aktueller_depot_stichtag(verbindung)
-    if stichtag is not None and bis is not None and bis < stichtag:
-        stichtag = None
+    stichtag, _historisch = _bewertungsstichtag(verbindung, bis)
     bestand: dict[int, dict] = {}
     if stichtag is not None:
         for z in verbindung.execute(
@@ -3788,8 +3827,13 @@ def erzeuge_app(
                 verlauf.append(VerlaufPunktAntwort(datum=tag, kumuliert_eur=_als_text(stand)))
                 tag += timedelta(days=1)
         with engine.connect() as verbindung:
+            bewertung, historisch = _bewertungsstichtag(verbindung, bis)
             unrealisiert = _unrealisiert_der_auswahl(
-                verbindung, _offene_legs_der_auswahl(verbindung, ketten_ids, lose_legs), bis
+                verbindung,
+                _offene_legs_der_auswahl(
+                    verbindung, ketten_ids, lose_legs, bewertung if historisch else None
+                ),
+                bis,
             )
         return AuswertungAntwort(
             tage=basis.tage,

@@ -3871,3 +3871,11 @@ Annahmen: Das 7DTE-Tagesprogramm nutzt die vorhandenen Testprofil-Strategien „
 Standard für das Nachziehen aller Strategien ohne Anteilsvorgabe: Strecke geteilt durch 8 Schritte (mindestens ein Tick), Takt 20 s
 (`nachzieh_ziel_schritte`); das Profil `oa` bleibt bei einem Tick je 5 s. Bei 10 und mehr Eröffnungen je Tag können sich viele offene
 Ketten ansammeln, das ist auf Paper gewollt.
+
+## OF-108 · Historische Bewertung zum Endtag (25.10.2026)
+
+Annahmen (M06, zweite Stufe): Liegt der Endtag der Auswertung vor dem jüngsten Bestand laut IB, wird zum jüngsten gespeicherten Bestand bis zum Endtag
+bewertet, aber nur, wenn er höchstens 7 Tage davor liegt (`HISTORISCHER_BESTAND_MAX_TAGE`); sonst bleibt Unrealisiertes leer. Die Bestände liegen nur
+für wenige Tage vor (der echte Abruf speichert nur gelegentlich), ein älterer Bestand wäre keine Bewertung zum Endtag. Bewertet werden die Beine, die am
+Stichtag des Bestands offen waren (eröffnet bis zu diesem Tag, erst danach oder nicht geschlossen); als Einstand gilt die Gesamtkommission des Beins,
+also bei inzwischen geschlossenen Beinen inklusive der späteren Schließkommission (leichte Abweichung). Soll die Frist länger oder kürzer sein?
