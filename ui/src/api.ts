@@ -1569,3 +1569,35 @@ export async function ladeAnhangHoch(scopeTyp: string, scopeId: string, datei: F
   }
   return (await antwort.json()) as Anhang
 }
+
+// M04: Datenqualität als Arbeitsliste.
+export interface DatenqualitaetPunkt {
+  id: string
+  art: string
+  titel: string
+  schwere: 'fehler' | 'warnung' | 'hinweis'
+  anzahl: number | null
+  betrag: string | null
+  von: string | null
+  bis: string | null
+  betroffen: string[]
+  loesung: string
+  link: string | null
+}
+
+export interface BetriebsLauf {
+  zuletzt_ok: string | null
+  zuletzt: { zeit: string; ergebnis: string; meldung: string | null } | null
+  herkunft?: string
+}
+
+export interface Datenqualitaet {
+  stand: string
+  status: 'ok' | 'warnung' | 'fehler'
+  laeufe: { abruf: BetriebsLauf; import: BetriebsLauf; rebuild: BetriebsLauf }
+  punkte: DatenqualitaetPunkt[]
+}
+
+export function holeDatenqualitaet(kurz: boolean): Promise<Datenqualitaet> {
+  return hole(`/datenqualitaet-liste?kurz=${kurz}`) as Promise<Datenqualitaet>
+}

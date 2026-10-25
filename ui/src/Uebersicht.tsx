@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { OaStand, Uebersicht as Daten } from './api'
-import { fehlerText, holeOaStand, holeUebersicht } from './api'
+import type { Datenqualitaet, OaStand, Uebersicht as Daten } from './api'
+import { fehlerText, holeDatenqualitaet, holeOaStand, holeUebersicht } from './api'
 import Betrag from './Betrag'
 import { datumDe } from './format'
 
@@ -12,6 +12,7 @@ export default function Uebersicht(): JSX.Element {
   const [daten, setzeDaten] = useState<Daten | null>(null)
   const [fehler, setzeFehler] = useState<string | null>(null)
   const [oaStand, setzeOaStand] = useState<OaStand | null>(null)
+  const [qualitaet, setzeQualitaet] = useState<Datenqualitaet | null>(null)
 
   useEffect(() => {
     holeUebersicht()
@@ -20,6 +21,9 @@ export default function Uebersicht(): JSX.Element {
     holeOaStand()
       .then(setzeOaStand)
       .catch(() => setzeOaStand(null))
+    holeDatenqualitaet(true)
+      .then(setzeQualitaet)
+      .catch(() => setzeQualitaet(null))
   }, [])
 
   if (fehler) {
@@ -35,6 +39,13 @@ export default function Uebersicht(): JSX.Element {
   return (
     <section className="uebersicht">
       <h2>Übersicht · {datumDe(daten.heute)}</h2>
+      {qualitaet && qualitaet.punkte.some((p) => p.schwere !== 'hinweis') && (
+        <p className={qualitaet.status === 'fehler' ? 'fehler' : 'warnung'}>
+          {qualitaet.status === 'fehler' ? '✘ Datenqualität: Fehler offen' : '⚠ Datenqualität: Warnungen offen'} —{' '}
+          {qualitaet.punkte.filter((p) => p.schwere !== 'hinweis').slice(0, 2).map((p) => p.titel).join('; ')}{' '}
+          <Link to="/datenqualitaet">Zur Arbeitsliste</Link>
+        </p>
+      )}
       <div className="kacheln">
         <div className="kachel">
           <h3>Kontowert laut IB</h3>

@@ -38,6 +38,15 @@ png, jpeg, gif, webp, pdf, txt, höchstens 5 MB und 20 je Bereich, Ablage in `an
 Ausbrechen über `..`), `nosniff`. **Kein Löschen** von Anhängen (CLAUDE.md Regel 4). Tests: `tests/test_journal_suche.py` (7), darunter die
 Abfrage „alle schlecht getimten Rolls mit Screenshot“ und Erreichbarkeit nach dem Rebuild.
 
+## M04 Datenqualität als Arbeitsliste (25.10.2026, erledigt)
+
+Neue Tabelle `betriebslaeufe` (Migration `a1c4e7b9d2f5`): `journal abrufen`, `journal import` und `journal rebuild` protokollieren je Lauf Ergebnis
+(ok/fehler/teilweise) und Meldung. `GET /datenqualitaet-liste` und die Seite „Datenqualität“ trennen **letzten erfolgreichen Abruf, Import und
+Rebuild** und zeigen Fehlschläge/Teilerfolge; die Punkte (Betrieb, Legs ohne Struktur, Kapitalmaßnahmen ohne Kosten, fehlende Wechselkurse,
+offene Rollkandidaten, Abgleichsreste) tragen Art, Schwere, Anzahl, Betrag, **Zeitraum**, betroffene Objekte und Lösungsweg. Die Startseite
+zeigt bei Fehlern oder Warnungen einen Hinweis mit Link zur Arbeitsliste. Tests: `tests/test_datenqualitaet.py` (10). Ist die Tabelle noch nicht
+migriert, meldet die Liste das ausdrücklich („alembic upgrade head“).
+
 ## M08 (25.10.2026, erledigt)
 
 `python -m journal restore-probe <sicherung>` (Integrität, Migration, optional Rebuild in temporärer Kopie), `werkzeuge/smoke.py` (jede Seite

@@ -69,6 +69,12 @@ def _oa_bericht(name: str, ergebnis) -> None:
         )
 
 
+def _lauf(db_pfad, art: str, ergebnis: str, meldung: str | None = None) -> None:
+    """Betriebslauf für die Datenqualität-Seite festhalten (AP-17g, M04); scheitert still."""
+    from journal.betrieb import protokolliere
+    protokolliere(db_pfad, art, ergebnis, meldung)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="journal",
@@ -336,11 +342,13 @@ def main(argv: list[str] | None = None) -> int:
             # Datenfehler der Quelle: benannt abbrechen, kein Traceback —
             # die Transaktion hat nichts geschrieben (AP-02).
             print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
+            _lauf(db_pfad, "import", "fehler", f"{argumente.datei.name}: {fehler}")
             return 1
         print(
             f"Import {argumente.datei.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
             f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
         )
+        _lauf(db_pfad, "import", "ok", f"{argumente.datei.name}: {ergebnis.zeilen_neu} neu")
     elif argumente.befehl == "nachtragen-realisiert":
         db_pfad = argumente.db or os.environ.get("JOURNAL_DB", "journal.db")
         for datei in argumente.dateien:
@@ -433,19 +441,23 @@ def main(argv: list[str] | None = None) -> int:
             pfad = flex_abruf.statement_speichern(xml, ziel_pfad)
         except (flex_abruf.AbrufFehler, ValueError) as fehler:
             print(f"Abruf fehlgeschlagen: {fehler}", file=sys.stderr)
+            _lauf(db_pfad, "abruf", "fehler", str(fehler))
             return 1
         print(f"Abruf: Statement nach {pfad}")
+        _lauf(db_pfad, "abruf", "ok", pfad.name)
         try:
             ergebnis = import_flex_file(db_pfad, pfad)
         except (FileNotFoundError, ValueError) as fehler:
             # Die Datei bleibt zur Prüfung liegen; ein Rebuild folgt nicht
             # (Vertrag AP-02a2).
             print(f"Import fehlgeschlagen: {fehler}", file=sys.stderr)
+            _lauf(db_pfad, "import", "fehler", f"{pfad.name}: {fehler}")
             return 1
         print(
             f"Import {pfad.name}: {ergebnis.zeilen_gesamt} Zeilen gelesen, "
             f"{ergebnis.zeilen_neu} neu, {ergebnis.zeilen_uebersprungen} übersprungen"
         )
+        _lauf(db_pfad, "import", "ok", f"{pfad.name}: {ergebnis.zeilen_neu} neu")
         # AP-13r2: neue OA-Exporte vor dem Rebuild einlesen, damit neue Trades
         # ihre Strategie bekommen. Ordner aus OA_ORDNER, sonst „oa" neben dem
         # Flex-Zielordner; fehlt er, geschieht nichts.
@@ -478,7 +490,10 @@ def main(argv: list[str] | None = None) -> int:
                 # Widerspruch in den Daten oder den Overrides: benannt
                 # abbrechen — die kurze Transaktion hat nichts geschrieben.
                 print(f"Rebuild fehlgeschlagen: {fehler}", file=sys.stderr)
+                _lauf(db_pfad, "rebuild", "fehler", str(fehler))
                 return 1
+            _lauf(db_pfad, "rebuild", "teilweise" if lauf.overrides_verwaist > 0 else "ok",
+                  f"{lauf.chains} Ketten, {lauf.overrides_verwaist} verwaiste Overrides")
             print(
                 f"Rebuild {db_pfad}: {lauf.legs} Legs, {lauf.structures} Strukturen, "
                 f"{lauf.chains} Ketten, {lauf.chain_links} Kettenglieder, "
@@ -507,7 +522,10 @@ def main(argv: list[str] | None = None) -> int:
             # Widerspruch in den Daten oder den Overrides: benannt abbrechen,
             # kein Traceback — die kurze Transaktion hat nichts geschrieben.
             print(f"Rebuild fehlgeschlagen: {fehler}", file=sys.stderr)
+            _lauf(db_pfad, "rebuild", "fehler", str(fehler))
             return 1
+        _lauf(db_pfad, "rebuild", "teilweise" if ergebnis.overrides_verwaist > 0 else "ok",
+              f"{ergebnis.chains} Ketten, {ergebnis.overrides_verwaist} verwaiste Overrides")
         print(
             f"Rebuild {db_pfad}: {ergebnis.legs} Legs, {ergebnis.structures} Strukturen, "
             f"{ergebnis.chains} Ketten, {ergebnis.chain_links} Kettenglieder, "

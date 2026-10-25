@@ -3373,6 +3373,16 @@ def erzeuge_app(
                 pass
         return RollerAntwort(erreichbar=status is not None, status=status)
 
+    @applikation.get("/datenqualitaet-liste")
+    def datenqualitaet(kurz: bool = False) -> dict:
+        """Arbeitsliste der Datenqualität (M04): Betriebsstatus (letzter Abruf, Import, Rebuild,
+        Fehlschläge) und Punkte mit Art, Schwere, Anzahl, Zeitraum, betroffenen Objekten und
+        Lösungsweg. ``kurz`` lässt den langsamen Abgleich weg (Startseite). Nur lesend."""
+        from datetime import date as _heute
+
+        from journal.datenqualitaet import arbeitsliste
+        return arbeitsliste(db_pfad, _heute.today(), mit_abgleich=not kurz)
+
     @applikation.get("/echtgeld-reife")
     def echtgeld_reife() -> dict:
         """Messbare Kriterien fuer den Schritt auf Echtgeld aus dem Roller-Status plus manuelle

@@ -25,6 +25,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     Table,
@@ -956,4 +957,19 @@ metrics_by_chain = Table(
 )
 metrics_by_campaign = Table(
     "metrics_by_campaign", metadata, Column("id", Integer, primary_key=True)
+)
+
+# AP-17g (M04): Betriebsläufe: Abruf, Import und Rebuild mit Ergebnis. Das Importdatum allein
+# beweist keinen erfolgreichen Neuaufbau; die Startseite unterscheidet anhand dieser Zeilen.
+betriebslaeufe = Table(
+    "betriebslaeufe",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("art", Text, nullable=False),            # abruf / import / rebuild
+    Column("beendet_am", DateTime, nullable=False),
+    Column("ergebnis", Text, nullable=False),       # ok / fehler / teilweise
+    Column("meldung", Text, nullable=True),
+    CheckConstraint("art IN ('abruf', 'import', 'rebuild')", name="ck_betriebslaeufe_art"),
+    CheckConstraint("ergebnis IN ('ok', 'fehler', 'teilweise')", name="ck_betriebslaeufe_ergebnis"),
+    Index("ix_betriebslaeufe_art_beendet", "art", "beendet_am"),
 )

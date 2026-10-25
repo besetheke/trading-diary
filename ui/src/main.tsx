@@ -6,6 +6,7 @@ import Depot from './Depot'
 import Titel from './Titel'
 import RollKosten from './RollKosten'
 import JournalSuche from './JournalSuche'
+import Datenqualitaet from './Datenqualitaet'
 import DaxSynthetic from './DaxSynthetic'
 import Zeitraumwahl from './Zeitraumwahl'
 import { useZeitraum, zeitraumSuche } from './zeitraum'
@@ -86,6 +87,7 @@ function Kopf(): JSX.Element {
           <Link to={`/kosten${mit}`}>Kosten &amp; Erträge</Link>
           <Link to="/roll-kosten">Roll-Kosten</Link>
           <Link to="/suche">Suche</Link>
+          <Link to="/datenqualitaet">Datenqualität</Link>
           {/* DAX Synthetic ist zurückgestellt (20.10.2026): Seite bleibt unter /dax-synthetic erreichbar, nicht im Menü. */}
           <Link to="/steuer">Steuer</Link>
           <Link to={`/monat${mit}`}>Kalender</Link>
@@ -144,6 +146,7 @@ ReactDOM.createRoot(document.getElementById('wurzel') as HTMLElement).render(
             {/* AP-17g (M01): Roll-Kosten und Kommission; API-Weg ist /roll-kosten-auswertung. */}
             <Route path="/roll-kosten" element={<RollKosten />} />
             <Route path="/suche" element={<JournalSuche />} />
+            <Route path="/datenqualitaet" element={<Datenqualitaet />} />
             <Route path="/dax-synthetic" element={<DaxSynthetic />} />
             {/* AP-08j2: /kalender ist der API-Endpunkt (AP-07t). Die Seite
                 heißt /monat, damit Neuladen und Lesezeichen die Oberfläche
