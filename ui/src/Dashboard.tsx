@@ -10,6 +10,7 @@ import ZweiLinien from './diagramm/ZweiLinien'
 import { datumDe, prozent } from './format'
 import Ueberleitung from './Ueberleitung'
 import { useZeitraum } from './zeitraum'
+import ErgebnisBegriffe from './ErgebnisBegriffe'
 
 // Dashboard (überarbeitet 11.10.2026, Wunsch des Nutzers): EIN Diagramm mit drei
 // Ansichten statt vieler Einzelkurven —
@@ -103,6 +104,7 @@ export default function Dashboard(): JSX.Element {
   return (
     <section className="dashboard">
       <h2>Dashboard</h2>
+      <ErgebnisBegriffe />
 
       {fehler ? (
         <section className="fehler">

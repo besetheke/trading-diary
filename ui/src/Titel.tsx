@@ -5,6 +5,7 @@ import type { TitelAntwort, TitelZeile } from './api'
 import Betrag from './Betrag'
 import { datumDe } from './format'
 import { useZeitraum } from './zeitraum'
+import ErgebnisBegriffe from './ErgebnisBegriffe'
 
 // AP-16: Ergebnis je Titel über alle Instrumente. Eine Zeile je Basiswert — Optionen, Aktien und Futures
 // zusammen —, im Unterschied zur Positionsliste (eine Zeile je Trade). Alles Werte der Quelle
@@ -188,6 +189,7 @@ export default function Titel(): JSX.Element {
   return (
     <section>
       <h2>Titel — Ergebnis über alle Instrumente</h2>
+      <ErgebnisBegriffe />
       <p className="sicht">
         Eine Zeile je Basiswert (Optionen, Aktien, Futures zusammen); die Positionsliste zeigt dagegen einen Trade je
         Zeile. Bestand zum Stichtag {daten.stichtag ? datumDe(daten.stichtag) : '—'}.

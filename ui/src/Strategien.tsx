@@ -5,6 +5,7 @@ import { fehlerText, holeStrategien } from "./api";
 import Betrag from "./Betrag";
 import { betrag, datumDe, prozent } from "./format";
 import { useZeitraum } from "./zeitraum";
+import ErgebnisBegriffe from "./ErgebnisBegriffe";
 
 // AP-06sc: Strategie-Scorecard. Alle Werte kommen fertig aus GET /strategien
 // (Vertrag 8). Die Sortierung über die Spaltenköpfe ordnet nur Zeilen — dafür
@@ -151,6 +152,7 @@ export default function Strategien(): JSX.Element {
   return (
     <section className="strategien">
       <h2>Strategien</h2>
+      <ErgebnisBegriffe />
       <p className="sicht">
         Je OptionApp-Strategie die im Zeitraum geschlossenen Positionen
         (Kontosicht, netto in EUR, Kurs des jeweiligen Tages). Zuteilungen und

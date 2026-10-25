@@ -38,6 +38,13 @@ png, jpeg, gif, webp, pdf, txt, höchstens 5 MB und 20 je Bereich, Ablage in `an
 Ausbrechen über `..`), `nosniff`. **Kein Löschen** von Anhängen (CLAUDE.md Regel 4). Tests: `tests/test_journal_suche.py` (7), darunter die
 Abfrage „alle schlecht getimten Rolls mit Screenshot“ und Erreichbarkeit nach dem Rebuild.
 
+## M06 Begriffe und Bewertungsstichtag (25.10.2026, erste Stufe erledigt)
+
+Baustein `ErgebnisBegriffe` (Dashboard, Positionen, Titel, Strategien): einheitliche Definitionen von realisiert, teilrealisiert, unrealisiert und gesamt,
+ausdrücklich benannter Bewertungsstichtag (Bestand des letzten Abrufs) und eine deutliche Warnung, wenn der gewählte Endtag davor liegt und
+Unrealisiertes deshalb nicht verfügbar ist. Offen (zweite Stufe): historischer Depotzustand aus Ausführungen bis zum Stichtag plus passendem Snapshot;
+Überleitbarkeit in Kampagnen. Test: `tests/test_ergebnisbegriffe.py`.
+
 ## M04 Datenqualität als Arbeitsliste (25.10.2026, erledigt)
 
 Neue Tabelle `betriebslaeufe` (Migration `a1c4e7b9d2f5`): `journal abrufen`, `journal import` und `journal rebuild` protokollieren je Lauf Ergebnis

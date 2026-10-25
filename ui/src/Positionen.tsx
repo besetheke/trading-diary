@@ -18,6 +18,7 @@ import { betrag, datumDe, mengeDe, zeit, zeitDe } from './format'
 import Betrag from './Betrag'
 import FilterAuswertung from './FilterAuswertung'
 import { useZeitraum } from './zeitraum'
+import ErgebnisBegriffe from './ErgebnisBegriffe'
 
 // Wunsch des Nutzers (11.10.2026): Vorgabe 200 Zeilen, Auswahl 50 bis 500.
 const LIMITS = [50, 100, 200, 500]
@@ -841,6 +842,7 @@ export default function Positionen(): JSX.Element {
   return (
     <section>
       <h2>Positionen</h2>
+      <ErgebnisBegriffe />
       <details
         className="filterbereich"
         open={filterOffen}
