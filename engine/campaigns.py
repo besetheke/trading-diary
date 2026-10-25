@@ -198,10 +198,28 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
     for kette in chains:
         eindeutig.setdefault(_naturschluessel(kette), kette)
     ketten = list(eindeutig.values())
+    schluessel_je_kette = {id(kette): schluessel for schluessel, kette in eindeutig.items()}
+
+    # Beide Kandidatenregeln verlangen denselben Basiswert und gegenläufige Seiten
+    # (Call gegen Put). Statt alle Paare zu prüfen, laufen nur die Partner der
+    # Gegenseite desselben Basiswerts, in der ursprünglichen Reihenfolge (AP-17g, M02:
+    # bei Tausenden Ketten brauchte die Vollprüfung über zwei Minuten).
+    positionen: dict[tuple[str, str], list[int]] = {}
+    for position, kette in enumerate(ketten):
+        positionen.setdefault((kette.underlying, kette.seite), []).append(position)
+    je_basis_seite = {
+        schluessel: [ketten[i] for i in liste] for schluessel, liste in positionen.items()
+    }
 
     kandidaten: list[CampaignKandidat] = []
     for i, a in enumerate(ketten):
-        for b in ketten[i + 1 :]:
+        if a.seite not in ("Call", "Put"):
+            continue
+        gegenseite = "Put" if a.seite == "Call" else "Call"
+        for j in positionen.get((a.underlying, gegenseite), ()):
+            if j <= i:
+                continue
+            b = ketten[j]
             fruehere, spaetere = _chronologisch(a, b)
             if _ic_kandidat(a, b):
                 kandidaten.append(
@@ -220,7 +238,9 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
             # filtert das Paar heraus.
             for bestand, gegenseite in ((b, a), (a, b)):
                 roll_zeitpunkt = _financing_roll_zeitpunkt(bestand, gegenseite)
-                if roll_zeitpunkt is None or _doppel_roll(gegenseite, ketten):
+                if roll_zeitpunkt is None or _doppel_roll(
+                    gegenseite, je_basis_seite.get((gegenseite.underlying, gegenseite.seite), [])
+                ):
                     continue
                 kandidaten.append(
                     CampaignKandidat(
@@ -235,8 +255,8 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
     kandidaten.sort(
         key=lambda k: (
             k.typ,
-            _naturschluessel(k.kette_a),
-            _naturschluessel(k.kette_b),
+            schluessel_je_kette[id(k.kette_a)],
+            schluessel_je_kette[id(k.kette_b)],
         )
     )
     return tuple(kandidaten)
@@ -245,6 +265,6 @@ def campaign_kandidaten(chains: Iterable[Chain]) -> tuple[CampaignKandidat, ...]
 def _chronologisch(a: Chain, b: Chain) -> tuple[Chain, Chain]:
     """Die beiden Ketten in der Reihenfolge (kette_a, kette_b): früher
     eröffnet zuerst, bei Gleichstand nach Naturschlüssel (Vertrag 2)."""
-    if (a.eroeffnet_am, _naturschluessel(a)) <= (b.eroeffnet_am, _naturschluessel(b)):
-        return a, b
-    return b, a
+    if a.eroeffnet_am != b.eroeffnet_am:
+        return (a, b) if a.eroeffnet_am < b.eroeffnet_am else (b, a)
+    return (a, b) if _naturschluessel(a) <= _naturschluessel(b) else (b, a)
