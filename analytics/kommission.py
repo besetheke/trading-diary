@@ -75,6 +75,9 @@ class KommissionsErgebnis:
     anzahl_ketten_gesamt: int  # inklusive offener und mangelbehafteter Ketten
     # Je abgeschlossener Kette (chain_id, brutto_eur, kommission_eur); None ohne vollständigen Kurs.
     ketten_summen: tuple = ()
+    # Offene Ketten: (chain_id, brutto_eur, kommission_eur), Cash-Flow bisher,
+    # KEIN Ergebnis (AP-17g, M02); None ohne Kurs.
+    offene_summen: tuple = ()
 
 
 def _beteiligt(
@@ -194,6 +197,7 @@ def kommissions_attribution(
 
     gruppen_acc: dict[tuple[str, str], dict[str, object]] = {}
     ketten_summen: list[tuple] = []
+    offene_summen: list[tuple] = []
     anzahl_ketten_gesamt = 0
     for chain_id in sorted(kette_je_id):
         zeile = kette_je_id[chain_id]
@@ -212,7 +216,12 @@ def kommissions_attribution(
             continue
         anzahl_ketten_gesamt += 1
         if zeile["beendet_am"] is None:
-            # Regel 2: offene Ketten haben noch keine endgültige Kommission.
+            # Regel 2: offene Ketten haben noch keine endgültige Kommission —
+            # nur separat als Cash-Flow ausgewiesen.
+            offen = _eur_teile(ketten_legs, exec_je_id, mult_je_conid)
+            offene_summen.append(
+                (chain_id, None, None) if offen is None else (chain_id, offen[0], offen[1])
+            )
             continue
         teile = _eur_teile(ketten_legs, exec_je_id, mult_je_conid)
         ketten_summen.append(
@@ -278,6 +287,7 @@ def kommissions_attribution(
         gruppen=gruppen,
         anzahl_ketten_gesamt=anzahl_ketten_gesamt,
         ketten_summen=tuple(ketten_summen),
+        offene_summen=tuple(offene_summen),
     )
 
 

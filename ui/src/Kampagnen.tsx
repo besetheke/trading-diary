@@ -6,12 +6,54 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { fehlerText, holeKampagne, holeKampagnen } from './api'
-import type { Kampagne, KampagnenDetail, KampagnenListe } from './api'
+import type { Kampagne, KampagnenBeitrag, KampagnenDetail, KampagnenListe, KampagnenWirtschaft } from './api'
 import Betrag from './Betrag'
 import { zeitDe } from './format'
 
 interface Entwurf {
   basiswert: string
+}
+
+const STATUS_TEXT: Record<string, string> = {
+  abgeschlossen: 'abgeschlossen',
+  teilweise_offen: 'teilweise offen — Ergebnis nur der geschlossenen Ketten',
+  offen: 'noch offen — kein Ergebnis',
+  kurs_fehlt: 'unvollständig — Wechselkurs fehlt, keine Summe',
+}
+
+// Geschlossene Ketten tragen ein Ergebnis, offene nur den Cash-Flow bisher — der wird nie
+// zum Ergebnis addiert (AP-17g, M02).
+function beitragZellen(b: KampagnenBeitrag | undefined): JSX.Element {
+  if (b === undefined) return <td colSpan={4}>—</td>
+  return (
+    <>
+      <td>{b.stand === 'geschlossen' ? 'Ergebnis' : 'offen (kein Ergebnis)'}</td>
+      <td className="zahl">
+        <Betrag wert={b.brutto_eur} />
+      </td>
+      <td className="zahl">
+        <Betrag wert={b.kommission_eur} />
+      </td>
+      <td className="zahl">
+        <Betrag wert={b.netto_eur} />
+      </td>
+    </>
+  )
+}
+
+function Ergebniszeile(props: { w: KampagnenWirtschaft }): JSX.Element {
+  const { w } = props
+  return (
+    <p>
+      Kampagnenergebnis (Summe der Ergebnis-Zeilen): <Betrag wert={w.ergebnis_eur} /> — {STATUS_TEXT[w.ergebnis_status]}.
+      {w.offener_cashflow_eur !== null ? (
+        <>
+          {' '}
+          Offener Cash-Flow bisher (kein Ergebnis): <Betrag wert={w.offener_cashflow_eur} />.
+        </>
+      ) : null}
+    </p>
+  )
 }
 
 // Eine Zeile der Liste. Klick auf die Zeile klappt die verknüpften Ketten auf
@@ -79,6 +121,8 @@ function KampagnenZeile(props: {
             ) : detail === null ? (
               <p className="laedt">Lade Ketten …</p>
             ) : (
+              <>
+              {detail.wirtschaft !== null ? <Ergebniszeile w={detail.wirtschaft} /> : null}
               <table className="positionen kampagnenketten">
                 <thead>
                   <tr>
@@ -86,6 +130,10 @@ function KampagnenZeile(props: {
                     <th>Beziehungstyp</th>
                     <th>Erkennung</th>
                     <th>Bestätigt am</th>
+                    <th>Stand</th>
+                    <th>Brutto</th>
+                    <th>Kommission</th>
+                    <th>Netto / Cash-Flow</th>
                     <th>Position</th>
                   </tr>
                 </thead>
@@ -98,6 +146,7 @@ function KampagnenZeile(props: {
                       <td className="zeit" title={kette.bestaetigt_am ?? undefined}>
                         {zeitDe(kette.bestaetigt_am)}
                       </td>
+                      {beitragZellen(detail.wirtschaft?.je_kette[String(kette.chain_id)])}
                       <td>
                         <Link to={`/positionen/${kette.chain_id}`}>öffnen</Link>
                       </td>
@@ -105,6 +154,7 @@ function KampagnenZeile(props: {
                   ))}
                 </tbody>
               </table>
+              </>
             )}
           </td>
         </tr>

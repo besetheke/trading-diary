@@ -360,8 +360,26 @@ export interface KampagnenKette {
   bestaetigt_am: string | null
 }
 
+// AP-17g (M02): geschlossen = Ergebnis, offen = Cash-Flow bisher (kein Ergebnis).
+export interface KampagnenBeitrag {
+  stand: 'geschlossen' | 'offen'
+  brutto_eur: string | null
+  kommission_eur: string | null
+  netto_eur: string | null
+}
+
+export interface KampagnenWirtschaft {
+  je_kette: Record<string, KampagnenBeitrag>
+  ergebnis_eur: string | null
+  ergebnis_status: 'abgeschlossen' | 'teilweise_offen' | 'offen' | 'kurs_fehlt'
+  offener_cashflow_eur: string | null
+  anzahl_geschlossen: number
+  anzahl_offen: number
+}
+
 export interface KampagnenDetail extends Kampagne {
   ketten: KampagnenKette[]
+  wirtschaft: KampagnenWirtschaft | null
 }
 
 export interface KampagnenListe {

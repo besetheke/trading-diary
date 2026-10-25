@@ -305,8 +305,27 @@ class KampagnenKetteAntwort(BaseModel):
     bestaetigt_am: datetime | None
 
 
+class KampagnenBeitragAntwort(BaseModel):
+    """Beitrag einer Kette (AP-17g, M02): geschlossen = Ergebnis, offen = nur Cash-Flow."""
+
+    stand: str
+    brutto_eur: str | None
+    kommission_eur: str | None
+    netto_eur: str | None
+
+
+class KampagnenWirtschaftAntwort(BaseModel):
+    je_kette: dict[str, KampagnenBeitragAntwort]
+    ergebnis_eur: str | None
+    ergebnis_status: str  # abgeschlossen | teilweise_offen | offen | kurs_fehlt
+    offener_cashflow_eur: str | None
+    anzahl_geschlossen: int
+    anzahl_offen: int
+
+
 class KampagneDetailAntwort(KampagneAntwort):
     ketten: list[KampagnenKetteAntwort]
+    wirtschaft: KampagnenWirtschaftAntwort | None = None
 
 
 class KampagnenListeAntwort(BaseModel):
@@ -3132,8 +3151,11 @@ def erzeuge_app(
                 .where(campaign_links.c.campaign_id == campaign_id)
                 .order_by(campaign_links.c.chain_id)
             ).mappings().all()
+        from api.kampagnen_wirtschaft import beitraege
+
         return KampagneDetailAntwort(
             **_kampagne_als_dict(zeile, anzahl_ketten),
+            wirtschaft=beitraege(db_pfad, [z["chain_id"] for z in ketten_zeilen]),
             ketten=[
                 KampagnenKetteAntwort(
                     chain_id=z["chain_id"],

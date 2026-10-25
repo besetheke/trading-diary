@@ -81,4 +81,13 @@ und jeder API-Weg antwortet; das Deploy ruft ihn auf), Vorabprüfung der Downloa
 ## Offen (ohne OF-102)
 
 Browser-Smoke-Test und Restore-Probe (M08),
-Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M02–M07 folgen.
+Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M02 zweite Stufe (Kandidaten-Dialog), M06 zweite Stufe, M07 Rest folgen.
+
+## M02 Kampagnen wirtschaftlich (25.10.2026, erste Stufe erledigt)
+
+`GET /kampagnen/{id}` liefert zusätzlich `wirtschaft`: je Kette Brutto, Kommission, Netto in EUR mit Stand `geschlossen` (= Ergebnis) oder `offen`
+(= Cash-Flow bisher, **kein Ergebnis**). Das Kampagnenergebnis ist die Summe der angezeigten Ergebnis-Zeilen der geschlossenen Ketten. Regel für
+teilweise offene Kampagnen: Status `teilweise_offen`, Ergebnis nur der geschlossenen Ketten, offener Cash-Flow getrennt und nie addiert. Fehlt bei einer
+geschlossenen Kette der Kurs, bleibt das Ergebnis leer (`kurs_fehlt`). Kern: `KommissionsErgebnis.offene_summen` (bestehendes Verhalten unverändert),
+`api/kampagnen_wirtschaft.py`, Anzeige in `ui/src/Kampagnen.tsx`. Tests: `tests/test_kampagnen_wirtschaft.py` (4, von Hand gerechnet: 392 / 296).
+Offen (zweite Stufe): Bestätigen/Verwerfen/Zurücknehmen von Kandidaten in der Oberfläche.
