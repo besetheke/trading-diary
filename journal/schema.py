@@ -973,3 +973,20 @@ betriebslaeufe = Table(
     CheckConstraint("ergebnis IN ('ok', 'fehler', 'teilweise')", name="ck_betriebslaeufe_ergebnis"),
     Index("ix_betriebslaeufe_art_beendet", "art", "beendet_am"),
 )
+
+# AP-17g (M03): manuelle Strategiezuordnung an Ketten, am Naturschlüssel (überlebt jeden Rebuild).
+# Rücknahme löscht nichts (Regel 4), sie setzt zurueckgenommen_am. Die Herkunft „manuell“ steht
+# hier: oa_erkennung an Ketten erlaubt nur auto/heuristik.
+strategie_zuordnungen = Table(
+    "strategie_zuordnungen",
+    metadata,
+    Column("natur_schluessel", Text, primary_key=True),
+    Column("strategie", Text, nullable=False),
+    Column("begruendung", Text, nullable=True),
+    Column("erstellt_am", DateTime, nullable=False),
+    Column("geaendert_am", DateTime, nullable=True),
+    Column("zurueckgenommen_am", DateTime, nullable=True),
+    Column("oa_vorher", Text, nullable=True),
+    Column("oa_erkennung_vorher", Text, nullable=True),
+    Column("konflikt_oa", Text, nullable=True),
+)

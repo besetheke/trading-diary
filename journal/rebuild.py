@@ -98,6 +98,7 @@ from journal.schema import (
     roller_link,
     structures,
 )
+from journal.strategie_zuordnung import anwenden as strategie_zuordnungen_anwenden
 
 # Vertrag 12: `structures.erkennung` hat ein anderes Vokabular als das Feld
 # `Structure.erkennung` der Dataclass. Die Spalte wird aus `methode` abgeleitet.
@@ -153,6 +154,10 @@ class RebuildErgebnis:
     journal_bezuege_umgehaengt: int = 0
     journal_bezuege_uneindeutig: int = 0
     journal_bezuege_verwaist: int = 0
+    # AP-17g (M03): manuelle Strategiezuordnungen: angewandt, davon im Widerspruch zu OA, ohne Kette
+    strategie_manuell: int = 0
+    strategie_widerspruch: int = 0
+    strategie_verwaist: int = 0
 
 
 @dataclass(frozen=True)
@@ -910,6 +915,11 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         bestand.instrument_je_conid,
     )
 
+    # -- Manuelle Strategiezuordnung (AP-17g, M03): nach dem OA-Abgleich, über den Naturschlüssel.
+    strategie_manuell, strategie_widerspruch, strategie_verwaist = strategie_zuordnungen_anwenden(
+        verbindung, ketten_id_je_schluessel, kette_sicht.ketten_id_je_schluessel
+    )
+
     offene_kandidaten = _offene_kandidaten(
         ketten_ergebnis,
         overrides,
@@ -971,6 +981,9 @@ def _rebuild_laufen(verbindung: Connection) -> RebuildErgebnis:
         journal_bezuege_umgehaengt=konto.bezuege[0] + kette_sicht.bezuege[0],
         journal_bezuege_uneindeutig=konto.bezuege[1] + kette_sicht.bezuege[1],
         journal_bezuege_verwaist=konto.bezuege[2] + kette_sicht.bezuege[2],
+        strategie_manuell=strategie_manuell,
+        strategie_widerspruch=strategie_widerspruch,
+        strategie_verwaist=strategie_verwaist,
     )
 
 

@@ -5,6 +5,7 @@ import type { Ausfuehrung, KetteDetail, Kettenglied, StrukturDetail } from './ap
 import Journal from './Journal'
 import { betrag, datumDe, zeitDe } from './format'
 import Betrag from './Betrag'
+import StrategieZuordnung from './StrategieZuordnung'
 
 // Bezeichner aus der Datenbank, deutsch gelesen — ein unbekannter Schlüssel
 // wird unverändert gezeigt statt verschwiegen.
@@ -224,6 +225,7 @@ export default function PositionDetail(): JSX.Element {
       </table>
 
       {/* AP-08j: Journal der Kette — unterhalb aller bestehenden Inhalte. */}
+      <StrategieZuordnung chainId={nummer} />
       <Journal scopeTyp="chain" scopeId={String(nummer)} />
     </section>
   )

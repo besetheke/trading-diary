@@ -38,6 +38,16 @@ png, jpeg, gif, webp, pdf, txt, höchstens 5 MB und 20 je Bereich, Ablage in `an
 Ausbrechen über `..`), `nosniff`. **Kein Löschen** von Anhängen (CLAUDE.md Regel 4). Tests: `tests/test_journal_suche.py` (7), darunter die
 Abfrage „alle schlecht getimten Rolls mit Screenshot“ und Erreichbarkeit nach dem Rebuild.
 
+## M03 Manuelle Strategiezuordnung (25.10.2026, erledigt für Ketten)
+
+Neue Tabelle `strategie_zuordnungen` (Migration `b3f1a8c2d6e9`), am **Naturschlüssel** der Kette: Strategie, Begründung, Zeitstempel, der Stand vor
+der Zuordnung und ein eventueller OA-Widerspruch. Der Rebuild wendet aktive Zuordnungen nach dem OA-Abgleich in beiden Sichten an (Kette und
+ihre Strukturen) und zählt angewandte, widersprechende und verwaiste (`RebuildErgebnis.strategie_*`). Wege: `GET /strategie-zuordnung/{id}`,
+`PUT /journal/strategie-zuordnung/{id}`, `POST …/zuruecknehmen` (die Rücknahme löscht nichts, Regel 4); auf der Positionsseite der Block
+„Strategie“. Die Datenqualität-Liste zeigt Widersprüche zu OA und verwaiste Zuordnungen. Die Herkunft „manuell“ steht in der Tabelle, weil die
+Prüfregel für `oa_erkennung` an Ketten und Strukturen nur auto/heuristik erlaubt (kein Umbau der Tabellen). Tests: `tests/test_strategie_zuordnung.py` (6).
+Nicht Teil: eigene Zuordnung auf Strukturebene, Rücknahme von Roll-Entscheidungen in der Oberfläche (die bestehende Rollkandidaten-Seite entscheidet).
+
 ## M06 Begriffe und Bewertungsstichtag (25.10.2026, erste Stufe erledigt)
 
 Baustein `ErgebnisBegriffe` (Dashboard, Positionen, Titel, Strategien): einheitliche Definitionen von realisiert, teilrealisiert, unrealisiert und gesamt,

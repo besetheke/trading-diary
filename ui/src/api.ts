@@ -1601,3 +1601,31 @@ export interface Datenqualitaet {
 export function holeDatenqualitaet(kurz: boolean): Promise<Datenqualitaet> {
   return hole(`/datenqualitaet-liste?kurz=${kurz}`) as Promise<Datenqualitaet>
 }
+
+// M03: manuelle Strategiezuordnung an einer Kette.
+export interface StrategieZuordnungStand {
+  chain_id: number
+  strategie: string | null
+  herkunft: string | null
+  manuell: {
+    strategie: string
+    begruendung: string | null
+    erstellt_am: string
+    geaendert_am: string | null
+    oa_widerspricht: string | null
+    stand_vorher: string | null
+  } | null
+  zurueckgenommen_am: string | null
+}
+
+export function holeStrategieZuordnung(chainId: number): Promise<StrategieZuordnungStand> {
+  return hole(`/strategie-zuordnung/${chainId}`) as Promise<StrategieZuordnungStand>
+}
+
+export function setzeStrategieZuordnung(chainId: number, strategie: string, begruendung: string): Promise<StrategieZuordnungStand> {
+  return schicke('PUT', `/journal/strategie-zuordnung/${chainId}`, { strategie, begruendung }) as Promise<StrategieZuordnungStand>
+}
+
+export function nimmStrategieZuordnungZurueck(chainId: number): Promise<StrategieZuordnungStand> {
+  return schicke('POST', `/journal/strategie-zuordnung/${chainId}/zuruecknehmen`, {}) as Promise<StrategieZuordnungStand>
+}

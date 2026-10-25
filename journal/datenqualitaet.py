@@ -15,7 +15,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
 from journal.db import create_db_engine
-from journal.schema import betriebslaeufe, executions, import_runs, instruments, legs
+from journal.schema import (
+    betriebslaeufe,
+    chains,
+    executions,
+    import_runs,
+    instruments,
+    legs,
+    strategie_zuordnungen,
+)
 
 ABRUF_ALT_TAGE = 2          # ab so vielen Tagen ohne erfolgreichen Abruf: Warnung
 LOG_HINWEIS = r"%USERPROFILE%\.trading-journal\logs\nachtlauf-<Datum>.log"
@@ -126,6 +134,25 @@ def arbeitsliste(db_pfad: str | pathlib.Path, heute: date | None = None, *, mit_
         if n:
             punkte.append(_punkt("kurs-fehlt", "kurs", "Ausführungen in Fremdwährung ohne Wechselkurs (fxRateToBase)", "fehler", anzahl=n, von=von, bis=bis,
                                  loesung="Flex-Abfrage prüfen: das Feld fxRateToBase muss aktiviert sein (Flex-Query-Anleitung); danach erneut abrufen."))
+
+        # 6b. Manuelle Strategiezuordnungen: Widerspruch zu OA und Zuordnungen ohne Kette
+        try:
+            konflikte = v.execute(select(strategie_zuordnungen.c.natur_schluessel, strategie_zuordnungen.c.strategie,
+                                         strategie_zuordnungen.c.konflikt_oa).where(
+                strategie_zuordnungen.c.zurueckgenommen_am.is_(None), strategie_zuordnungen.c.konflikt_oa.is_not(None))).all()
+            if konflikte:
+                punkte.append(_punkt("strategie-widerspruch", "zuordnung", "Manuelle Strategie widerspricht OA", "hinweis", anzahl=len(konflikte),
+                                     betroffen=[f"{nk}: manuell {s}, OA {o}" for nk, s, o in konflikte[:5]],
+                                     loesung="Die manuelle Zuordnung gilt (Regel des Nutzers). Prüfen, ob sie noch stimmt; sonst auf der Positionsseite zurücknehmen."))
+            vorhanden = {nk for (nk,) in v.execute(select(chains.c.natur_schluessel).where(chains.c.sicht == "konto"))}
+            aktiv = [nk for (nk,) in v.execute(select(strategie_zuordnungen.c.natur_schluessel).where(strategie_zuordnungen.c.zurueckgenommen_am.is_(None)))]
+            verwaist = [nk for nk in aktiv if nk not in vorhanden]
+            if verwaist:
+                punkte.append(_punkt("strategie-verwaist", "zuordnung", "Manuelle Strategiezuordnung ohne Kette (Kette hat sich verändert)", "warnung",
+                                     anzahl=len(verwaist), betroffen=verwaist[:5],
+                                     loesung="Die Zuordnung bleibt gespeichert. Kette in der Positionsliste suchen und die Strategie neu setzen."))
+        except OperationalError:
+            pass        # Tabelle noch nicht migriert (siehe Punkt „schema-veraltet“)
 
     # 7. offene Rollkandidaten (liest selbst)
     try:

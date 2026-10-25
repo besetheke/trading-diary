@@ -35,6 +35,7 @@ export default defineConfig({
       '/titel-auswertung': 'http://localhost:8000',
       '/roll-kosten-auswertung': 'http://localhost:8000',
       '/journal-suche': 'http://localhost:8000',
+      '/strategie-zuordnung': 'http://localhost:8000',
       '/datenqualitaet-liste': 'http://localhost:8000',
       '/anhang': 'http://localhost:8000',
       '/echtgeld-reife': 'http://localhost:8000',

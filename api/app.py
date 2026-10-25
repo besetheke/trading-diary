@@ -4107,6 +4107,9 @@ def erzeuge_app(
             )
 
         from api import journal_suche
+        from api.strategie_zuordnung_wege import registriere as strategie_wege_registrieren
+
+        strategie_wege_registrieren(applikation, engine)
 
         # Suche, Tag-Filter und Anhänge (M05); Anhänge liegen in anhaenge/ neben der Datenbank.
         journal_suche.registriere(
