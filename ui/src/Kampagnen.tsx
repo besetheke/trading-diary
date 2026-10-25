@@ -9,6 +9,7 @@ import { fehlerText, holeKampagne, holeKampagnen } from './api'
 import type { Kampagne, KampagnenBeitrag, KampagnenDetail, KampagnenListe, KampagnenWirtschaft } from './api'
 import Betrag from './Betrag'
 import { zeitDe } from './format'
+import KampagnenKandidatenListe from './KampagnenKandidaten'
 
 interface Entwurf {
   basiswert: string
@@ -173,6 +174,7 @@ export default function Kampagnen(): JSX.Element {
 
   // Nur eine Kampagne ist zugleich aufgeklappt; ein neuer Filter klappt zu.
   const [offen, setzeOffen] = useState<number | null>(null)
+  const [neuLaden, setzeNeuLaden] = useState(0)
 
   useEffect(() => {
     let abgebrochen = false
@@ -189,7 +191,7 @@ export default function Kampagnen(): JSX.Element {
     return () => {
       abgebrochen = true
     }
-  }, [basiswert])
+  }, [basiswert, neuLaden])
 
   function anwenden(ereignis: FormEvent): void {
     ereignis.preventDefault()
@@ -208,8 +210,8 @@ export default function Kampagnen(): JSX.Element {
     <section>
       <h2>Kampagnen</h2>
       <p className="sicht fussnote">
-        Nur bestätigte Kampagnen — offene Vorschläge der Dateirundreise erscheinen
-        hier nicht. Beträge unverändert, wie die API sie liefert.
+        Bestätigte Kampagnen. Offene Vorschläge stehen darunter und werden dort
+        bestätigt oder verworfen. Beträge unverändert, wie die API sie liefert.
       </p>
       <form className="filter" onSubmit={anwenden}>
         <label>
@@ -240,16 +242,7 @@ export default function Kampagnen(): JSX.Element {
               ? `Keine bestätigte Kampagne für ${basiswert}.`
               : 'Noch keine bestätigte Kampagne.'}
           </p>
-          {/* Die Seite ist nicht kaputt: Kandidaten entstehen außerhalb ihrer
-              (Plan §6, Block B, Regel 2). Ohne den Befehl wirkt sie tot. */}
-          <p>
-            Kampagnen werden über die CLI-Rundreise bestätigt:{' '}
-            <code>journal kampagnen-ausschreiben</code> schreibt die offenen
-            Kandidaten aus, nach dem Urteil liest{' '}
-            <code>journal kampagnen-einlesen</code> sie ein, und{' '}
-            <code>journal rebuild</code> macht die Entscheidungen wirksam —
-            erst danach erscheinen sie hier.
-          </p>
+          <p>Vorschläge bestätigst du weiter unten; die Datei-Rundreise (CLI) bleibt als Alternative.</p>
         </section>
       ) : (
         <table className="positionen kampagnen">
@@ -277,6 +270,7 @@ export default function Kampagnen(): JSX.Element {
           </tbody>
         </table>
       )}
+      <KampagnenKandidatenListe geaendert={() => setzeNeuLaden((n) => n + 1)} />
     </section>
   )
 }

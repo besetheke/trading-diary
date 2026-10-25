@@ -1652,3 +1652,60 @@ export function setzeStrategieZuordnung(chainId: number, strategie: string, begr
 export function nimmStrategieZuordnungZurueck(chainId: number): Promise<StrategieZuordnungStand> {
   return schicke('POST', `/journal/strategie-zuordnung/${chainId}/zuruecknehmen`, {}) as Promise<StrategieZuordnungStand>
 }
+
+// AP-17g (M02, zweite Stufe): Kampagnen-Kandidaten in der Oberfläche bestätigen oder verwerfen.
+export interface KandidatKette {
+  schluessel: string
+  seite: string | null
+  eroeffnet_am: string | null
+  beendet_am: string | null
+  rolls: number | null
+  typ: string
+}
+
+export interface KampagnenKandidat {
+  rang: number
+  typ: 'ic' | 'financing'
+  basiswert: string
+  a: KandidatKette
+  b: KandidatKette
+  abstand_minuten: number | null
+  ueberlappung_tage: string | null
+}
+
+export interface KandidatenGruppe {
+  gruppe: number
+  mehrdeutig: boolean
+  kandidaten: KampagnenKandidat[]
+}
+
+export interface VerworfenesPaar {
+  schluessel_a: string
+  schluessel_b: string
+  typ: 'ic' | 'financing'
+  notiz: string | null
+  erstellt_am: string | null
+}
+
+export interface KampagnenKandidaten {
+  gruppen: KandidatenGruppe[]
+  anzahl: number
+  verworfen: VerworfenesPaar[]
+}
+
+export function holeKampagnenKandidaten(): Promise<KampagnenKandidaten> {
+  return hole('/kampagnen-kandidaten') as Promise<KampagnenKandidaten>
+}
+
+export function entscheideKandidat(eingabe: {
+  schluessel_a: string
+  schluessel_b: string
+  typ: string
+  urteil: 'ja' | 'nein'
+  typ_a?: string
+  typ_b?: string
+  bemerkung?: string
+  ueberschreiben?: boolean
+}): Promise<unknown> {
+  return schicke('POST', '/journal/kampagnen-kandidaten/entscheiden', eingabe)
+}

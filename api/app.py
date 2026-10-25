@@ -4139,6 +4139,10 @@ def erzeuge_app(
 
         strategie_wege_registrieren(applikation, engine)
 
+        from api.kampagnen_kandidaten_wege import registriere as kandidaten_wege_registrieren
+
+        kandidaten_wege_registrieren(applikation, engine)
+
         # Suche, Tag-Filter und Anhänge (M05); Anhänge liegen in anhaenge/ neben der Datenbank.
         journal_suche.registriere(
             applikation, engine, pathlib.Path(db_pfad).resolve().parent,

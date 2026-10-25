@@ -81,7 +81,7 @@ und jeder API-Weg antwortet; das Deploy ruft ihn auf), Vorabprüfung der Downloa
 ## Offen (ohne OF-102)
 
 Browser-Smoke-Test und Restore-Probe (M08),
-Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M02 zweite Stufe (Kandidaten-Dialog), M06 zweite Stufe, M07 Rest folgen.
+Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M06 zweite Stufe, M07 Rest folgen.
 
 ## M02 Kampagnen wirtschaftlich (25.10.2026, erste Stufe erledigt)
 
@@ -91,3 +91,12 @@ teilweise offene Kampagnen: Status `teilweise_offen`, Ergebnis nur der geschloss
 geschlossenen Kette der Kurs, bleibt das Ergebnis leer (`kurs_fehlt`). Kern: `KommissionsErgebnis.offene_summen` (bestehendes Verhalten unverändert),
 `api/kampagnen_wirtschaft.py`, Anzeige in `ui/src/Kampagnen.tsx`. Tests: `tests/test_kampagnen_wirtschaft.py` (4, von Hand gerechnet: 392 / 296).
 Offen (zweite Stufe): Bestätigen/Verwerfen/Zurücknehmen von Kandidaten in der Oberfläche.
+
+### M02, zweite Stufe (25.10.2026, erledigt)
+
+Kandidaten werden in der Kampagnenseite entschieden: `GET /kampagnen-kandidaten` (offene Vorschläge gruppiert nach Kette A, dazu verworfene Paare) und
+`POST /journal/kampagnen-kandidaten/entscheiden` (ja/nein, Typen A/B, Bemerkung, `ueberschreiben`). Die Logik ist die der Datei-Rundreise
+(`journal/kampagnen_entscheidung.py` nutzt `_plan_bilden`/`_plan_ausfuehren`), Erkennung immer `manuell`, Widerspruch → 409 ohne Schreiben; Entscheidungen
+hängen an Kontosicht-Ketten und überleben den Rebuild. **Rücknahme:** Eine Bestätigung wird nicht gelöscht (keine Verknüpfung entfällt, Regel 4); eine
+Verwerfung wird nur durch ausdrückliches „doch bestätigen“ ersetzt (wie `--ueberschreiben` der Rundreise). Eine echte Rücknahme mit Zeitstempel bräuchte
+eine Migration der Tabellen `campaign_ablehnungen`/`campaign_links` — nicht umgesetzt. Tests: `tests/test_kampagnen_entscheidung.py` (4).
