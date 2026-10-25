@@ -819,6 +819,10 @@ class BacktestVergleichAntwort(BaseModel):
     # AP-12c: Ursachen der Differenz (Summe = differenz) und der Kontrakteffekt.
     ursachen: list["BacktestUrsacheAntwort"]
     kontrakt_effekt: str
+    # M07: Fillpreis-Analyse des Einstiegs (live - backtest, je Kontrakt, USD)
+    summe_einstieg_abweichung: str = "0"
+    anzahl_einstieg: int = 0
+    anzahl_korrigiert: int = 0
 
 
 class BacktestUrsacheAntwort(BaseModel):
@@ -857,6 +861,10 @@ class BacktestPaarAntwort(BaseModel):
     ausstieg_backtest: str | None = None
     ausstieg_live: str | None = None
     partner_herkunft: str | None = None
+    oo_trade: str | None = None
+    praemie_backtest: str | None = None
+    praemie_live: str | None = None
+    einstieg_abweichung: str | None = None
 
 
 class BacktestZuordnungEingabe(BaseModel):
@@ -3486,7 +3494,9 @@ def erzeuge_app(
                                                summe=_als_text(u.summe))
                         for k, u in sorted(z.ursachen.items(), key=lambda kv: kv[1].summe)
                     ],
-                    kontrakt_effekt=_als_text(z.kontrakt_effekt))
+                    kontrakt_effekt=_als_text(z.kontrakt_effekt),
+                    summe_einstieg_abweichung=_als_text(z.summe_einstieg_abweichung),
+                    anzahl_einstieg=z.anzahl_einstieg, anzahl_korrigiert=z.anzahl_korrigiert)
                 for z in b.vergleich
             ],
             ohne_zuordnung=[BacktestOhneAntwort(oo_strategie=s, anzahl=n)
@@ -3509,6 +3519,9 @@ def erzeuge_app(
                         "pl_live": _als_text(d.pl_live),
                         "differenz": _als_text(d.differenz),
                         "kontrakt_effekt": _als_text(d.kontrakt_effekt),
+                        "praemie_backtest": _als_text(d.praemie_backtest),
+                        "praemie_live": _als_text(d.praemie_live),
+                        "einstieg_abweichung": _als_text(d.einstieg_abweichung),
                     })
                     for d in z.details
                 ]
@@ -4186,6 +4199,10 @@ def erzeuge_app(
         from api.kampagnen_kandidaten_wege import registriere as kandidaten_wege_registrieren
 
         kandidaten_wege_registrieren(applikation, engine)
+
+        from api.backtest_partner_wege import registriere as partner_wege_registrieren
+
+        partner_wege_registrieren(applikation, engine)
 
         # Suche, Tag-Filter und Anhänge (M05); Anhänge liegen in anhaenge/ neben der Datenbank.
         journal_suche.registriere(

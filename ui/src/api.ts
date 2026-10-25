@@ -722,6 +722,9 @@ export interface BacktestVergleich {
   offen: number
   ursachen: BacktestUrsache[]
   kontrakt_effekt: string
+  summe_einstieg_abweichung?: string
+  anzahl_einstieg?: number
+  anzahl_korrigiert?: number
 }
 
 export interface Backtests {
@@ -748,6 +751,10 @@ export interface BacktestPaar {
   ausstieg_backtest?: string | null
   ausstieg_live?: string | null
   partner_herkunft?: string | null
+  oo_trade?: string | null
+  praemie_backtest?: string | null
+  praemie_live?: string | null
+  einstieg_abweichung?: string | null
 }
 
 function zeitraumSuche(von?: string | null, bis?: string | null): URLSearchParams {
@@ -1708,4 +1715,31 @@ export function entscheideKandidat(eingabe: {
   ueberschreiben?: boolean
 }): Promise<unknown> {
   return schicke('POST', '/journal/kampagnen-kandidaten/entscheiden', eingabe)
+}
+
+// AP-17g (M07): Partner eines Backtest-Trades korrigieren.
+export interface PartnerKandidat {
+  oa_trade: string
+  zeit: string
+  kontrakte: number
+  offen: boolean
+  abstand_min: number
+}
+
+export function holePartnerKandidaten(ooTrade: number, oaStrategie: string): Promise<PartnerKandidat[]> {
+  const suche = new URLSearchParams({ oo_trade: String(ooTrade), oa_strategie: oaStrategie })
+  return hole(`/backtests/partner-kandidaten?${suche.toString()}`) as Promise<PartnerKandidat[]>
+}
+
+export function setzePartner(ooTrade: number, oaStrategie: string, oaTrade: string | null, begruendung: string): Promise<unknown> {
+  return schicke('POST', '/journal/backtests/partner', {
+    oo_trade: ooTrade,
+    oa_strategie: oaStrategie,
+    oa_trade: oaTrade,
+    begruendung: begruendung || null,
+  })
+}
+
+export function nimmPartnerZurueck(ooTrade: number): Promise<unknown> {
+  return schicke('POST', '/journal/backtests/partner/zuruecknehmen', { oo_trade: ooTrade })
 }

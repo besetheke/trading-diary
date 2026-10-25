@@ -37,11 +37,12 @@ def api_wege() -> list[str]:
 PFLICHTPARAMETER = {
     "/kalender": "?monat=2026-10",
     "/backtests/paare": "?oo_strategie=smoke&oa_strategie=smoke",
+    "/backtests/partner-kandidaten": "?oo_trade=0&oa_strategie=smoke",
 }
 
 
 # Ein Weg, der ein bestimmtes Objekt verlangt, antwortet für ein Objekt, das es nicht gibt, zu Recht mit 404.
-ERLAUBTE_STATUS = {"/backtests/paare": {200, 404}}
+ERLAUBTE_STATUS = {"/backtests/paare": {200, 404}, "/backtests/partner-kandidaten": {200, 404}}
 
 
 def smoke(hole_status: Callable[[str], int]) -> list[tuple[str, int]]:

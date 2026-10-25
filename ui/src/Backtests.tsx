@@ -6,6 +6,7 @@ import {
   holeBacktestPaare,
   holeBacktests,
 } from "./api";
+import BacktestPartner from "./BacktestPartner";
 import Betrag from "./Betrag";
 import { datumDe, zeitDe } from "./format";
 import { useZeitraum } from "./zeitraum";
@@ -325,6 +326,25 @@ export default function Backtests(): JSX.Element {
                     </td>
                   </tr>
                 )}
+                {(v.anzahl_einstieg ?? 0) > 0 && (
+                  <tr
+                    className={gewaehlt ? "gewaehlt klickbar ursachenzeile" : "klickbar ursachenzeile"}
+                    onClick={klick}
+                  >
+                    <td colSpan={9} className="ursachen">
+                      <span
+                        className="beschriftung"
+                        title="Prämie je Kontrakt laut tatsächlichen Fills des Bots minus Prämie des Backtests, nur Paare mit beiden Werten. Positiv = der Bot hat mehr Credit bekommen. Der Ausstieg lässt sich nicht vergleichen: der Export nennt keine Schlusskurse der Legs."
+                      >
+                        Einstiegs-Fills (Bot − Backtest, je Kontrakt):
+                      </span>{" "}
+                      <Betrag wert={v.summe_einstieg_abweichung ?? "0"} waehrung="USD" /> in {v.anzahl_einstieg} Paaren
+                      {(v.anzahl_korrigiert ?? 0) > 0 && (
+                        <span className="ursache"> · {v.anzahl_korrigiert} Partner manuell korrigiert</span>
+                      )}
+                    </td>
+                  </tr>
+                )}
                 </Fragment>
               );
             })}
@@ -363,6 +383,8 @@ export default function Backtests(): JSX.Element {
                     <th className="zahl">Bot</th>
                     <th className="zahl">Differenz</th>
                     <th>Ursache</th>
+                    <th className="zahl" title="Eröffnungsprämie je Kontrakt: Bot laut Fills minus Backtest">Einstieg Bot − Backtest</th>
+                    <th>Partner</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -423,6 +445,20 @@ export default function Backtests(): JSX.Element {
                             Ausstieg: Backtest {p.ausstieg_backtest ?? "—"}, Bot {p.ausstieg_live ?? "—"}
                           </div>
                         )}
+                      </td>
+                      <td className="zahl">
+                        {p.einstieg_abweichung == null ? (
+                          "—"
+                        ) : (
+                          <Betrag wert={p.einstieg_abweichung} waehrung="USD" />
+                        )}
+                      </td>
+                      <td>
+                        <BacktestPartner
+                          paar={p}
+                          oaStrategie={auswahl.oa}
+                          geaendert={() => setzeStand((n) => n + 1)}
+                        />
                       </td>
                     </tr>
                   ))}

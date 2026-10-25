@@ -1,7 +1,7 @@
 ---
 titel: Roll-Kosten in der Oberfläche und festgeschriebene Abhängigkeiten (M01, M08)
 modell: stark
-status: teilweise   # M03, M04, M06 offen
+status: erledigt
 abhaengig_von: AP-17
 aendert_tests: nein
 ---
@@ -38,14 +38,13 @@ png, jpeg, gif, webp, pdf, txt, höchstens 5 MB und 20 je Bereich, Ablage in `an
 Ausbrechen über `..`), `nosniff`. **Kein Löschen** von Anhängen (CLAUDE.md Regel 4). Tests: `tests/test_journal_suche.py` (7), darunter die
 Abfrage „alle schlecht getimten Rolls mit Screenshot“ und Erreichbarkeit nach dem Rebuild.
 
-## M07 Live-/Backtest-Abweichungen als Indizien (25.10.2026, erledigt bis auf Korrektur des Partners)
+## M07 Live-/Backtest-Abweichungen als Indizien (25.10.2026, erledigt)
 
 Je Paar bleibt `ursache` die **erste erkannte** Abweichung in fester Reihenfolge (bestehende Summen und Tests unverändert), daneben stehen jetzt
 `abweichungen` (alle beobachteten Unterschiede: Kontraktzahl, Einstiegszeit, Strikes, Art und Zeitpunkt des Ausstiegs), `rest_unerklaert`
 (keine Abweichung gefunden: Slippage ist nur eine Vermutung), die Ausstiegsart je Seite (Verfall, vorzeitig bzw. Rückkauf) und `partner_herkunft`
 („zeitfenster“); je Strategiepaar `mehrfach_abweichend`. Die Oberfläche beschriftet „erste erkannte Abweichung (kein Nachweis der Ursache)“, zeigt
-„beobachtet außerdem“ und „ungeklärter Rest“. Tests: `tests/test_backtest_indizien.py` (6). **Offen:** den abgeleiteten Partner in der Oberfläche
-korrigieren (eigene Zuordnungstabelle), und die Auswertung der tatsächlichen Fillpreise je Order (nur Ausstiegsart und -zeit sind getrennt).
+„beobachtet außerdem“ und „ungeklärter Rest“. Tests: `tests/test_backtest_indizien.py` (6). Der Rest steht unten (Partnerkorrektur, Fillpreise des Einstiegs).
 
 ## M03 Manuelle Strategiezuordnung (25.10.2026, erledigt für Ketten)
 
@@ -81,7 +80,7 @@ und jeder API-Weg antwortet; das Deploy ruft ihn auf), Vorabprüfung der Downloa
 ## Offen (ohne OF-102)
 
 Browser-Smoke-Test und Restore-Probe (M08),
-Vorabprüfung aller Downloads vor dem Stoppen der Dienste. M07 Rest folgt.
+Vorabprüfung aller Downloads vor dem Stoppen der Dienste.
 
 ## M02 Kampagnen wirtschaftlich (25.10.2026, erste Stufe erledigt)
 
@@ -107,3 +106,14 @@ Historische Bewertung: Liegt der Endtag vor dem jüngsten Bestand, bewertet `/au
 (höchstens 7 Tage davor, sonst leer) mit den Beinen, die an jenem Stichtag offen waren; der Stichtag steht in der Antwort. Annahmen in OF-108.
 Test: `tests/test_bewertung_historisch.py` (4, von Hand gerechnet). Der Baustein `ErgebnisBegriffe` beschreibt das. Nicht Teil: Überleitung in
 Kampagnen.
+
+### M07, Rest (25.10.2026, erledigt)
+
+**Partner korrigieren:** neue Tabelle `backtest_partner` (Migration `c7d2e9f4a1b8`, Schlüssel = Naturschlüssel des Backtest-Trades, `erkennung = manuell`,
+Rücknahme mit `zurueckgenommen_am`, nichts wird gelöscht). Wege: `GET /backtests/partner-kandidaten` (Live-Trades der OA-Strategie bis 2 Tage Abstand),
+`POST /journal/backtests/partner` (anderer Live-Trade oder ausdrücklich „kein Partner“; ein Trade einer anderen OA-Strategie wird mit 409 abgelehnt) und
+`POST …/partner/zuruecknehmen`. Die Korrektur wirkt sofort in Vergleich und Paarliste (`partner_herkunft = manuell`, `anzahl_korrigiert`); ein korrigierter
+Live-Trade gehört nur noch dem korrigierten Backtest-Trade. **Fillpreise des Einstiegs:** je Paar die Eröffnungsprämie je Kontrakt aus den tatsächlichen
+Fills (USD) gegen die OO-Prämie (`praemie_backtest`, `praemie_live`, `einstieg_abweichung` = live − backtest) und die Summe je Zuordnung. Die Einheit
+der OO-Prämie (USD je Kontrakt, Faktor 100 gegenüber dem Preis) wurde am echten Bestand geprüft (585 von 731 Paaren innerhalb 30 %, Rest Teilfüllungen u. ä.).
+**Nicht möglich:** ein Ausstiegs-Fillvergleich — der OO-Export enthält keine Schlusskurse der Legs, nur den P/L. Tests: `tests/test_backtest_partner.py` (8).

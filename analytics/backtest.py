@@ -43,6 +43,7 @@ from engine.oo_zuordnung import (
 from ingest.optionomega import legs_lesen
 from journal.db import create_db_engine
 from journal.schema import (
+    backtest_partner,
     executions,
     instruments,
     legs,
@@ -73,6 +74,8 @@ class OoZeile:
     offen: bool
     geschlossen: datetime | None = None
     grund: str = ""
+    # Prämie je Kontrakt in USD laut OO (+ Credit); Grundlage der Fillpreis-Analyse (M07)
+    praemie: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,8 @@ class LiveZeile:
     # er ein Verfall war; None, solange keine schließende Ausführung bekannt ist.
     ende: datetime | None = None
     ausgelaufen: bool | None = None
+    # Eröffnungsprämie je Kontrakt in USD aus den tatsächlichen Fills (+ Credit); None bei anderer Währung (M07)
+    einstiegspraemie: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +135,12 @@ class VergleichDetail:
     ausstieg_backtest: str | None = None
     ausstieg_live: str | None = None
     partner_herkunft: str | None = None
+    # Zeile des Backtest-Trades, an der der Partner korrigiert werden kann (M07)
+    oo_trade: str | None = None
+    # Fillpreis-Analyse des Einstiegs: Prämie je Kontrakt (USD), Backtest gegen tatsächliche Fills; Abweichung = live - backtest
+    praemie_backtest: Decimal | None = None
+    praemie_live: Decimal | None = None
+    einstieg_abweichung: Decimal | None = None
 
 
 @dataclass
@@ -151,6 +162,10 @@ class VergleichZeile:
     kontrakt_effekt: Decimal = Decimal("0")
     # M07: Paare mit mindestens zwei beobachteten Abweichungen (die „erste“ Ursache erklärt dann nicht alles)
     mehrfach_abweichend: int = 0
+    # M07: Einstiegsabweichung der Fills (live - backtest, je Kontrakt, Summe über die Paare mit beiden Prämien) und ihre Anzahl
+    summe_einstieg_abweichung: Decimal = Decimal("0")
+    anzahl_einstieg: int = 0
+    anzahl_korrigiert: int = 0
     details: list[VergleichDetail] = field(default_factory=list)
 
 
@@ -236,7 +251,8 @@ def _lokale_paare(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile]
 
 
 def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
-               paare: dict[str, str], gepaart: set[str]) -> VergleichZeile:
+               paare: dict[str, str], gepaart: set[str],
+               korrigiert: frozenset[str] = frozenset()) -> VergleichZeile:
     """``paare``: die Paarung dieses Backtests mit diesem Bot; ``gepaart``:
     alle Live-Trades dieses Bots, die irgendein zugeordneter Backtest erklärt."""
     eigene_oo = [z for z in oo if z.eroeffnung.strategie == oo_s]
@@ -254,7 +270,7 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
             zeile.details.append(VergleichDetail(
                 "offen", e.zeit, partner.eroeffnung.zeit if partner else None,
                 partner.eroeffnung.schluessel if partner else None, o.kontrakte,
-                partner.kontrakte if partner else None, None, None, None))
+                partner.kontrakte if partner else None, None, None, None, oo_trade=e.schluessel))
             continue
         bt = _je_kontrakt(o.pl, o.kontrakte)
         if partner is not None and partner.eroeffnung.strategie == oa_s:
@@ -270,6 +286,13 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
             if effekt is not None:
                 zeile.kontrakt_effekt += effekt
             abweichungen = _abweichungen(o, partner)
+            einstieg = (partner.einstiegspraemie - o.praemie
+                        if o.praemie is not None and partner.einstiegspraemie is not None else None)
+            if einstieg is not None:
+                zeile.summe_einstieg_abweichung += einstieg
+                zeile.anzahl_einstieg += 1
+            if e.schluessel in korrigiert:
+                zeile.anzahl_korrigiert += 1
             if len(abweichungen) >= 2:
                 zeile.mehrfach_abweichend += 1
             zeile.details.append(VergleichDetail(
@@ -277,12 +300,16 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
                 o.kontrakte, partner.kontrakte, bt, lv, lv - bt, ursache, versatz, effekt,
                 abweichungen=abweichungen, rest_unerklaert=(ursache == "slippage" and not abweichungen),
                 ausstieg_backtest=_ausstieg_backtest(o), ausstieg_live=_ausstieg_live(partner),
-                partner_herkunft="zeitfenster"))
+                partner_herkunft="manuell" if e.schluessel in korrigiert else "zeitfenster",
+                oo_trade=e.schluessel, praemie_backtest=o.praemie, praemie_live=partner.einstiegspraemie,
+                einstieg_abweichung=einstieg))
         elif partner is None and live_tage and min(live_tage) <= e.zeit.date() <= max(live_tage):
             zeile.nur_backtest += 1
             zeile.summe_nur_backtest += bt
             zeile.details.append(VergleichDetail(
-                "nur_backtest", e.zeit, None, None, o.kontrakte, None, bt, None, None))
+                "nur_backtest", e.zeit, None, None, o.kontrakte, None, bt, None, None,
+                oo_trade=e.schluessel,
+                partner_herkunft="manuell" if e.schluessel in korrigiert else None))
     for x in eigene_live:
         e = x.eroeffnung
         if (e.schluessel in gepaart or x.profit is None or not oo_tage
@@ -298,8 +325,31 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
     return zeile
 
 
+def _korrigierte_paare(paare: dict[str, str], oo_s: str, oa_s: str, live: list[LiveZeile],
+                       korrekturen: dict[str, str | None]) -> tuple[dict[str, str], frozenset[str]]:
+    """Wendet die Partnerkorrekturen des Nutzers auf die Zeitfenster-Paarung an (M07). Ein korrigierter Partner gehört nur
+    noch dem korrigierten Backtest-Trade; ``None`` heißt ausdrücklich kein Partner. Ein Live-Trade einer anderen OA-Strategie
+    oder ein unbekannter wird ignoriert (die Korrektur gilt für diese Zuordnung nicht)."""
+    live_strategie = {z.eroeffnung.schluessel: z.eroeffnung.strategie for z in live}
+    ergebnis = dict(paare)
+    angewandt: set[str] = set()
+    for oo_id, ziel in korrekturen.items():
+        if ziel is not None and live_strategie.get(ziel) != oa_s:
+            continue
+        ergebnis.pop(oo_id, None)
+        if ziel is None:
+            angewandt.add(oo_id)
+            continue
+        for andere in [k for k, v in ergebnis.items() if v == ziel]:
+            del ergebnis[andere]
+        ergebnis[oo_id] = ziel
+        angewandt.add(oo_id)
+    return ergebnis, frozenset(angewandt)
+
+
 def backtest_auswertung(oo: list[OoZeile], live: list[LiveZeile],
-                        entscheidungen: dict[tuple[str, str], str]) -> BacktestBericht:
+                        entscheidungen: dict[tuple[str, str], str],
+                        partner_korrekturen: dict[str, str | None] | None = None) -> BacktestBericht:
     oo_e = [z.eroeffnung for z in oo]
     live_e = [z.eroeffnung for z in live]
     paare = paaren(oo_e, live_e)
@@ -340,12 +390,19 @@ def backtest_auswertung(oo: list[OoZeile], live: list[LiveZeile],
     aktiv = [z for z in zuordnungen if z.status != "abgelehnt"]
     lokal = {(z.oo_strategie, z.oa_strategie):
              _lokale_paare(z.oo_strategie, z.oa_strategie, oo, live) for z in aktiv}
+    korrigiert: dict[tuple[str, str], frozenset[str]] = {}
+    if partner_korrekturen:
+        for k in lokal:
+            eigene = {z.eroeffnung.schluessel for z in oo if z.eroeffnung.strategie == k[0]}
+            lokal[k], korrigiert[k] = _korrigierte_paare(
+                lokal[k], k[0], k[1], live, {i: t for i, t in partner_korrekturen.items() if i in eigene})
     erklaert: dict[str, set[str]] = defaultdict(set)
     for (_, oa_s), p in lokal.items():
         erklaert[oa_s] |= set(p.values())
     vergleich = [
         _vergleich(z.oo_strategie, z.oa_strategie, oo, live,
-                   lokal[(z.oo_strategie, z.oa_strategie)], erklaert[z.oa_strategie])
+                   lokal[(z.oo_strategie, z.oa_strategie)], erklaert[z.oa_strategie],
+                   korrigiert.get((z.oo_strategie, z.oa_strategie), frozenset()))
         for z in sorted(aktiv, key=lambda z: (z.oo_strategie, z.oa_strategie))
     ]
     mit = {z.oo_strategie for z in aktiv}
@@ -400,7 +457,8 @@ def _live_laden(v) -> list[LiveZeile]:
         select(executions.c.exec_id, executions.c.oa_trade, executions.c.handelszeit,
                executions.c.side, executions.c.menge, instruments.c.underlying,
                instruments.c.right, instruments.c.strike, instruments.c.expiry,
-               executions.c.ereignistyp)
+               executions.c.ereignistyp, executions.c.preis, executions.c.waehrung,
+               instruments.c.multiplikator)
         .join(instruments, instruments.c.conid == executions.c.conid)
         .where(instruments.c.asset_class.in_(("OPT", "FOP")))
     ).mappings():
@@ -426,6 +484,11 @@ def _live_laden(v) -> list[LiveZeile]:
             for _, z in eroeffnend
         )
         eigene = {i for i, _ in eroeffnend}
+        einstieg = None
+        if eroeffnend and all(z["waehrung"] == "USD" for _, z in eroeffnend):
+            gesamt = sum((1 if z["side"] == "SELL" else -1) * abs(z["menge"]) * z["preis"] * z["multiplikator"]
+                         for _, z in eroeffnend)
+            einstieg = _je_kontrakt(Decimal(gesamt), kontrakte(legs_))
         schluss = {c for i in eigene for c in schluss_je_eroeffnung.get(i, ())}
         schliessend = [alle[c] for c in schluss if c in alle]
         schliessend += [z for i, z in alle.items()
@@ -438,6 +501,7 @@ def _live_laden(v) -> list[LiveZeile]:
             ende=max((z["handelszeit"] for z in schliessend), default=None),
             ausgelaufen=(all(z["ereignistyp"] != "trade" for z in schliessend)
                          if schliessend else None),
+            einstiegspraemie=einstieg,
         ))
     return ergebnis
 
@@ -452,15 +516,32 @@ def backtest_bericht(
         oo = [
             OoZeile(Eroeffnung(str(z["id"]), z["strategie"], z["eroeffnet"], z["basiswert"],
                                tuple(legs_lesen(z["legs_roh"], z["eroeffnet"].date()))),
-                    z["kontrakte"], z["pl"], z["offen"], z["geschlossen"], z["grund"])
+                    z["kontrakte"], z["pl"], z["offen"], z["geschlossen"], z["grund"], z["praemie"])
             for z in v.execute(select(oo_trades)).mappings()
         ]
         live = _live_laden(v)
         entscheidungen = {(z["oo_strategie"], z["oa_strategie"]): z["status"]
                           for z in v.execute(select(oo_zuordnung)).mappings()}
+        korrekturen = partner_korrekturen_lesen(v)
     def im_zeitraum(tag: date) -> bool:
         return (von is None or tag >= von) and (bis is None or tag <= bis)
 
     oo = [z for z in oo if im_zeitraum(z.eroeffnung.zeit.date())]
     live = [z for z in live if im_zeitraum(z.eroeffnung.zeit.date())]
-    return backtest_auswertung(oo, live, entscheidungen)
+    id_je_natur = {}
+    with engine.connect() as v:
+        for z in v.execute(select(oo_trades.c.id, oo_trades.c.strategie, oo_trades.c.eroeffnet, oo_trades.c.legs_roh)).mappings():
+            id_je_natur[(z["strategie"], z["eroeffnet"], z["legs_roh"])] = str(z["id"])
+    korrekturen_je_id = {id_je_natur[k]: t for k, t in korrekturen.items() if k in id_je_natur}
+    return backtest_auswertung(oo, live, entscheidungen, korrekturen_je_id)
+
+
+def partner_korrekturen_lesen(v) -> dict[tuple, str | None]:
+    """Aktive Partnerkorrekturen (Naturschlüssel des Backtest-Trades → OA-Trade oder None = kein Partner). Fehlt die Tabelle noch
+    (Migration offen), gilt keine Korrektur."""
+    from sqlalchemy.exc import OperationalError
+    try:
+        zeilen = v.execute(select(backtest_partner).where(backtest_partner.c.zurueckgenommen_am.is_(None))).mappings().all()
+    except OperationalError:
+        return {}
+    return {(z["oo_strategie"], z["oo_eroeffnet"], z["oo_legs_roh"]): z["oa_trade"] for z in zeilen}

@@ -990,3 +990,22 @@ strategie_zuordnungen = Table(
     Column("oa_erkennung_vorher", Text, nullable=True),
     Column("konflikt_oa", Text, nullable=True),
 )
+
+
+# AP-17g (M07): vom Nutzer korrigierter Live-Partner eines Backtest-Trades
+# (Naturschlüssel statt Zeilennummer).
+# oa_trade leer = ausdrücklich kein Partner. Rücknahme setzt zurueckgenommen_am,
+# nichts wird gelöscht (Regel 4).
+backtest_partner = Table(
+    "backtest_partner",
+    metadata,
+    Column("oo_strategie", Text, primary_key=True),
+    Column("oo_eroeffnet", DateTime, primary_key=True),
+    Column("oo_legs_roh", Text, primary_key=True),
+    Column("oa_trade", Text, nullable=True),
+    Column("begruendung", Text, nullable=True),
+    Column("erkennung", Text, nullable=False),
+    Column("erstellt_am", DateTime, nullable=False),
+    Column("zurueckgenommen_am", DateTime, nullable=True),
+    CheckConstraint("erkennung IN ('manuell')", name="ck_backtest_partner_erkennung"),
+)
