@@ -832,6 +832,12 @@ class BacktestPaarAntwort(BaseModel):
     ursache: str | None
     zeitversatz_min: int | None
     kontrakt_effekt: str | None
+    # M07: alle beobachteten Abweichungen, ungeklärter Rest, Ausstiegsart je Seite, Partnerherkunft
+    abweichungen: list[str] = []
+    rest_unerklaert: bool = False
+    ausstieg_backtest: str | None = None
+    ausstieg_live: str | None = None
+    partner_herkunft: str | None = None
 
 
 class BacktestZuordnungEingabe(BaseModel):

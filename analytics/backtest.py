@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Live gegen Backtest (AP-12a): Zuordnung OO-Strategie → OA-Strategie und
 Vergleich der Ergebnisse je Kontrakt.
 
@@ -120,6 +121,15 @@ class VergleichDetail:
     ursache: str | None = None
     zeitversatz_min: int | None = None
     kontrakt_effekt: Decimal | None = None
+    # AP-17g (M07): ``ursache`` ist die ERSTE erkannte Abweichung in fester Reihenfolge, keine kausale Zerlegung.
+    # ``abweichungen`` nennt ALLE beobachteten Unterschiede des Paars (kontrakte, einstiegszeit, strikeauswahl, exit_art,
+    # exit_zeit); ``rest_unerklaert`` heißt: keine Abweichung gefunden, der Betrag bleibt ungeklärt (Slippage ist nur eine
+    # Vermutung). Ausstiegsart je Seite getrennt; der Partner stammt aus der Zeitfenster-Paarung.
+    abweichungen: tuple = ()
+    rest_unerklaert: bool = False
+    ausstieg_backtest: str | None = None
+    ausstieg_live: str | None = None
+    partner_herkunft: str | None = None
 
 
 @dataclass
@@ -139,6 +149,8 @@ class VergleichZeile:
     # differenz. Der Kontrakteffekt (Dollar insgesamt) steht daneben.
     ursachen: dict[str, UrsachenSumme] = field(default_factory=dict)
     kontrakt_effekt: Decimal = Decimal("0")
+    # M07: Paare mit mindestens zwei beobachteten Abweichungen (die „erste“ Ursache erklärt dann nicht alles)
+    mehrfach_abweichend: int = 0
     details: list[VergleichDetail] = field(default_factory=list)
 
 
@@ -178,6 +190,38 @@ def _ursache(o: OoZeile, x: LiveZeile, bt: Decimal, lv: Decimal) -> tuple[str, i
                 (x.ende - o.geschlossen).total_seconds()) > AUSSTIEG_MINUTEN * 60:
             return "exit", versatz
     return "slippage", versatz
+
+
+def _abweichungen(o: OoZeile, x: LiveZeile) -> tuple[str, ...]:
+    """Alle beobachteten Unterschiede eines Paars (AP-17g, M07), unabhängig von der Höhe des Betrags und der Reihenfolge der
+    ersten Ursache: Kontraktzahl, Einstiegszeit, Strikes, Art und Zeit des Ausstiegs."""
+    aus = []
+    versatz = round((x.eroeffnung.zeit - o.eroeffnung.zeit).total_seconds() / 60)
+    if o.kontrakte != x.kontrakte:
+        aus.append("kontrakte")
+    if abs(versatz) > EINSTIEG_MINUTEN:
+        aus.append("einstiegszeit")
+    if _strikes(o.eroeffnung.legs) != _strikes(x.eroeffnung.legs):
+        aus.append("strikeauswahl")
+    if x.ausgelaufen is not None and o.geschlossen is not None:
+        oo_verfall = o.grund in OO_VERFALL
+        if oo_verfall != x.ausgelaufen:
+            aus.append("exit_art")
+        elif not oo_verfall and x.ende is not None and abs((x.ende - o.geschlossen).total_seconds()) > AUSSTIEG_MINUTEN * 60:
+            aus.append("exit_zeit")
+    return tuple(aus)
+
+
+def _ausstieg_backtest(o: OoZeile) -> str | None:
+    if o.geschlossen is None:
+        return None
+    return "verfall" if o.grund in OO_VERFALL else "vorzeitig"
+
+
+def _ausstieg_live(x: LiveZeile) -> str | None:
+    if x.ausgelaufen is None:
+        return None
+    return "verfall" if x.ausgelaufen else "rueckkauf"
 
 
 def _lokale_paare(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile]
@@ -225,9 +269,15 @@ def _vergleich(oo_s: str, oa_s: str, oo: list[OoZeile], live: list[LiveZeile],
             u.summe += lv - bt
             if effekt is not None:
                 zeile.kontrakt_effekt += effekt
+            abweichungen = _abweichungen(o, partner)
+            if len(abweichungen) >= 2:
+                zeile.mehrfach_abweichend += 1
             zeile.details.append(VergleichDetail(
                 "paar", e.zeit, partner.eroeffnung.zeit, partner.eroeffnung.schluessel,
-                o.kontrakte, partner.kontrakte, bt, lv, lv - bt, ursache, versatz, effekt))
+                o.kontrakte, partner.kontrakte, bt, lv, lv - bt, ursache, versatz, effekt,
+                abweichungen=abweichungen, rest_unerklaert=(ursache == "slippage" and not abweichungen),
+                ausstieg_backtest=_ausstieg_backtest(o), ausstieg_live=_ausstieg_live(partner),
+                partner_herkunft="zeitfenster"))
         elif partner is None and live_tage and min(live_tage) <= e.zeit.date() <= max(live_tage):
             zeile.nur_backtest += 1
             zeile.summe_nur_backtest += bt

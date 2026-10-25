@@ -33,6 +33,15 @@ const ART: Record<string, { text: string; hinweis: string }> = {
 };
 
 // AP-12c: Ursache je Paar — genau eine, in dieser Prüfreihenfolge.
+// M07: alle beobachteten Unterschiede eines Paars (die „erste“ Ursache erklärt nicht zwingend den ganzen Betrag).
+const ABWEICHUNG: Record<string, string> = {
+  kontrakte: "Kontraktzahl",
+  einstiegszeit: "Einstiegszeit",
+  strikeauswahl: "Strikeauswahl",
+  exit_art: "Art des Ausstiegs (Verfall gegen vorzeitig)",
+  exit_zeit: "Zeitpunkt des Ausstiegs",
+}
+
 const URSACHE: Record<string, { text: string; hinweis: string }> = {
   kontrakte: {
     text: "Kontraktzahl",
@@ -294,7 +303,7 @@ export default function Backtests(): JSX.Element {
                     onClick={klick}
                   >
                     <td colSpan={9} className="ursachen">
-                      <span className="beschriftung">Ursachen der Differenz:</span>
+                      <span className="beschriftung" title="Je Paar die erste erkannte Abweichung in fester Reihenfolge — keine kausale Zerlegung; weitere Unterschiede stehen in der Paarliste">Erste erkannte Abweichung je Paar (kein Nachweis der Ursache):</span>
                       {v.ursachen.map((u) => (
                         <span
                           key={u.ursache}
@@ -393,7 +402,27 @@ export default function Backtests(): JSX.Element {
                         )}
                       </td>
                       <td title={p.ursache ? URSACHE[p.ursache]?.hinweis : undefined}>
-                        {p.ursache ? (URSACHE[p.ursache]?.text ?? p.ursache) : ""}
+                        {p.ursache ? (
+                          p.rest_unerklaert ? (
+                            <span title="Keine Abweichung gefunden: der Betrag bleibt ungeklärt (Slippage ist nur eine Vermutung)">
+                              ungeklärter Rest
+                            </span>
+                          ) : (
+                            <>erste: {URSACHE[p.ursache]?.text ?? p.ursache}</>
+                          )
+                        ) : ""}
+                        {(() => {
+                          const weitere = (p.abweichungen ?? []).filter(
+                            (a) => a !== p.ursache && !(p.ursache === "exit" && a.startsWith("exit")))
+                          return weitere.length > 0 ? (
+                            <div className="sicht">beobachtet außerdem: {weitere.map((a) => ABWEICHUNG[a] ?? a).join(", ")}</div>
+                          ) : null
+                        })()}
+                        {p.art === "paar" && (p.ausstieg_backtest || p.ausstieg_live) && (
+                          <div className="sicht">
+                            Ausstieg: Backtest {p.ausstieg_backtest ?? "—"}, Bot {p.ausstieg_live ?? "—"}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

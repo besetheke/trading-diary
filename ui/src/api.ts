@@ -725,6 +725,11 @@ export interface BacktestPaar {
   ursache: string | null
   zeitversatz_min: number | null
   kontrakt_effekt: string | null
+  abweichungen?: string[]
+  rest_unerklaert?: boolean
+  ausstieg_backtest?: string | null
+  ausstieg_live?: string | null
+  partner_herkunft?: string | null
 }
 
 function zeitraumSuche(von?: string | null, bis?: string | null): URLSearchParams {
