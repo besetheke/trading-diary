@@ -1512,3 +1512,60 @@ export interface EchtgeldReife {
 export function holeEchtgeldReife(): Promise<EchtgeldReife> {
   return hole('/echtgeld-reife') as Promise<EchtgeldReife>
 }
+
+// M05: Journal-Suche, Tag-Filter und Anhänge.
+export interface SucheTreffer {
+  scope_typ: string
+  scope_id: string
+  tags: string[]
+  anzahl_notizen: number
+  anzahl_anhaenge: number
+  aktiv: string
+  notizen: { id: number; snippet: string; erstellt_am: string }[]
+  kontext: { text: string; von: string; bis: string | null; strategie: string | null; link: string | null } | null
+}
+
+export interface Anhang {
+  id: number
+  name: string
+  mime: string
+  groesse: number | null
+  erstellt_am: string
+}
+
+export function sucheJournal(
+  q: string,
+  tags: string[],
+  modus: 'alle' | 'irgendeines',
+  mitAnhang: boolean,
+): Promise<SucheTreffer[]> {
+  const p = new URLSearchParams()
+  if (q.trim()) p.set('q', q.trim())
+  for (const name of tags) p.append('tags', name)
+  p.set('modus', modus)
+  if (mitAnhang) p.set('mit_anhang', 'true')
+  return hole(`/journal-suche?${p.toString()}`) as Promise<SucheTreffer[]>
+}
+
+export function holeAnhaenge(scopeTyp: string, scopeId: string): Promise<Anhang[]> {
+  return hole(`/journal/${scopeTyp}/${encodeURIComponent(scopeId)}/anhaenge`) as Promise<Anhang[]>
+}
+
+// Der Dateiinhalt ist der Körper der Anfrage (kein Formular); Typ und Größe prüft die API (png, jpeg, gif, webp, pdf, txt, 5 MB).
+export async function ladeAnhangHoch(scopeTyp: string, scopeId: string, datei: File): Promise<Anhang> {
+  const antwort = await fetch(
+    `/journal/${scopeTyp}/${encodeURIComponent(scopeId)}/anhaenge?name=${encodeURIComponent(datei.name)}`,
+    { method: 'POST', headers: { 'Content-Type': datei.type, 'X-Trading-Station': '1' }, body: datei },
+  )
+  if (!antwort.ok) {
+    let text = antwort.statusText
+    try {
+      const inhalt = (await antwort.json()) as { detail?: unknown }
+      if (typeof inhalt.detail === 'string') text = inhalt.detail
+    } catch {
+      /* Statuszeile bleibt */
+    }
+    throw new ApiFehler(antwort.status, text)
+  }
+  return (await antwort.json()) as Anhang
+}

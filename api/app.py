@@ -4096,6 +4096,14 @@ def erzeuge_app(
                 neu=(ergebnis.neu_bestaetigt + ergebnis.neu_abgelehnt) > 0
             )
 
+        from api import journal_suche
+
+        # Suche, Tag-Filter und Anhänge (M05); Anhänge liegen in anhaenge/ neben der Datenbank.
+        journal_suche.registriere(
+            applikation, engine, pathlib.Path(db_pfad).resolve().parent,
+            pruefe_station_aufruf, _journal_bereich_pruefen,
+        )
+
         @applikation.get("/journal/{scope_typ}/{scope_id}", response_model=JournalAntwort)
         def journal_lesen(scope_typ: str, scope_id: str) -> JournalAntwort:
             """Notizen und Tags eines Bereichs — neueste Notiz zuerst."""

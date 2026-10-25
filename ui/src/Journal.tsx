@@ -5,11 +5,13 @@ import {
   ersetzeTags,
   fehlerText,
   holeAlleSchlagwoerter,
+  holeAnhaenge,
   holeJournal,
+  ladeAnhangHoch,
   legeNotizAn,
   loescheNotiz,
 } from './api'
-import type { JournalInhalt, Notiz, Schlagwort } from './api'
+import type { Anhang, JournalInhalt, Notiz, Schlagwort } from './api'
 import { zeit, zeitDe } from './format'
 
 // AP-08j, Punkt 2: Der Journal-Baustein — Notizen und Tags zu einem Bereich
@@ -38,6 +40,7 @@ export default function Journal({
   // null heißt: Tags werden nur gezeigt; eine Zeichenkette heißt: Bearbeiten.
   const [tagEntwurf, setzeTagEntwurf] = useState<string | null>(null)
   const [beschaeftigt, setzeBeschaeftigt] = useState(false)
+  const [anhaenge, setzeAnhaenge] = useState<Anhang[]>([])
 
   useEffect(() => {
     let abgebrochen = false
@@ -45,6 +48,13 @@ export default function Journal({
     setzeFehler(null)
     setzeBearbeitung(null)
     setzeTagEntwurf(null)
+    holeAnhaenge(scopeTyp, scopeId)
+      .then((liste) => {
+        if (!abgebrochen) setzeAnhaenge(liste)
+      })
+      .catch(() => {
+        if (!abgebrochen) setzeAnhaenge([])
+      })
     holeJournal(scopeTyp, scopeId)
       .then((ergebnis) => {
         if (!abgebrochen) setzeInhalt(ergebnis)
@@ -102,6 +112,19 @@ export default function Journal({
         setzeNeuText('')
         return neuLaden()
       })
+      .then(() => setzeBeschaeftigt(false))
+      .catch(fehlFang)
+  }
+
+  function anhangWaehlen(ereignis: React.ChangeEvent<HTMLInputElement>): void {
+    const datei = ereignis.target.files?.[0]
+    ereignis.target.value = ''
+    if (!datei) return
+    setzeBeschaeftigt(true)
+    setzeFehler(null)
+    ladeAnhangHoch(scopeTyp, scopeId, datei)
+      .then(() => holeAnhaenge(scopeTyp, scopeId))
+      .then(setzeAnhaenge)
       .then(() => setzeBeschaeftigt(false))
       .catch(fehlFang)
   }
@@ -195,6 +218,24 @@ export default function Journal({
               </button>
             </form>
           )}
+
+          <h4>Anhänge</h4>
+          {anhaenge.length === 0 && <p className="leer">Noch keine Anhänge.</p>}
+          <ul className="notizen">
+            {anhaenge.map((anhang) => (
+              <li key={anhang.id}>
+                <a href={`/anhang/${anhang.id}`} target="_blank" rel="noreferrer">{anhang.name}</a>{' '}
+                <span className="sicht">
+                  {anhang.mime}{anhang.groesse !== null ? `, ${(anhang.groesse / 1024).toFixed(0)} KB` : ''} · {zeitDe(anhang.erstellt_am)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <label className="sicht">
+            Anhang hinzufügen (png, jpeg, gif, webp, pdf, txt; höchstens 5 MB; Anhänge werden nicht gelöscht):{' '}
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain"
+                   disabled={beschaeftigt} onChange={anhangWaehlen} />
+          </label>
 
           <h4>Notizen</h4>
           {inhalt.notizen.length === 0 && <p className="leer">Noch keine Notizen.</p>}
