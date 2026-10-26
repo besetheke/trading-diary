@@ -51,6 +51,10 @@ Wenn sich `Deploy.ps1` selbst geändert hat, ruft es sich mit `-Neustart` neu au
 - [ ] Restore-Probe der letzten Sicherung (einmal im Monat und vor größeren Änderungen):
   `python -m journal restore-probe C:\Trading\backup\journal-<Datum>.db` (optional `--rebuild`): Integrität ok, Migration ok, Zeilenzahlen plausibel.
 - [ ] Mail: Testmail aus der Station oder `python -m roller.mailtest` kommt bei nbillinger@gmx.de an.
+- [ ] **Betrieb:** Das Live-Konto nirgends sonst anmelden (Handy, zweiter PC), solange der Roller läuft. Eine zweite Sitzung kappt die Paper-Daten
+  (IB 10197, am 23.10. über 2000 Meldungen). Die Station zeigt dann „Datenstörung“; Orders laufen bewusst weiter.
+- [ ] In der Zeitumstellungswoche (Europa Winterzeit, USA noch Sommerzeit: 25.10.–1.11.2026) beginnt Eurex um 04:00 ET (09:00 MEZ); der Roller
+  eröffnet erst nach 15 Minuten Abstand (09:15 MEZ). Das DAX-Tagesprogramm versucht es alle 3 Minuten bis etwa eine Stunde nach dem Beginn.
 - [ ] Am nächsten Handelstag: DAX-Eröffnung um 4:00 ET (Station: Verlauf zeigt Start-Limit, Wartebereiche, Fill), 7DTE-Eröffnungen 10:33/11:03 ET.
 
 ## 4. Nach einem Handelstag auswerten

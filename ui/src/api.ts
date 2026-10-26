@@ -661,6 +661,7 @@ export interface RollerStrategie {
   letzte_pruefung: string | null
   grund: string
   daten?: { art: string; seit: string | null }
+  datenstoerung?: { aktiv: boolean; code: number | null; text: string; seit: string | null; zuletzt: string | null; anzahl: number }
   profil?: string
   profil_je_strategie?: Record<string, string>
   verlauf_live?: { zeit: string; art: string; text: string }[]

@@ -364,6 +364,13 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
         {s.letzte_pruefung ? ` · geprüft ${zeitDe(s.letzte_pruefung)}` : ""}{" "}
         <button disabled={laeuft !== null} onClick={() => tu("strategie-pruefen")}>Neu prüfen</button>
       </p>
+      {s.datenstoerung?.aktiv && (
+        <p className="warnung">
+          <strong>Datenstörung</strong> · {s.datenstoerung.text} (IB {s.datenstoerung.code}, seit {zeitDe(s.datenstoerung.seit)},{" "}
+          {s.datenstoerung.anzahl} Meldungen). Die Kursquelle kann trotz Anzeige „live“ verzögert sein. Rolls und Eröffnungen laufen
+          bewusst weiter (Entscheidung 26.10.2026: lieber mit verzögerten Daten rollen als gar nicht).
+        </p>
+      )}
       {s.modus === "live" && s.live && (
         <p className="warnung">
           <strong>ECHTGELD-MODUS</strong> · Konto {s.live.konto} · erlaubt: {s.live.strategien.join(", ")} · höchstens{" "}
