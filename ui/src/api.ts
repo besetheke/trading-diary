@@ -630,6 +630,30 @@ export interface RollerLiveGrenzen {
   tagesverlust: Record<string, number>
 }
 
+// Rollparameter einer Strategie-Vorgabe, wie der Roller sie im Status liefert (nur zur Anzeige).
+export interface RollerRegeln {
+  seite: string
+  ziel_delta: number
+  breite: number
+  ziel_dte: number
+  verfall_modus: string
+  pt_restwert: number
+  kontrakte: number
+  staffel: [number, number][]
+  delta_puffer: number
+  gap_aufschlag: number
+  roll_wochen_max: number
+  max_verschiebung: number
+  max_debit_normal: number
+  early_exit_delta: number
+  early_exit_fenster_min: number
+  max_kettenverlust_anteil: number | null
+  max_rolls_pro_tag: number
+  tagesende_schliessen: boolean
+  multiplikator: string
+  waehrung: string
+}
+
 export interface RollerStrategie {
   paper: boolean
   modus?: 'paper' | 'live'
@@ -645,7 +669,7 @@ export interface RollerStrategie {
   tagesprogramm?: { strategien: string[]; ab_min: number; heute_eroeffnet: string[]; aktiv: boolean }
   aktion?: { name: string; laeuft: boolean; seit: string; ende?: string; ergebnis: unknown; params?: unknown } | null
   auto?: { an: boolean; max_pro_tag: number; heute: number; nur_live: boolean }
-  vorgaben: { name: string; text: string }[]
+  vorgaben: { name: string; text: string; regeln?: RollerRegeln }[]
   ketten: RollerKetteStand[]
   meldungen: string[]
 }

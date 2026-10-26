@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
+import Kettenkarten from "./Kettenkarte";
 import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
 import type { BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
@@ -496,6 +497,7 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
           ))}
         </div>
       )}
+      <Kettenkarten strategie={s} />
       {meldung && <p className="hinweis">{meldung}</p>}
       {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
         <p className="sicht">

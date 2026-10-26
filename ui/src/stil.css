@@ -1362,3 +1362,13 @@ details.filterbereich > summary {
   font-weight: 600;
   padding: 0.25rem 0;
 }
+
+/* Kettenkarten der Station: Strike-Leiter, Rollregel, Kostenbremse, Kettenverlauf */
+.kettenkarten { margin-top: 1.5rem; }
+.kettenkarte { border: 1px solid var(--rand); border-radius: 6px; padding: 0.7rem 0.9rem; margin: 0 0 1rem; background: #fff; }
+.kettenkarte > header { margin-bottom: 0.4rem; }
+.kk-raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 0.6rem 1.2rem; }
+.kk-bild { margin: 0; }
+.kk-bild figcaption { font-size: 0.82em; color: var(--grau); margin-bottom: 0.15rem; }
+.kk-bild svg { width: 100%; height: auto; display: block; }
+@media (max-width: 40rem) { .kk-raster { grid-template-columns: 1fr; } }
