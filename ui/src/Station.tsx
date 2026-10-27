@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
 import Kettenkarten from "./Kettenkarte";
+import OffeneKetten from "./OffeneKetten";
 import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
 import type { BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
@@ -204,7 +205,7 @@ function verfall(jjjjmmtt: string): string {
 }
 
 // Verlauf einer Roller-Kette als Liste: Eröffnung, jeder Roll mit Position vorher/nachher, kumuliertes Netto.
-function KettenVerlauf({ k }: { k: RollerKetteStand }): JSX.Element | null {
+function KettenVerlauf({ k, offen = false }: { k: RollerKetteStand; offen?: boolean }): JSX.Element | null {
   const schritte = k.verlauf ?? [];
   if (schritte.length === 0) return null;
   const rolls = schritte.filter((b) => b.art === "roll");
@@ -216,7 +217,7 @@ function KettenVerlauf({ k }: { k: RollerKetteStand }): JSX.Element | null {
   let kumuliert = 0;
   let rollIndex = -1;
   return (
-    <details className="kettenverlauf">
+    <details className="kettenverlauf" open={offen}>
       <summary>
         {k.kette_id} · Verlauf ({schritte.length} Schritte, {rolls.length} {rolls.length === 1 ? "Roll" : "Rolls"})
       </summary>
@@ -421,88 +422,50 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
       {s.ketten.length === 0 ? (
         <p className="hinweis">Keine offene Kette.</p>
       ) : (
-        <div className="tabelle-rahmen">
-          <table className="strategie-tabelle">
-            <thead>
-              <tr>
-                <th>Kette</th>
-                <th>Strategie</th>
-                <th>Verfall</th>
-                <th className="zahl">DTE</th>
-                <th className="zahl">Short/Long</th>
-                <th className="zahl">|Δ| Short</th>
-                <th className="zahl">Schwelle</th>
-                <th className="zahl" title="Summe aller Kredite minus Debits der Kette (Cash-Flow, kein Gewinn)">Netto</th>
-                <th className="zahl" title="Ergebnis, wenn die Kette jetzt geschlossen würde: Mittelkurs (natürlicher Preis); alle 10 Minuten neu">
-                  Wert jetzt
-                </th>
-                <th className="zahl">Rolls</th>
-                <th className="zahl" title="Rückkauf-Limit des Profit-Targets">PT</th>
-                <th>Lage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.ketten.map((k) => (
-                <tr key={k.kette_id} className={k.alarm || k.status === "pruefen" ? "warnung" : undefined}>
-                  <td>{k.kette_id}</td>
-                  <td>{k.strategie}</td>
-                  <td>{verfall(k.aktiv.verfall)}</td>
-                  <td className="zahl">{k.dte ?? "—"}</td>
-                  <td className="zahl">{k.aktiv.short}/{k.aktiv.long}</td>
-                  <td className="zahl">{k.short_delta === null || k.short_delta === undefined ? "—" : Math.abs(k.short_delta).toFixed(3)}</td>
-                  <td className="zahl">{zahl(k.schwelle)}</td>
-                  <td className="zahl">{zahl(k.netto)}</td>
-                  <td className="zahl" title={k.wert ? `Stand ${zeitDe(k.wert.zeit)}` : "noch keine Bewertung"}>
-                    {k.wert && k.wert.geld_mitte !== null
-                      ? `${k.wert.geld_mitte.toFixed(0)} (${k.wert.geld_natuerlich === null ? "—" : k.wert.geld_natuerlich.toFixed(0)}) ${k.wert.waehrung}`
-                      : "—"}
-                  </td>
-                  <td className="zahl">{k.rolls}</td>
-                  <td className="zahl">{zahl(k.pt_limit)}</td>
-                  <td>
-                    {k.status === "pruefen" && (
-                      <div>
-                        <strong>ANGEHALTEN</strong> — {k.warnung}{" "}
-                        <button disabled={laeuft !== null || !s.paper}
-                          title="Erst den Bestand in der TWS prüfen; der Roller nimmt die Kette nur auf, wenn der Bestand passt"
-                          onClick={() => tu("kette-aufnehmen", { kette: k.kette_id })}>
-                          Geprüft — wieder aufnehmen
-                        </button>
-                      </div>
-                    )}
-                    {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
-                    {k.grund ?? "—"}
-                    {k.vorschlag && (k.vorschlag as { art?: string }).art === "schliessen" && (
-                      <div>
-                        Vorschlag: Kette schließen{(k.vorschlag as { tagesende?: boolean }).tagesende ? " (Tagesende)" : " (Early Exit)"},
-                        Rückkauf ca. {zahl((k.vorschlag as { debit?: number }).debit)}{" "}
-                        <button disabled={laeuft !== null || !s.paper}
-                          onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
-                          Schließen freigeben
-                        </button>
-                      </div>
-                    )}
-                    {k.vorschlag && (k.vorschlag as { art?: string }).art !== "schliessen" && (
-                      <div>
-                        Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
-                        (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
-                        |Δ| neu {zahl(k.vorschlag.neu_delta === null ? null : Math.abs(k.vorschlag.neu_delta), 3)}), netto{" "}
-                        {zahl(k.vorschlag.netto)}, Debit-Rahmen {zahl(k.vorschlag.max_debit)}{" "}
-                        <button disabled={laeuft !== null || !s.paper}
-                          onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
-                          Roll freigeben
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {s.ketten.map((k) => (
-            <KettenVerlauf key={`v-${k.kette_id}`} k={k} />
-          ))}
-        </div>
+        <OffeneKetten
+          ketten={s.ketten}
+          verfall={verfall}
+          zahl={zahl}
+          verlauf={(k) => <KettenVerlauf k={k} offen />}
+          lage={(k) => (
+            <>
+              {k.status === "pruefen" && (
+                <div>
+                  <strong>ANGEHALTEN</strong> — {k.warnung}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    title="Erst den Bestand in der TWS prüfen; der Roller nimmt die Kette nur auf, wenn der Bestand passt"
+                    onClick={() => tu("kette-aufnehmen", { kette: k.kette_id })}>
+                    Geprüft — wieder aufnehmen
+                  </button>
+                </div>
+              )}
+              {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
+              {k.grund ?? "—"}
+              {k.vorschlag && (k.vorschlag as { art?: string }).art === "schliessen" && (
+                <div>
+                  Vorschlag: Kette schließen{(k.vorschlag as { tagesende?: boolean }).tagesende ? " (Tagesende)" : " (Early Exit)"},
+                  Rückkauf ca. {zahl((k.vorschlag as { debit?: number }).debit)}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                    Schließen freigeben
+                  </button>
+                </div>
+              )}
+              {k.vorschlag && (k.vorschlag as { art?: string }).art !== "schliessen" && (
+                <div>
+                  Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
+                  (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
+                  |Δ| neu {zahl(k.vorschlag.neu_delta === null ? null : Math.abs(k.vorschlag.neu_delta), 3)}), netto{" "}
+                  {zahl(k.vorschlag.netto)}, Debit-Rahmen {zahl(k.vorschlag.max_debit)}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                    Roll freigeben
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        />
       )}
       <Kettenkarten strategie={s} />
       {meldung && <p className="hinweis">{meldung}</p>}
@@ -688,7 +651,8 @@ export function RollerSeite(): JSX.Element {
         </div>
       )}
 
-      <h3>Offene Spreads ({s.spreads.length})</h3>
+      <details>
+      <summary>Alle Spreads im Konto ({s.spreads.length}) — Rohbestand aus der TWS, auch ohne Roller-Kette</summary>
       <div className="tabelle-rahmen">
         <table className="strategie-tabelle">
           <thead>
@@ -721,6 +685,7 @@ export function RollerSeite(): JSX.Element {
           </tbody>
         </table>
       </div>
+      </details>
 
       <h3>Stufen</h3>
       <ol className="stufen">

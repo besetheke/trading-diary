@@ -585,6 +585,7 @@ export interface RollerKettenWert {
 export interface RollerKetteStand {
   kette_id: string
   wert?: RollerKettenWert | null
+  symbol?: string | null
   status?: string
   warnung?: string | null
   strategie: string

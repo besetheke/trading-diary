@@ -1372,3 +1372,16 @@ details.filterbereich > summary {
 .kk-bild figcaption { font-size: 0.82em; color: var(--grau); margin-bottom: 0.15rem; }
 .kk-bild svg { width: 100%; height: auto; display: block; }
 @media (max-width: 40rem) { .kk-raster { grid-template-columns: 1fr; } }
+
+/* Offene Ketten des Rollers: Excel-artige Spaltenfilter, aufklappbare Kettenhistorie. */
+.offene-ketten tr.klickbar { cursor: pointer; }
+.offene-ketten tr.klickbar:hover, .offene-ketten tr.gewaehlt { background: var(--hover, rgba(128, 128, 128, 0.12)); }
+.offene-ketten .verlaufszeile td { white-space: normal; padding-left: 1.5rem; }
+.spaltenfilter { display: inline-block; position: relative; }
+.spaltenfilter summary { cursor: pointer; list-style: none; padding: 0 0.25rem; }
+.spaltenfilter summary.aktiv { font-weight: 700; color: var(--akzent, #c60); }
+.spaltenfilter-box {
+  position: absolute; z-index: 5; top: 1.4rem; left: 0; min-width: 11rem; max-height: 18rem; overflow-y: auto;
+  background: var(--hg, Canvas); color: inherit; border: 1px solid var(--grau, #888); padding: 0.4rem 0.6rem; text-align: left; font-weight: 400;
+}
+.spaltenfilter-box label { display: block; white-space: nowrap; }
