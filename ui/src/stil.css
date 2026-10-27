@@ -1385,3 +1385,9 @@ details.filterbereich > summary {
   background: var(--hg, Canvas); color: inherit; border: 1px solid var(--grau, #888); padding: 0.4rem 0.6rem; text-align: left; font-weight: 400;
 }
 .spaltenfilter-box label { display: block; white-space: nowrap; }
+/* eine Zeile je Kette: nichts umbrechen, Lage gekürzt (voller Text im Tooltip); Verlauf bleibt im sichtbaren Bereich */
+.offene-ketten td, .offene-ketten th { white-space: nowrap; }
+.offene-ketten td.lage { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
+.offene-ketten td.lage div { white-space: normal; }
+.offene-ketten .verlaufszeile td { padding: 0; }
+.verlauf-innen { position: sticky; left: 0; width: min(60rem, calc(100vw - 3rem)); overflow-x: auto; padding: 0.3rem 1rem; }

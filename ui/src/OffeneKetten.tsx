@@ -201,7 +201,7 @@ export default function OffeneKetten(props: {
                 >
                   <td>{offen ? '▾' : '▸'} {k.kette_id}</td>
                   <td>{tickerVon(k)}</td>
-                  <td>{k.strategie}</td>
+                  <td title={k.strategie}>{k.strategie.replace(/^(T\s+)?[A-Z]+:\s*/, '$1')}</td>
                   <td>{verfall(k.aktiv.verfall)}</td>
                   <td className="zahl">{k.dte ?? '—'}</td>
                   <td className="zahl">{k.aktiv.short}/{k.aktiv.long}</td>
@@ -215,11 +215,13 @@ export default function OffeneKetten(props: {
                   </td>
                   <td className="zahl">{k.rolls}</td>
                   <td className="zahl">{zahl(k.pt_limit)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>{lage(k)}</td>
+                  <td className="lage" title={k.grund ?? undefined} onClick={(e) => e.stopPropagation()}>{lage(k)}</td>
                 </tr>
                 {offen ? (
                   <tr className="verlaufszeile">
-                    <td colSpan={13}>{verlauf(k)}</td>
+                    <td colSpan={13}>
+                      <div className="verlauf-innen">{verlauf(k)}</div>
+                    </td>
                   </tr>
                 ) : null}
               </Fragment>
