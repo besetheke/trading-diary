@@ -1397,8 +1397,8 @@ details.filterbereich > summary {
 .shorts-uebersicht h3 label { font-size: 0.8rem; font-weight: 400; margin-left: 0.8rem; }
 .shorts-uebersicht h4 { margin: 0.8rem 0 0.3rem; font-size: 0.95rem; }
 .shorts-block { border: 1px solid var(--rand); border-radius: 6px; padding: 0.4rem 0.8rem 0.6rem; margin-bottom: 0.8rem; }
-.shorts-block.live { border: 2px solid var(--rot); }
-.shorts-block.live .shorts-kopf strong { color: var(--rot); }
+.shorts-block.paper { border: 2px solid var(--rot); background: #fdf3f2; }
+.shorts-block.paper .shorts-kopf strong { color: var(--rot); }
 .shorts-kopf { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: baseline; margin: 0.3rem 0; }
 .shorts-kopf .zaehler.rot { color: var(--rot); font-weight: 600; }
 .shorts-kopf .zaehler.gelb { color: var(--gelb); font-weight: 600; }
@@ -1429,3 +1429,11 @@ table.shorts td.im-geld { color: var(--rot); font-weight: 700; }
 button.klein { padding: 0 0.3rem; margin-left: 0.3rem; font-size: 0.8rem; }
 button.link { background: none; border: none; padding: 0; color: var(--akzent); text-decoration: underline; cursor: pointer; }
 .schwelle-form { padding: 0.3rem 0; }
+/* Kontowahl: Paper rot wie in der TWS, Live neutral */
+.konto-wahl { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0 0.6rem; }
+.konto-reiter { border: 2px solid var(--rand); background: var(--grund); border-radius: 6px; padding: 0.35rem 0.9rem; cursor: pointer;
+  font-size: 0.95rem; }
+.konto-reiter.live.gewaehlt { border-color: var(--tinte); background: #fff; box-shadow: 0 0 0 1px var(--tinte); }
+.konto-reiter.paper { color: #b42318; }
+.konto-reiter.paper.gewaehlt { border-color: #b42318; background: #b42318; color: #fff; }
+.konto-reiter.paper.gewaehlt .zaehler { color: #fff; }

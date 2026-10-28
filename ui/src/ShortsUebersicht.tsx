@@ -195,8 +195,8 @@ function Abschnitt(props: {
   )
 }
 
-function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'live'; nurHandeln: boolean; live?: boolean }): JSX.Element {
-  const { titel, daten, konto, nurHandeln, live } = props
+function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'live'; nurHandeln: boolean; paper?: boolean }): JSX.Element {
+  const { titel, daten, konto, nurHandeln, paper } = props
   const zurKette = (kette: string): void => {
     document.getElementById(`kette-${kette}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
@@ -204,7 +204,7 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
   const index = daten.positionen.filter((p) => p.klasse === 'index')
   const einzel = daten.positionen.filter((p) => p.klasse === 'einzelwert')
   return (
-    <div className={`shorts-block${live ? ' live' : ''}`}>
+    <div className={`shorts-block${paper ? ' paper' : ''}`}>
       <p className="shorts-kopf">
         <strong>{titel}</strong>
         <span className="zaehler rot">● {z.rot ?? 0} handeln</span>
@@ -221,6 +221,30 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
   )
 }
 
+type Konto = 'live' | 'paper'
+const KONTO_SPEICHER = 'shorts-konto'
+
+// Live-Instanz: undefined = noch nicht gefragt, null = nicht erreichbar, 'alt' = erreichbar, aber ohne Übersicht.
+type LiveStand = RollerShorts | null | 'alt' | undefined
+
+function Reiter(props: { konto: Konto; gewaehlt: boolean; waehle: () => void; daten: RollerShorts | null; hinweis?: string }): JSX.Element {
+  const { konto, gewaehlt, waehle, daten, hinweis } = props
+  const z = daten?.zaehler ?? {}
+  return (
+    <button type="button" className={`konto-reiter ${konto}${gewaehlt ? ' gewaehlt' : ''}`} onClick={waehle} aria-pressed={gewaehlt}>
+      <strong>{konto === 'live' ? 'LIVE' : 'PAPER'}</strong>{' '}
+      {daten ? (
+        <>
+          <span className="zaehler rot">● {z.rot ?? 0}</span> <span className="zaehler gelb">● {z.gelb ?? 0}</span>{' '}
+          <span className="zaehler gruen">● {z.gruen ?? 0}</span>
+        </>
+      ) : (
+        <span className="sicht">{hinweis}</span>
+      )}
+    </button>
+  )
+}
+
 export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null | undefined }): JSX.Element {
   const [nurHandeln, setzeNurHandeln] = useState<boolean>(() => {
     try {
@@ -229,12 +253,19 @@ export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null
       return true
     }
   })
-  const [live, setzeLive] = useState<RollerShorts | null>(null)
+  const [konto, setzeKonto] = useState<Konto>(() => {
+    try {
+      return localStorage.getItem(KONTO_SPEICHER) === 'paper' ? 'paper' : 'live'
+    } catch {
+      return 'live'
+    }
+  })
+  const [live, setzeLive] = useState<LiveStand>(undefined)
   useEffect(() => {
     let aktiv = true
     const laden = () =>
       holeRollerLive()
-        .then((d) => aktiv && setzeLive(d.erreichbar && d.status?.shorts ? d.status.shorts : null))
+        .then((d) => aktiv && setzeLive(!d.erreichbar ? null : d.status?.shorts ? d.status.shorts : 'alt'))
         .catch(() => aktiv && setzeLive(null))
     laden()
     const takt = window.setInterval(laden, 15000)
@@ -243,25 +274,56 @@ export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null
       window.clearInterval(takt)
     }
   }, [])
-  const umschalten = (an: boolean): void => {
-    setzeNurHandeln(an)
+  const merke = (schluessel: string, wert: string): void => {
     try {
-      localStorage.setItem(SPEICHER, an ? '1' : '0')
+      localStorage.setItem(schluessel, wert)
     } catch {
       /* nur eine Bequemlichkeit */
     }
   }
+  const umschalten = (an: boolean): void => {
+    setzeNurHandeln(an)
+    merke(SPEICHER, an ? '1' : '0')
+  }
+  const waehle = (k: Konto): void => {
+    setzeKonto(k)
+    merke(KONTO_SPEICHER, k)
+  }
+  const liveDaten = live && live !== 'alt' ? live : null
+  const liveHinweis = live === undefined ? 'frage …' : live === 'alt' ? 'Dienst ohne Übersicht (alter Stand)' : 'nicht verbunden'
   return (
-    <section className="shorts-uebersicht">
+    <section className={`shorts-uebersicht konto-${konto}`}>
       <h3>
         Shorts im Konto{' '}
         <label className="sicht">
           <input type="checkbox" checked={nurHandeln} onChange={(e) => umschalten(e.target.checked)} /> nur Handlungsbedarf
         </label>
       </h3>
-      {live ? <Block titel="LIVE-Konto" daten={live} konto="live" nurHandeln={nurHandeln} live /> : null}
-      {paper ? (
-        <Block titel="Paper-Konto" daten={paper} konto="paper" nurHandeln={nurHandeln} />
+      <div className="konto-wahl" role="group" aria-label="Konto">
+        <Reiter konto="live" gewaehlt={konto === 'live'} waehle={() => waehle('live')} daten={liveDaten} hinweis={liveHinweis} />
+        <Reiter konto="paper" gewaehlt={konto === 'paper'} waehle={() => waehle('paper')} daten={paper ?? null}
+          hinweis="Dienst ohne Übersicht (alter Stand)" />
+      </div>
+      {konto === 'live' ? (
+        liveDaten ? (
+          <Block titel="LIVE-Konto" daten={liveDaten} konto="live" nurHandeln={nurHandeln} />
+        ) : (
+          <div className="shorts-block">
+            <p className="warnung">
+              <strong>Live-Konto: {liveHinweis}.</strong>{' '}
+              {live === 'alt'
+                ? 'Die Live-Instanz läuft mit einem Stand vor AP-19 — Roller deployen und neu starten.'
+                : 'Die lesende Live-Instanz des Rollers antwortet nicht auf Port 8601.'}
+            </p>
+            <p className="hinweis">
+              Auf dem Server im Roller-Ordner <code>.\Start-Dienst-Live-Lesen.ps1</code> starten (Live-TWS auf 7496 muss laufen; setzt nie eine
+              Order). Das Journal braucht <code>ROLLER_LIVE_STATUS_PORT=8601</code> — der Paper-Schnellstart setzt es; ein schon laufendes
+              Journal einmal neu starten.
+            </p>
+          </div>
+        )
+      ) : paper ? (
+        <Block titel="PAPER-Konto" daten={paper} konto="paper" nurHandeln={nurHandeln} paper />
       ) : (
         <p className="hinweis">Der Roller liefert noch keine Übersicht (älterer Stand des Dienstes).</p>
       )}
