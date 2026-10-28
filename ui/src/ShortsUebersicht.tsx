@@ -138,17 +138,28 @@ function Abschnitt(props: {
                     <td>{z.symbol}</td>
                     <td>
                       {z.art}
-                      {z.naked ? <span className="marke-naked" title="Risiko nicht durch ein Long-Bein begrenzt"> ungedeckt</span> : null}
-                      {z.gruppe ? <span className="sicht" title="Short Put und Short Call desselben Verfalls (Iron Condor / Strangle)"> · IC</span> : null}
+                      {z.naked ? <span className="marke-naked" title="Risiko weder durch ein Long-Bein noch durch Aktien begrenzt"> ungedeckt</span> : null}
+                      {z.deckung === 'aktien' ? <span className="sicht" title="Durch Aktien im Depot gedeckt"> · Aktien</span> : null}
+                      {z.gruppe ? (
+                        <span className="sicht" title="Short Put und Short Call desselben Verfalls">
+                          {' · '}
+                          {z.deckung === 'kalender' || z.deckung === 'diagonal' ? 'DC' : 'IC'}
+                        </span>
+                      ) : null}
                     </td>
                     <td>{datum(z.verfall)}</td>
                     <td className="zahl">{z.dte}</td>
                     <td className="zahl">
                       {zahl(z.short, z.short % 1 ? 1 : 0)}
                       {z.long !== null ? `/${zahl(z.long, z.long % 1 ? 1 : 0)}` : ''}
+                      {z.long_verfall ? <span className="sicht" title="Verfall des Long-Beins"> ({datum(z.long_verfall)})</span> : null}
                     </td>
                     <td className="zahl">{z.menge}</td>
-                    <td className="zahl">{zahl(z.spot, z.klasse === 'index' ? 0 : 2)}</td>
+                    <td className={`zahl${z.daten_alt ? ' alt' : ''}`}
+                      title={z.daten_alt ? `Letzter bekannter Wert vom ${zeitDe(z.daten_alt)} (IB liefert gerade nichts)` : undefined}>
+                      {zahl(z.spot, z.klasse === 'index' ? 0 : 2)}
+                      {z.daten_alt ? <span className="sicht"> · {z.daten_alt.slice(11, 16)}</span> : null}
+                    </td>
                     <td className={`zahl${z.abstand !== null && z.abstand < 0 ? ' im-geld' : ''}`}>
                       {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                       {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}

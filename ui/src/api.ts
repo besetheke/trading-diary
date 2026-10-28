@@ -568,6 +568,9 @@ export interface RollerShort {
   ampel: Ampel
   grund: string
   ohne_delta: boolean
+  deckung?: 'spread' | 'debit' | 'kalender' | 'diagonal' | 'aktien' | null
+  long_verfall?: string | null
+  daten_alt?: string | null
 }
 
 export interface RollerShorts {

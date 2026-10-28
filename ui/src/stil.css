@@ -1437,3 +1437,4 @@ button.link { background: none; border: none; padding: 0; color: var(--akzent); 
 .konto-reiter.paper { color: #b42318; }
 .konto-reiter.paper.gewaehlt { border-color: #b42318; background: #b42318; color: #fff; }
 .konto-reiter.paper.gewaehlt .zaehler { color: #fff; }
+table.shorts td.alt { color: var(--grau); font-style: italic; }
