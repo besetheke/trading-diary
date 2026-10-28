@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Betrag from "./Betrag";
 import Kettenkarten from "./Kettenkarte";
 import OffeneKetten from "./OffeneKetten";
+import ShortsUebersicht from "./ShortsUebersicht";
 import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
 import type { BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
@@ -600,6 +601,7 @@ export function RollerSeite(): JSX.Element {
         Herzschlag vor {alter} s
       </p>
 
+      <ShortsUebersicht paper={s.shorts} />
       {s.strategie && <StrategieKarte s={s.strategie} />}
       {s.strategie && <EchtgeldReife />}
 
@@ -650,42 +652,6 @@ export function RollerSeite(): JSX.Element {
           </table>
         </div>
       )}
-
-      <details>
-      <summary>Alle Spreads im Konto ({s.spreads.length}) — Rohbestand aus der TWS, auch ohne Roller-Kette</summary>
-      <div className="tabelle-rahmen">
-        <table className="strategie-tabelle">
-          <thead>
-            <tr>
-              <th>Basiswert</th>
-              <th>Typ</th>
-              <th>Verfall</th>
-              <th className="zahl">Menge</th>
-              <th className="zahl">Short / Long</th>
-              <th className="zahl">|Δ| Short</th>
-              <th className="zahl">Basiswert</th>
-              <th>Kette im Journal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {s.spreads.map((p) => (
-              <tr key={p.key}>
-                <td>{p.symbol}</td>
-                <td>{p.typ}</td>
-                <td>{verfall(p.expiration)}</td>
-                <td className="zahl">{p.menge}</td>
-                <td className="zahl">
-                  {zahl(p.short, 0)} / {zahl(p.long, 0)}
-                </td>
-                <td className="zahl">{zahl(p.short_delta, 2)}</td>
-                <td className="zahl">{zahl(p.underlying, 1)}</td>
-                <KettenZelle k={p.kette} />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      </details>
 
       <h3>Stufen</h3>
       <ol className="stufen">

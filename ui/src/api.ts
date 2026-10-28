@@ -541,6 +541,43 @@ export interface RollerSpread {
   kette?: RollerKette
 }
 
+// AP-19: Shorts im Konto — jede Short-Option (Spread oder naked) mit Ampel, vom Roller bewertet.
+export type Ampel = 'rot' | 'gelb' | 'grau' | 'gruen'
+
+export interface RollerShort {
+  key: string
+  symbol: string
+  verfall: string
+  recht: 'P' | 'C'
+  art: string
+  short: number
+  long: number | null
+  menge: number
+  naked: boolean
+  gruppe: string | null
+  klasse: 'index' | 'einzelwert'
+  dte: number
+  spot: number | null
+  schwelle: number | null
+  schwelle_herkunft: 'roller' | 'position' | 'ticker' | 'staffel'
+  kette: string | null
+  abstand: number | null
+  abstand_pct: number | null
+  delta: number | null
+  delta_anteil: number | null
+  ampel: Ampel
+  grund: string
+  ohne_delta: boolean
+}
+
+export interface RollerShorts {
+  stand: string | null
+  fehler: string | null
+  zaehler: Partial<Record<Ampel, number>>
+  positionen: RollerShort[]
+  ueberschreibung?: { ticker?: Record<string, number>; position?: Record<string, number> }
+}
+
 export interface RollerStatus {
   dienst: string
   stufe: string
@@ -559,6 +596,7 @@ export interface RollerStatus {
   }
   breaches: RollerBreach[]
   spreads: RollerSpread[]
+  shorts?: RollerShorts | null
   log: string[]
 }
 
@@ -677,8 +715,8 @@ export interface RollerStrategie {
 }
 
 export function sendeRollerBefehl(
-  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen' | 'auto-an' | 'auto-aus',
-  parameter: { kette?: string; strategie?: string } = {},
+  name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen' | 'auto-an' | 'auto-aus' | 'schwelle-setzen',
+  parameter: { kette?: string; strategie?: string; ticker?: string; position?: string; wert?: string; konto?: 'paper' | 'live' } = {},
 ): Promise<unknown> {
   const q = new URLSearchParams(parameter as Record<string, string>).toString()
   return schicke('POST', `/journal/roller-befehl/${name}${q ? `?${q}` : ''}`, {})
@@ -695,6 +733,11 @@ export interface RollerAntwort {
 
 export function holeRoller(): Promise<RollerAntwort> {
   return hole('/roller-status') as Promise<RollerAntwort>
+}
+
+// AP-19 (L0): lesende Live-Instanz des Rollers.
+export function holeRollerLive(): Promise<RollerAntwort> {
+  return hole('/roller-status-live') as Promise<RollerAntwort>
 }
 
 // AP-14a: Zustand der Station (Seite „System“).

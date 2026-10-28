@@ -655,7 +655,10 @@ def pruefe_station_aufruf(request: Request) -> None:
 
 ROLLER_BEFEHLE = (
     "roll-freigabe", "strategie-pruefen", "oeffnen", "kette-aufnehmen", "auto-an", "auto-aus",
+    "schwelle-setzen",
 )
+# AP-19: an die Live-Instanz (nur lesend) geht ausschließlich die Schwelle der Shorts-Übersicht.
+ROLLER_BEFEHLE_LIVE = ("schwelle-setzen",)
 
 
 def _sende_roller_befehl(port: int, name: str) -> tuple[int, dict]:
@@ -2684,6 +2687,7 @@ def erzeuge_app(
     mit_journal: bool = False,
     pruefe_port=None,
     roller_port: int | None = None,
+    roller_live_port: int | None = None,
     hole_roller_status=None,
     sende_roller_befehl=None,
     bo_ordner: str | pathlib.Path | None = None,
@@ -2704,6 +2708,7 @@ def erzeuge_app(
     ``pruefe_port`` ersetzt die Erreichbarkeitsprüfung der Seite „System“
     (AP-14a) — nur für Tests. ``roller_port`` ist der Statusport des
     Roller-Dienstes (AP-14b); ohne Angabe gilt er als nicht angebunden.
+    ``roller_live_port`` ist der Statusport der lesenden Live-Instanz (AP-19, Stufe L0).
     ``hole_roller_status`` ersetzt die HTTP-Abfrage (nur für Tests).
     ``sende_roller_befehl`` ersetzt den Befehl an den Roller (AP-14e, nur für Tests).
     ``bo_ordner`` ist der Ordner der BO Research Suite (AP-14c, nur lesend).
@@ -3448,6 +3453,15 @@ def erzeuge_app(
                 pass
         return RollerAntwort(erreichbar=status is not None, status=status)
 
+    @applikation.get("/roller-status-live", response_model=RollerAntwort)
+    def roller_live() -> RollerAntwort:
+        """Status der Live-Instanz des Rollers (AP-19, L0: nur lesend, Shorts im Live-Konto).
+        Unverändert durchgereicht; ohne angebundene Instanz ``erreichbar: false``."""
+        if roller_live_port is None:
+            return RollerAntwort(erreichbar=False, status=None)
+        status = hole_roller_status(roller_live_port)
+        return RollerAntwort(erreichbar=status is not None, status=status)
+
     @applikation.get("/datenqualitaet-liste")
     def datenqualitaet(kurz: bool = False) -> dict:
         """Arbeitsliste der Datenqualität (M04): Betriebsstatus (letzter Abruf, Import, Rebuild,
@@ -4101,22 +4115,35 @@ def erzeuge_app(
 
         @applikation.post("/journal/roller-befehl/{name}")
         def roller_befehl(name: str, request: Request, kette: str | None = None,
-                          strategie: str | None = None) -> dict:
+                          strategie: str | None = None, ticker: str | None = None,
+                          position: str | None = None, wert: str | None = None,
+                          konto: str = "paper") -> dict:
             """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` (``kette``)
             führt den vorbereiteten Roll aus, ``oeffnen`` (``strategie``) eröffnet
             eine Strategie, ``kette-aufnehmen`` (``kette``) nimmt eine angehaltene Kette
             wieder auf, ``auto-an``/``auto-aus`` schaltet die Automatik (aus = Not-Aus),
-            ``strategie-pruefen`` rechnet neu. Nur diese Namen;
+            ``strategie-pruefen`` rechnet neu, ``schwelle-setzen`` (``ticker`` oder
+            ``position``, ``wert``; ohne ``wert`` entfernt) überschreibt die Schwelle der
+            Shorts-Übersicht (AP-19). ``konto=live`` geht an die lesende Live-Instanz und
+            erlaubt nur ``schwelle-setzen``. Nur diese Namen;
             Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst; vorab Schutzprüfung."""
             pruefe_station_aufruf(request)
             if name not in ROLLER_BEFEHLE:
                 raise HTTPException(status_code=404, detail="unbekannter Befehl")
-            if roller_port is None:
+            if konto not in ("paper", "live"):
+                raise HTTPException(status_code=404, detail="unbekanntes Konto")
+            if konto == "live" and name not in ROLLER_BEFEHLE_LIVE:
+                raise HTTPException(status_code=403,
+                                    detail="an die Live-Instanz nur schwelle-setzen")
+            ziel_port = roller_live_port if konto == "live" else roller_port
+            if ziel_port is None:
                 raise HTTPException(status_code=503, detail="Roller nicht angebunden")
             from urllib.parse import urlencode
-            parameter = {k: w for k, w in (("kette", kette), ("strategie", strategie)) if w}
+            parameter = {k: w for k, w in (("kette", kette), ("strategie", strategie),
+                                            ("ticker", ticker), ("position", position),
+                                            ("wert", wert)) if w}
             ziel = f"{name}?{urlencode(parameter)}" if parameter else name
-            code, antwort = sende_roller_befehl(roller_port, ziel)
+            code, antwort = sende_roller_befehl(ziel_port, ziel)
             if code != 200:
                 raise HTTPException(status_code=code, detail=antwort.get("fehler", "abgelehnt"))
             return antwort
@@ -4415,6 +4442,8 @@ app = erzeuge_app(
     ui_verzeichnis=os.environ.get("JOURNAL_UI") or None,
     # AP-14b: Statusport des Roller-Dienstes; 0 schaltet die Anbindung ab.
     roller_port=int(os.environ.get("ROLLER_STATUS_PORT", "8600")) or None,
+    # AP-19 (L0): Statusport der lesenden Live-Instanz; ohne Angabe nicht angebunden.
+    roller_live_port=int(os.environ.get("ROLLER_LIVE_STATUS_PORT", "0")) or None,
     # AP-14c: Ordner der BO Research Suite (nur lesend).
     bo_ordner=os.environ.get("BO_ORDNER", r"C:\10_Coding\BO Research Suite"),
 )

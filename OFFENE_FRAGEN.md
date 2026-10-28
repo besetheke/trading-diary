@@ -3879,3 +3879,12 @@ bewertet, aber nur, wenn er höchstens 7 Tage davor liegt (`HISTORISCHER_BESTAND
 für wenige Tage vor (der echte Abruf speichert nur gelegentlich), ein älterer Bestand wäre keine Bewertung zum Endtag. Bewertet werden die Beine, die am
 Stichtag des Bestands offen waren (eröffnet bis zu diesem Tag, erst danach oder nicht geschlossen); als Einstand gilt die Gesamtkommission des Beins,
 also bei inzwischen geschlossenen Beinen inklusive der späteren Schließkommission (leichte Abweichung). Soll die Frist länger oder kürzer sein?
+
+## OF-109 · Shorts im Konto: Ampel und Schwelle (28.10.2026)
+
+Annahmen (AP-19, Stufe A, `options-roller/roller/shorts.py`): rot = Short im Geld oder |Δ| ≥ Schwelle, bei DTE ≤ 1 wird gelb zu rot;
+gelb = |Δ| ≥ 80 % der Schwelle oder Abstand Kurs–Short unter 1 % (Index) bzw. 3 % (Einzelwert). Schwelle für manuelle Positionen ist die
+DTE-Staffel des Rollers (7 DTE 0,38 · 14 DTE 0,42 · 21 DTE 0,46 · 28 DTE 0,50); über 28 DTE gilt ihr letzter Wert 0,50, obwohl die
+Staffel des Rollers dort „noch nicht rollen“ heißt. Roller-Ketten zeigen ihre eigene Schwelle (Profil, Strategie). Ein Long schützt einen
+Short nur auf der richtigen Seite (Put darunter, Call darüber), gleicher Verfall, gleiche Handelsklasse; der nächstliegende zuerst, der Rest
+gilt als ungedeckt. Passen 80 %, 1 % und 3 % und die 0,50 für lange Laufzeiten?

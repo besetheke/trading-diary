@@ -195,6 +195,7 @@ export default function OffeneKetten(props: {
             return (
               <Fragment key={k.kette_id}>
                 <tr
+                  id={`kette-${k.kette_id}`}
                   className={`klickbar${k.alarm || k.status === 'pruefen' ? ' warnung' : ''}${offen ? ' gewaehlt' : ''}`}
                   onClick={() => setzeAufgeklappt(offen ? null : k.kette_id)}
                   title="Klicken: Kettenhistorie ein-/ausklappen"

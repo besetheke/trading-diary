@@ -56,6 +56,7 @@ export default defineConfig({
       '/oa-abgleich': 'http://localhost:8000',
       '/backtests': 'http://localhost:8000',
       '/system': 'http://localhost:8000',
+      '/roller-status-live': 'http://localhost:8000',
       '/roller-status': 'http://localhost:8000',
       '/breakout-stand': 'http://localhost:8000',
       '/rollkandidaten': 'http://localhost:8000',

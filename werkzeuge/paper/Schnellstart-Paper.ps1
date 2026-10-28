@@ -19,6 +19,8 @@ if (Test-Laeuft) { Start-Process "http://127.0.0.1:$port/start"; return }
 
 $env:JOURNAL_DB = $db
 $env:ROLLER_STATUS_PORT = "8600"
+# AP-19 (L0): lesende Live-Instanz des Rollers (Start-Dienst-Live-Lesen.ps1); laeuft sie nicht, zeigt die Station nur Paper.
+$env:ROLLER_LIVE_STATUS_PORT = "8601"
 $env:JOURNAL_UI = Join-Path $projekt "ui\dist"     # Oberflaeche aus dem Projekt (die Datenbank liegt ausserhalb)
 $logs = Join-Path $stamm "logs"
 Start-Process -FilePath ".venv\Scripts\pythonw.exe" `

@@ -1391,3 +1391,41 @@ details.filterbereich > summary {
 .offene-ketten td.lage div { white-space: normal; }
 .offene-ketten .verlaufszeile td { padding: 0; }
 .verlauf-innen { position: sticky; left: 0; width: min(60rem, calc(100vw - 3rem)); overflow-x: auto; padding: 0.3rem 1rem; }
+
+/* AP-19: Shorts im Konto — Ampel je Short-Option, Indizes und Einzelwerte getrennt. */
+.shorts-uebersicht { --rot: #b42318; --gelb: #b7791f; --gruen: #2f855a; --grau-ampel: #9a958c; }
+.shorts-uebersicht h3 label { font-size: 0.8rem; font-weight: 400; margin-left: 0.8rem; }
+.shorts-uebersicht h4 { margin: 0.8rem 0 0.3rem; font-size: 0.95rem; }
+.shorts-block { border: 1px solid var(--rand); border-radius: 6px; padding: 0.4rem 0.8rem 0.6rem; margin-bottom: 0.8rem; }
+.shorts-block.live { border: 2px solid var(--rot); }
+.shorts-block.live .shorts-kopf strong { color: var(--rot); }
+.shorts-kopf { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: baseline; margin: 0.3rem 0; }
+.shorts-kopf .zaehler.rot { color: var(--rot); font-weight: 600; }
+.shorts-kopf .zaehler.gelb { color: var(--gelb); font-weight: 600; }
+.shorts-kopf .zaehler.gruen { color: var(--gruen); }
+.shorts-kopf .zaehler.grau { color: var(--grau-ampel); }
+table.shorts td, table.shorts th { white-space: nowrap; }
+table.shorts td.grund { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; color: var(--grau); }
+table.shorts tr.ampel-rot { background: #fbeceb; }
+table.shorts tr.ampel-gelb { background: #fdf6e7; }
+table.shorts tr.gruppen-anfang td { border-top: 2px solid var(--grau); }
+table.shorts td.im-geld { color: var(--rot); font-weight: 700; }
+.punkt { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 50%; vertical-align: middle; }
+.punkt.rot { background: var(--rot); }
+.punkt.gelb { background: var(--gelb); }
+.punkt.gruen { background: var(--gruen); }
+.punkt.grau { background: var(--grau-ampel); }
+.marke-naked { color: var(--rot); font-size: 0.8em; font-weight: 600; }
+.delta-balken { position: relative; display: inline-block; width: 9rem; height: 1.1rem; background: #eeebe5; border-radius: 3px;
+  vertical-align: middle; overflow: hidden; }
+.delta-balken .fuellung { position: absolute; left: 0; top: 0; bottom: 0; }
+.delta-balken .fuellung.rot { background: #f2b8b2; }
+.delta-balken .fuellung.gelb { background: #f5d99a; }
+.delta-balken .fuellung.gruen { background: #b9dcc7; }
+.delta-balken .fuellung.grau { background: #d8d5cf; }
+.delta-balken .marke { position: absolute; left: 80%; top: 0; bottom: 0; border-left: 2px solid var(--tinte); }
+.delta-balken .text { position: relative; padding-left: 0.3rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.delta-balken.ohne { color: var(--grau); font-size: 0.8rem; text-align: center; line-height: 1.1rem; }
+button.klein { padding: 0 0.3rem; margin-left: 0.3rem; font-size: 0.8rem; }
+button.link { background: none; border: none; padding: 0; color: var(--akzent); text-decoration: underline; cursor: pointer; }
+.schwelle-form { padding: 0.3rem 0; }
