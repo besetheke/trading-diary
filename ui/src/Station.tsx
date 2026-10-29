@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import Betrag from "./Betrag";
 import Kettenkarten from "./Kettenkarte";
 import OffeneKetten from "./OffeneKetten";
 import ShortsUebersicht from "./ShortsUebersicht";
 import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
-import type { RollerShorts, BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
+import type { RollerShorts, BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -170,35 +168,6 @@ function zahl(wert: number | null | undefined, stellen = 1): string {
     : wert.toLocaleString("de-DE", { minimumFractionDigits: stellen, maximumFractionDigits: stellen });
 }
 
-// AP-14d: Was hat diese Position schon gekostet? Kette im Journal: Rolls,
-// bereits realisiertes Ergebnis (Roll-Schritte), Prämie der offenen Legs.
-function KettenZelle({ k }: { k?: RollerKette }): JSX.Element {
-  if (!k) {
-    return (
-      <td className="kette" title="Keine eindeutige offene Kette im Journal (Stand des letzten Flex-Imports; heute Eröffnetes fehlt noch)">
-        —
-      </td>
-    );
-  }
-  return (
-    <td className="kette">
-      <Link to={`/positionen/${k.chain_id}`} title={k.strategie ?? undefined}>
-        {k.anzahl_rolls} {k.anzahl_rolls === 1 ? "Roll" : "Rolls"}
-      </Link>
-      {k.ketten && k.ketten > 1 ? ` (${k.ketten} Ketten)` : ""}
-      {" · "}
-      bisher <Betrag wert={k.realisiert_bisher} waehrung={k.waehrung ?? undefined} />
-      {k.praemie_offen_eur !== null && (
-        <>
-          {" · "}
-          Prämie <Betrag wert={k.praemie_offen_eur} />
-          {k.praemie_aktuell_eur !== null && <> → <Betrag wert={k.praemie_aktuell_eur} /></>}
-        </>
-      )}
-    </td>
-  );
-}
-
 function verfall(jjjjmmtt: string): string {
   return jjjjmmtt.length === 8
     ? `${jjjjmmtt.slice(6, 8)}.${jjjjmmtt.slice(4, 6)}.${jjjjmmtt.slice(0, 4)}`
@@ -332,6 +301,11 @@ function EchtgeldReife(): JSX.Element | null {
       </ul>
     </details>
   );
+}
+
+// Karten fürs Rollen nur für Ketten ohne Position im Konto; die übrigen zeigt die Liste beim Aufklappen.
+function RestKarten({ s }: { s: RollerStrategie }): JSX.Element {
+  return <Kettenkarten strategie={s} />;
 }
 
 type KopfKontext = { lage: (k: RollerKetteStand) => JSX.Element; verlauf: (k: RollerKetteStand) => JSX.Element; laeuft: boolean };
@@ -476,7 +450,7 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
         </>
       )}
       {s.ketten.length === 0 && !shorts && <p className="hinweis">Keine offene Kette.</p>}
-      <Kettenkarten strategie={s} />
+      {restKetten.length > 0 && <RestKarten s={{ ...s, ketten: restKetten }} />}
       {meldung && <p className="hinweis">{meldung}</p>}
       {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
         <p className="sicht">
@@ -486,9 +460,11 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
           {s.tagesprogramm.strategien.length}.
         </p>
       )}
+      {((s.statistik && Object.keys(s.statistik).length > 0) || (s.abgeschlossen && s.abgeschlossen.length > 0)) && (
+        <details>
+          <summary>Roller-Statistik (Paper): Ergebnis je Strategie in Punkten, abgeschlossene Ketten</summary>
       {s.statistik && Object.keys(s.statistik).length > 0 && (
         <>
-          <h3>Auswertung je Strategie</h3>
           <div className="tabelle-rahmen">
             <table className="strategie-tabelle">
               <thead>
@@ -537,6 +513,8 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
               </tbody>
             </table>
           </div>
+        </details>
+      )}
         </details>
       )}
       {s.meldungen.length > 0 && (
@@ -617,62 +595,6 @@ export function RollerSeite(): JSX.Element {
       )}
       {s.strategie && <EchtgeldReife />}
 
-      <h3>Breaches ({s.breaches.length})</h3>
-      {s.breaches.length === 0 ? (
-        <p className="hinweis">Kein Short-Strike hat seinen Danger-Strike überschritten.</p>
-      ) : (
-        <div className="tabelle-rahmen">
-          <table className="strategie-tabelle">
-            <thead>
-              <tr>
-                <th>Basiswert</th>
-                <th>Verfall</th>
-                <th>Seite</th>
-                <th className="zahl">DTE</th>
-                <th className="zahl">Short</th>
-                <th className="zahl">Danger</th>
-                <th className="zahl" title="Abstand Basiswert zu Short in Indexpunkten; negativ = im Geld">
-                  Puffer
-                </th>
-                <th className="zahl">|Δ| Short</th>
-                <th className="zahl" title="Theoretischer Wert des Rolls in Indexpunkten">Roll Theo</th>
-                <th className="zahl" title="Positiv = Markt verlangt mehr als das Modell (teuer)">Edge</th>
-                <th>Bewertung</th>
-                <th title="Geschichte dieser Kette im Journal: Rolls, bisher realisiert (EUR), Prämie bei Eröffnung → aktuell">
-                  Kette im Journal
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.breaches.map((b) => (
-                <tr key={b.position_key}>
-                  <td>{b.symbol}</td>
-                  <td>{verfall(b.expiration)}</td>
-                  <td>{b.right === "P" ? "Put" : "Call"}</td>
-                  <td className="zahl">{b.dte}</td>
-                  <td className="zahl">{zahl(b.short_strike, 0)}</td>
-                  <td className="zahl">{zahl(b.danger_strike, 1)}</td>
-                  <td className="zahl">{zahl(b.puffer, 0)}</td>
-                  <td className="zahl">{zahl(b.short_delta, 2)}</td>
-                  <td className="zahl">{zahl(b.edge?.theo_roll)}</td>
-                  <td className="zahl">{zahl(b.edge?.edge_abs, 2)}</td>
-                  <td>{b.edge ? `${b.edge.verdict ?? "—"} (${b.edge.data_quality ?? "—"})` : "—"}</td>
-                  <KettenZelle k={b.kette} />
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <h3>Stufen</h3>
-      <ol className="stufen">
-        <li><strong>R1 Inbetriebnahme</strong> — erledigt.</li>
-        <li><strong>R2 Sichtbar</strong> — diese Seite, Dienst ohne Fenster.</li>
-        <li><strong>R3 Vorschlag und Freigabe per Klick</strong> — zuerst im Paper-Konto.</li>
-        <li><strong>R4 Schattenmodus</strong> — entscheidet automatisch, schickt nichts ab.</li>
-        <li><strong>R5 Automatik mit Leitplanken</strong> — Rolls je Kette und Roll-Verlust begrenzt, Tageslimits, Not-Aus.</li>
-      </ol>
       <details>
         <summary>Protokoll des Dienstes</summary>
         <pre className="protokoll">{s.log.slice(-40).join("\n")}</pre>

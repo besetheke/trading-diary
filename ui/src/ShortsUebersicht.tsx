@@ -153,7 +153,7 @@ function KettenZeile({ k }: { k: RollerKetteStand }): JSX.Element {
   const hinweis = k.status === 'pruefen' ? 'ANGEHALTEN' : k.vorschlag ? 'Vorschlag' : k.signal ? 'ROLL-SIGNAL' : null
   return (
     <>
-      <strong>{k.kette_id}</strong> · {k.rolls} {k.rolls === 1 ? 'Roll' : 'Rolls'} · Netto {zahl(k.netto, 1)}
+      <strong>{k.kette_id}</strong> · Netto {zahl(k.netto, 1)}
       {hinweis ? <span className="kette-hinweis"> · {hinweis}</span> : null}
     </>
   )
@@ -163,6 +163,7 @@ function KettenZeile({ k }: { k: RollerKetteStand }): JSX.Element {
 function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge }): JSX.Element {
   const { z, konto, w } = props
   const info = z.kette ? w.ketten.get(z.kette) : undefined
+  const [karten, setzeKarten] = useState(false)
   return (
     <div className="shorts-details">
       <p className="sicht">
@@ -175,13 +176,22 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
         <>
           {w.lage ? <div className="lage-block">{w.lage(info.kette)}</div> : null}
           {w.verlauf ? w.verlauf(info.kette) : null}
-          <div className="kk-raster">
-            <StrikeLeiter kette={info.kette} regeln={info.regeln} />
-            <RollRegel kette={info.kette} regeln={info.regeln} />
-            <Kostenbremse kette={info.kette} regeln={info.regeln} />
-            <Kettenverlauf kette={info.kette} />
-          </div>
-          {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
+          <p>
+            <button type="button" onClick={() => setzeKarten(!karten)} aria-expanded={karten}>
+              {karten ? 'Karten fürs Rollen ausblenden' : 'Details: Karten fürs Rollen (Strike-Leiter, Rollregel, Kostenbremse, Verlauf)'}
+            </button>
+          </p>
+          {karten ? (
+            <>
+              <div className="kk-raster">
+                <StrikeLeiter kette={info.kette} regeln={info.regeln} />
+                <RollRegel kette={info.kette} regeln={info.regeln} />
+                <Kostenbremse kette={info.kette} regeln={info.regeln} />
+                <Kettenverlauf kette={info.kette} />
+              </div>
+              {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
+            </>
+          ) : null}
         </>
       ) : z.kette ? (
         <p className="sicht">Kette {z.kette} ist nur im Dienst bekannt, die Kettendaten fehlen im Status.</p>
@@ -223,7 +233,8 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                 <th className="zahl" title="Kurswert minus Einstand (wie UNRLSRTR G&V der TWS)">Unrealisiert</th>
                 <th title={`|Δ| des Shorts gegen die Schwelle; Strich = Schwelle. ${REGEL}`}>|Δ| / Schwelle</th>
                 <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
-                <th title="Roller-Kette dieser Position: Rolls, Netto der Kette">Kette</th>
+                <th className="zahl" title="Anzahl Rolls der Roller-Kette">Rolls</th>
+                <th title="Roller-Kette dieser Position: Netto der Kette, Hinweis">Kette</th>
               </tr>
             </thead>
             <tbody>
@@ -277,11 +288,12 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                         {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
                       </td>
+                      <td className="zahl">{info ? info.kette.rolls : '—'}</td>
                       <td>{info ? <KettenZeile k={info.kette} /> : z.kette ? z.kette : <span className="sicht">manuell</span>}</td>
                     </tr>
                     {aufgeklappt ? (
                       <tr className="verlaufszeile">
-                        <td colSpan={12}>
+                        <td colSpan={13}>
                           <div className="verlauf-innen">
                             <Details z={z} konto={konto} w={w} />
                           </div>
