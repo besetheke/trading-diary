@@ -96,55 +96,57 @@ export default function Ueberleitung(): JSX.Element | null {
         Stand {datumDe(daten.stichtag)}, gesamte Historie, EUR. Links die Rechnung des Journals,
         rechts IBs Bericht — beide Spalten ergeben denselben Kontowert.
       </p>
-      <table className="ueberleitung">
-        <thead>
-          <tr>
-            <th>Posten</th>
-            <th className="zahl">Journal (berechnet)</th>
-            <th className="zahl">IB (Bericht)</th>
-            <th className="zahl">Unterschied</th>
-            <th>Quelle</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ZEILEN.map((z) => (
-            <tr key={z.feld}>
-              <td>{z.titel}</td>
+      <div className="tabelle-rahmen">
+        <table className="ueberleitung">
+          <thead>
+            <tr>
+              <th>Posten</th>
+              <th className="zahl">Journal (berechnet)</th>
+              <th className="zahl">IB (Bericht)</th>
+              <th className="zahl">Unterschied</th>
+              <th>Quelle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ZEILEN.map((z) => (
+              <tr key={z.feld}>
+                <td>{z.titel}</td>
+                <td className="zahl">
+                  <Betrag wert={journal[z.feld]} />
+                </td>
+                <td className="zahl">
+                  <Betrag wert={ib[z.feld]} />
+                </td>
+                <td className="zahl">
+                  <Betrag wert={unterschied[z.feld]} />
+                </td>
+                <td>
+                  Journal: {z.journal}. IB: {z.ib}.
+                  {z.feld === 'unrealisiert' ? (
+                    <>
+                      {' '}
+                      <Link to="/bestand">Depot</Link>
+                    </>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+            <tr className="summe">
+              <td>= Kontowert laut IB</td>
               <td className="zahl">
-                <Betrag wert={journal[z.feld]} />
+                <Betrag wert={daten.kontowert} />
               </td>
               <td className="zahl">
-                <Betrag wert={ib[z.feld]} />
+                <Betrag wert={daten.kontowert} />
               </td>
-              <td className="zahl">
-                <Betrag wert={unterschied[z.feld]} />
-              </td>
+              <td className="zahl">—</td>
               <td>
-                Journal: {z.journal}. IB: {z.ib}.
-                {z.feld === 'unrealisiert' ? (
-                  <>
-                    {' '}
-                    <Link to="/bestand">Depot</Link>
-                  </>
-                ) : null}
+                Gewinn laut IB: <Betrag wert={daten.gewinn_ib} />
               </td>
             </tr>
-          ))}
-          <tr className="summe">
-            <td>= Kontowert laut IB</td>
-            <td className="zahl">
-              <Betrag wert={daten.kontowert} />
-            </td>
-            <td className="zahl">
-              <Betrag wert={daten.kontowert} />
-            </td>
-            <td className="zahl">—</td>
-            <td>
-              Gewinn laut IB: <Betrag wert={daten.gewinn_ib} />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
 
       <h4>Warum das realisierte Ergebnis abweicht</h4>
       <p className="sicht">
@@ -152,8 +154,9 @@ export default function Ueberleitung(): JSX.Element | null {
         stimmen mit IB genau überein, {a.zeilen_abweichend.toLocaleString('de-DE')} weichen ab —
         fast alle im Zusammenhang mit Zuteilung oder Ausübung.
       </p>
-      <table className="ueberleitung">
-        <tbody>
+      <div className="tabelle-rahmen">
+        <table className="ueberleitung">
+          <tbody>
           <tr>
             <td>Prämien im Einstand gehaltener Aktien</td>
             <td className="zahl">
@@ -233,8 +236,9 @@ export default function Ueberleitung(): JSX.Element | null {
             </td>
             <td />
           </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
       {luecke > 0 || daten.anzahl_kurs_fehlt > 0 ? (
         <p className="sicht fussnote">
           {luecke > 0

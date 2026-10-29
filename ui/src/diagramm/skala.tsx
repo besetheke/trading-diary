@@ -77,50 +77,78 @@ export function monatKurz(monat: string): string {
   return `${mm}/${jahr.slice(2)}`
 }
 
-// Zeitmarken der x-Achse: bis etwa 18 Monate Monatsanfänge (MM/JJ), darüber
-// Jahresanfänge (JJJJ). Mehr als zehn Marken verlieren den Rang.
-export function xMarken(ersteIso: string, letzteIso: string): { ms: number; text: string }[] {
-  const erste = new Date(isoMs(ersteIso))
-  const letzte = new Date(isoMs(letzteIso))
-  const jahrV = erste.getUTCFullYear()
-  const monatV = erste.getUTCMonth()
-  const jahrB = letzte.getUTCFullYear()
-  const monatB = letzte.getUTCMonth()
-  const monate = (jahrB - jahrV) * 12 + (monatB - monatV) + 1
-  const marken: { ms: number; text: string }[] = []
-  if (monate <= 18) {
-    let jahr = jahrV
-    let monat = monatV + 1
-    if (monat > 11) {
-      monat = 0
-      jahr += 1
-    }
-    while (jahr < jahrB || (jahr === jahrB && monat <= monatB)) {
-      marken.push({
-        ms: Date.UTC(jahr, monat, 1),
-        text: `${String(monat + 1).padStart(2, '0')}/${String(jahr).slice(2)}`,
-      })
-      monat += 1
+interface Zeitmarke {
+  ms: number
+  text: string
+}
+
+function isoVonMs(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+function kurzesDatum(ms: number, mitJahr: boolean): string {
+  const [jahr, monat, tag] = isoVonMs(ms).split('-')
+  return mitJahr ? `${tag}.${monat}.${jahr.slice(2)}` : `${tag}.${monat}.`
+}
+
+function markenAusduennen(marken: Zeitmarke[], hoechstzahl: number): Zeitmarke[] {
+  if (marken.length <= hoechstzahl) return marken
+  const schritt = (marken.length - 1) / (hoechstzahl - 1)
+  return Array.from({ length: hoechstzahl }, (_, i) => marken[Math.round(i * schritt)])
+}
+
+// Zeitmarken folgen dem sichtbaren Zeitraum und der tatsächlichen Diagrammbreite.
+// Start und Ende bleiben immer lesbar; auch ein einzelner Monat erhält eine Achse.
+export function xMarken(ersteIso: string, letzteIso: string, breite = KURVE_BREITE): Zeitmarke[] {
+  const von = isoMs(ersteIso)
+  const bis = isoMs(letzteIso)
+  if (von === bis) return [{ ms: von, text: kurzesDatum(von, true) }]
+  const tage = Math.round((bis - von) / 86_400_000)
+  const marken: Zeitmarke[] = [{ ms: von, text: '' }]
+  if (tage <= 62) {
+    for (let ms = von + 86_400_000; ms < bis; ms += 86_400_000) marken.push({ ms, text: '' })
+  } else if (tage <= 210) {
+    const wochentag = new Date(von).getUTCDay()
+    let ms = von + ((8 - wochentag) % 7 || 7) * 86_400_000
+    for (; ms < bis; ms += 7 * 86_400_000) marken.push({ ms, text: '' })
+  } else {
+    const erste = new Date(von)
+    const letzte = new Date(bis)
+    const monate = (letzte.getUTCFullYear() - erste.getUTCFullYear()) * 12 + letzte.getUTCMonth() - erste.getUTCMonth()
+    if (monate <= 24) {
+      let jahr = erste.getUTCFullYear()
+      let monat = erste.getUTCMonth() + 1
       if (monat > 11) {
         monat = 0
         jahr += 1
       }
-    }
-  } else {
-    for (let jahr = jahrV + 1; jahr <= jahrB; jahr += 1) {
-      marken.push({ ms: Date.UTC(jahr, 0, 1), text: String(jahr) })
+      while (jahr < letzte.getUTCFullYear() || (jahr === letzte.getUTCFullYear() && monat <= letzte.getUTCMonth())) {
+        const ms = Date.UTC(jahr, monat, 1)
+        if (ms < bis) marken.push({ ms, text: `${String(monat + 1).padStart(2, '0')}/${String(jahr).slice(2)}` })
+        monat += 1
+        if (monat > 11) {
+          monat = 0
+          jahr += 1
+        }
+      }
+    } else {
+      for (let jahr = erste.getUTCFullYear() + 1; jahr <= letzte.getUTCFullYear(); jahr += 1) {
+        const ms = Date.UTC(jahr, 0, 1)
+        if (ms < bis) marken.push({ ms, text: String(jahr) })
+      }
     }
   }
-  if (marken.length > 10) {
-    const schritt = Math.ceil(marken.length / 10)
-    return marken.filter((_, i) => i % schritt === 0 || i === marken.length - 1)
-  }
-  return marken
+  marken.push({ ms: bis, text: '' })
+  const hoechstzahl = Math.max(2, Math.floor(grafikBreite(breite) / 72))
+  return markenAusduennen(marken, hoechstzahl).map((marke, i, auswahl) => ({
+    ...marke,
+    text: marke.text || kurzesDatum(marke.ms, i === 0 || i === auswahl.length - 1),
+  }))
 }
 
 // Das Gerüst einer Kurve über der Zeit — von Linie.tsx und Flaeche.tsx
 // gemeinsam genutzt. Number() bestimmt ausschließlich Pixelpositionen (D2).
-export function kurvenGeruest(punkte: Punkt[]) {
+export function kurvenGeruest(punkte: Punkt[], breite = KURVE_BREITE) {
   const werte = punkte.map((punkt) => Number(punkt.y))
   const raster = yRaster(Math.min(...werte), Math.max(...werte))
   const ms = punkte.map((punkt) => isoMs(punkt.x))
@@ -129,26 +157,25 @@ export function kurvenGeruest(punkte: Punkt[]) {
   const px = (i: number): number =>
     RAND.links +
     (msBis === msVon
-      ? grafikBreite(KURVE_BREITE) / 2
-      : ((ms[i] - msVon) / (msBis - msVon)) * grafikBreite(KURVE_BREITE))
+      ? grafikBreite(breite) / 2
+      : ((ms[i] - msVon) / (msBis - msVon)) * grafikBreite(breite))
   const py = (wert: number): number => yPixel(wert, raster.von, raster.bis, KURVE_HOEHE)
   const pfad = punkte
     .map(
       (punkt, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)} ${py(Number(punkt.y)).toFixed(1)}`,
     )
     .join(' ')
-  const marken = xMarken(punkte[0].x, punkte[punkte.length - 1].x)
+  const marken = xMarken(punkte[0].x, punkte[punkte.length - 1].x, breite)
   return { raster, ms, msVon, msBis, px, py, pfad, marken }
 }
 
 export type KurvenGeruest = ReturnType<typeof kurvenGeruest>
 
-// Index des zeitlich nächsten Punkts zur Mausposition (D2: Pixel, nicht
-// Inhalt) — für die senkrechte Hilfslinie des Zeigers.
-export function naechsterIndex(ms: number[], grafikX: number): number {
+// Index des zeitlich nächsten Punkts zur Zeigerposition (D2: Pixel, nicht Inhalt).
+export function naechsterIndex(ms: number[], grafikX: number, breite = KURVE_BREITE): number {
   const msVon = ms[0]
   const msBis = ms[ms.length - 1]
-  const ziel = msVon + ((grafikX - RAND.links) / grafikBreite(KURVE_BREITE)) * (msBis - msVon)
+  const ziel = msVon + ((grafikX - RAND.links) / grafikBreite(breite)) * (msBis - msVon)
   let bester = 0
   let abstand = Infinity
   for (let i = 0; i < ms.length; i += 1) {
@@ -196,7 +223,7 @@ export function yAchse(
 
 // Die x-Achse: feine Senkrechte je Marke mit Beschriftung darunter.
 export function xAchse(
-  marken: { ms: number; text: string }[],
+  marken: Zeitmarke[],
   msVon: number,
   msBis: number,
   breite: number,
@@ -207,11 +234,14 @@ export function xAchse(
     <g className="marke">
       {marken.map((marke) => {
         if (marke.ms < msVon || marke.ms > msBis) return null
-        const x = RAND.links + ((marke.ms - msVon) / (msBis - msVon)) * grafikBreite(breite)
+        const x = msBis === msVon
+          ? RAND.links + grafikBreite(breite) / 2
+          : RAND.links + ((marke.ms - msVon) / (msBis - msVon)) * grafikBreite(breite)
+        const anker = msBis === msVon ? 'middle' : marke.ms === msVon ? 'start' : marke.ms === msBis ? 'end' : 'middle'
         return (
           <g key={marke.ms}>
             <line x1={x} y1={RAND.oben} x2={x} y2={unten} />
-            <text x={x} y={unten + 16} textAnchor="middle">
+            <text x={x} y={unten + 16} textAnchor={anker}>
               {marke.text}
             </text>
           </g>
@@ -231,11 +261,25 @@ export function zeigerKasten(
   breite: number,
   hoehe: number,
 ): JSX.Element {
-  const kastenBreite = Math.max(...zeilen.map((zeile) => zeile.length)) * 6.4 + 14
-  const kastenHoehe = zeilen.length * 16 + 10
-  let kx = x + 9
-  if (kx + kastenBreite > breite - RAND.rechts) kx = x - 9 - kastenBreite
-  const ky = Math.min(Math.max(RAND.oben + 2, y - kastenHoehe - 7), hoehe - RAND.unten - kastenHoehe)
+  const maximaleBreite = Math.max(80, breite - 16)
+  const maximaleZeichen = Math.max(12, Math.floor((maximaleBreite - 14) / 6.4))
+  const textzeilen = zeilen.flatMap((zeile) => {
+    const umbrochen: string[] = []
+    let aktuell = ''
+    for (const wort of zeile.split(' ')) {
+      const naechste = aktuell ? `${aktuell} ${wort}` : wort
+      if (naechste.length > maximaleZeichen && aktuell) {
+        umbrochen.push(aktuell)
+        aktuell = wort
+      } else aktuell = naechste
+    }
+    if (aktuell) umbrochen.push(aktuell)
+    return umbrochen
+  })
+  const kastenBreite = Math.min(maximaleBreite, Math.max(...textzeilen.map((zeile) => zeile.length)) * 6.4 + 14)
+  const kastenHoehe = textzeilen.length * 16 + 10
+  const kx = Math.max(8, Math.min(x + 9, breite - kastenBreite - 8))
+  const ky = Math.max(RAND.oben + 2, Math.min(y - kastenHoehe - 7, hoehe - RAND.unten - kastenHoehe))
   return (
     <g className="zeiger">
       <title>{rohwert}</title>
@@ -246,7 +290,7 @@ export function zeigerKasten(
         height={kastenHoehe}
         rx={3}
       />
-      {zeilen.map((zeile, i) => (
+      {textzeilen.map((zeile, i) => (
         <text key={i} x={kx + 7} y={ky + 16 + i * 16}>
           {zeile}
         </text>

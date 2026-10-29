@@ -344,9 +344,14 @@ details.drilldown summary {
 
 header nav.hauptnav {
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
   margin: 0.4rem 0 0;
   font-size: 0.95rem;
+}
+
+header nav.hauptnav a {
+  white-space: nowrap;
 }
 
 p.sicht {
@@ -773,6 +778,7 @@ table.positionen.kampagnen > tbody > tr:not(.kampagnendetail) {
    feste Höhe, volle Breite über viewBox. Die Balkenfarben entsprechen
    .positiv/.negativ oben. */
 figure.diagramm {
+  min-width: 0;
   margin: 0.6rem 0 1rem;
 }
 
@@ -782,12 +788,36 @@ figure.diagramm svg {
   height: auto;
   background: #fff;
   border: 1px solid var(--rand);
+  touch-action: pan-y;
+}
+
+figure.diagramm svg:focus-visible {
+  outline: 3px solid var(--akzent);
+  outline-offset: 2px;
 }
 
 figure.diagramm figcaption {
   color: var(--grau);
   font-size: 0.85rem;
   margin-bottom: 0.25rem;
+}
+
+.diagramm-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.diagramm-wert {
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.diagramm-ebene-titel {
+  display: block;
+  margin: 0.5rem 0 0.2rem;
+  color: var(--grau);
+  font-size: 0.85rem;
 }
 
 /* Leerer Zeitraum: ein Hinweis statt eines leeren Rahmens. */
@@ -803,6 +833,14 @@ p.diagramm-leer {
   stroke: var(--akzent);
   stroke-width: 2;
   fill: none;
+}
+
+.diagramm .kurve-negativ {
+  stroke: #a33a2a;
+}
+
+.diagramm .kurve-positiv {
+  stroke: #1d6b3a;
 }
 
 .diagramm .fuellung-negativ {
@@ -859,6 +897,7 @@ p.diagramm-leer {
 /* AP-08h: Umschalter der IB-Ansichten und Legende der Zwei-Linien-Diagramme. */
 .diagramm-wahl {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0.6rem 0 0.2rem;
 }
@@ -1365,12 +1404,19 @@ details.filterbereich > summary {
 
 /* Kettenkarten der Station: Strike-Leiter, Rollregel, Kostenbremse, Kettenverlauf */
 .kettenkarten { margin-top: 1.5rem; }
-.kettenkarte { border: 1px solid var(--rand); border-radius: 6px; padding: 0.7rem 0.9rem; margin: 0 0 1rem; background: #fff; }
-.kettenkarte > header { margin-bottom: 0.4rem; }
-.kk-raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 0.6rem 1.2rem; }
-.kk-bild { margin: 0; }
+.kettenkarte { border: 1px solid var(--rand); border-radius: 6px; margin: 0 0 0.7rem; background: #fff; }
+.kettenkarte.bedarf { border-color: #b7791f; }
+.kettenkarte > summary { cursor: pointer; padding: 0.6rem 0.9rem; }
+.kettenkarte[open] > summary { border-bottom: 1px solid var(--rand); }
+.kk-zustand { display: inline-block; min-width: 7.5rem; font-size: 0.78rem; font-weight: 600; }
+.kk-zustand.rot { color: #b42318; }
+.kk-zustand.gruen { color: #1d6b3a; }
+.kk-kennzahlen { display: block; margin: 0.15rem 0 0 1.2rem; color: var(--grau); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.kettenkarte-inhalt { padding: 0.7rem 0.9rem 0.8rem; }
+.kk-raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 0.6rem 1.2rem; }
+.kk-bild { min-width: 0; margin: 0; overflow-x: auto; }
 .kk-bild figcaption { font-size: 0.82em; color: var(--grau); margin-bottom: 0.15rem; }
-.kk-bild svg { width: 100%; height: auto; display: block; }
+.kk-bild svg { width: 100%; min-width: 35rem; height: auto; display: block; }
 @media (max-width: 40rem) { .kk-raster { grid-template-columns: 1fr; } }
 
 /* Offene Ketten des Rollers: Excel-artige Spaltenfilter, aufklappbare Kettenhistorie. */
@@ -1438,3 +1484,73 @@ button.link { background: none; border: none; padding: 0; color: var(--akzent); 
 .konto-reiter.paper.gewaehlt { border-color: #b42318; background: #b42318; color: #fff; }
 .konto-reiter.paper.gewaehlt .zaehler { color: #fff; }
 table.shorts td.alt { color: var(--grau); font-style: italic; }
+
+.kalender-scroll {
+  overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+}
+
+.monatskalender {
+  table-layout: fixed;
+  min-width: 46rem;
+}
+
+.monatskalender th {
+  padding: 0.3rem 0.5rem;
+  text-align: center;
+}
+
+.monatskalender td {
+  height: 5.8rem;
+  padding: 0.35rem 0.45rem;
+  background: #fff;
+}
+
+.monatskalender td.wochenende {
+  background: #f3f1ed;
+}
+
+.monatskalender td.positiv {
+  background: #edf6f0;
+}
+
+.monatskalender td.negativ {
+  background: #fcf0ed;
+}
+
+.monatskalender td.gemischt {
+  background: #faf3df;
+}
+
+.monatskalender td.heute {
+  box-shadow: inset 0 0 0 2px var(--akzent);
+}
+
+.monatskalender td.leer {
+  background: var(--grund);
+}
+
+.kalender-tagnummer {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kalender-ereignisse {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.45rem;
+  margin: 0.35rem 0;
+  color: var(--grau);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.kalender-wert {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.kalender-wert span {
+  display: block;
+}

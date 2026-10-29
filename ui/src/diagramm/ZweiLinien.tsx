@@ -7,12 +7,14 @@
 // die Formatierer (Vertrag 8 gilt für alles Sichtbare).
 
 import { useMemo, useState } from 'react'
-import type { MouseEvent } from 'react'
+import type { KeyboardEvent, PointerEvent } from 'react'
 import { datumDe, geldDe } from '../format'
+import { DiagrammWert, tastaturIndex, useDiagrammBreite, zeigerX } from './bedienung'
 import {
   KURVE_BREITE,
   KURVE_HOEHE,
   RAND,
+  grafikBreite,
   grafikHoehe,
   isoMs,
   naechsterIndex,
@@ -53,6 +55,8 @@ export default function ZweiLinien({
   gestrichelt = false,
 }: Eigenschaften): JSX.Element {
   const [aktiv, setzeAktiv] = useState<number | null>(null)
+  const { ref, breite } = useDiagrammBreite(KURVE_BREITE)
+  const beschreibung = titel ?? `${legendeOben ?? 'Wertverlauf'}${legendeUnten ? ` und ${legendeUnten}` : ''}`
 
   const geruest = useMemo(() => {
     if (oben.length === 0) return null
@@ -65,9 +69,9 @@ export default function ZweiLinien({
         : msOben[msOben.length - 1]
     const werte = [...oben, ...(unten ?? [])].map((punkt) => Number(punkt.y))
     const raster = yRaster(Math.min(...werte), Math.max(...werte))
-    const breite = KURVE_BREITE - RAND.links - RAND.rechts
+    const zeichenBreite = grafikBreite(breite)
     const px = (ms: number): number =>
-      RAND.links + (msBis === msVon ? breite / 2 : ((ms - msVon) / (msBis - msVon)) * breite)
+      RAND.links + (msBis === msVon ? zeichenBreite / 2 : ((ms - msVon) / (msBis - msVon)) * zeichenBreite)
     const py = (wert: number): number => yPixel(wert, raster.von, raster.bis, KURVE_HOEHE)
     const pfad = (punkte: Punkt[]): string =>
       punkte
@@ -89,59 +93,74 @@ export default function ZweiLinien({
     const marken = xMarken(
       new Date(msVon).toISOString().slice(0, 10),
       new Date(msBis).toISOString().slice(0, 10),
+      breite,
     )
     return { msOben, msUnten, msVon, msBis, raster, px, py, pfadOben, pfadUnten, fuellung, marken }
-  }, [oben, unten, flaeche])
+  }, [oben, unten, flaeche, breite])
 
-  function zeigeMaus(e: MouseEvent<SVGSVGElement>): void {
+  function zeigeZeiger(e: PointerEvent<SVGSVGElement>): void {
     if (!geruest) return
-    const rahmen = e.currentTarget.getBoundingClientRect()
-    const grafikX = ((e.clientX - rahmen.left) / rahmen.width) * KURVE_BREITE
-    setzeAktiv(naechsterIndex(geruest.msOben, grafikX))
+    setzeAktiv(naechsterIndex(geruest.msOben, zeigerX(e, breite), breite))
+  }
+
+  function taste(e: KeyboardEvent<SVGSVGElement>): void {
+    const index = tastaturIndex(e, aktiv, oben.length)
+    if (index !== undefined) setzeAktiv(index)
   }
 
   if (!geruest) {
     return <p className="diagramm-leer">Keine Werte — nichts zu zeichnen.</p>
   }
 
-  const gewaehlt = aktiv !== null ? { i: aktiv, punkt: oben[aktiv] } : null
-  // Passender Punkt der zweiten Reihe zur Zeigerzeit — die Reihen können
-  // unterschiedliche Tage tragen (Gewinn laut IB gegen realisierte Equity).
+  const gewaehlt = aktiv !== null && aktiv < oben.length ? { i: aktiv, punkt: oben[aktiv] } : null
+  // Passender Punkt der zweiten Reihe zur Zeigerzeit — abweichende Daten werden benannt.
   const untenPunkt =
     gewaehlt && geruest.msUnten.length > 0 && unten
       ? unten[
           naechsterIndex(
             geruest.msUnten,
             geruest.px(geruest.msOben[gewaehlt.i]),
+            breite,
           )
         ]
       : null
 
   const zeilen = gewaehlt
-    ? [datumDe(gewaehlt.punkt.x), geldDe(gewaehlt.punkt.y)]
+    ? [
+        datumDe(gewaehlt.punkt.x),
+        `${legendeOben ?? 'Wert 1'}: ${geldDe(gewaehlt.punkt.y)}`,
+      ]
     : []
   // AP-07fv: Gestrichelt ist ein Ausblick (Endpunkt = mit Unrealisiertem) —
   // im Zeiger nur am letzten Tag, dann mit seinem Endwert und benannt.
   const endeUnten = gestrichelt && unten && unten.length > 0 ? unten[unten.length - 1] : null
   if (gestrichelt) {
     if (gewaehlt && endeUnten && gewaehlt.i === oben.length - 1) {
-      zeilen.push(`mit Unrealisiertem ${geldDe(endeUnten.y)}`)
+      zeilen.push(`${legendeUnten ?? 'Mit Unrealisiertem'}: ${geldDe(endeUnten.y)} (${datumDe(endeUnten.x)})`)
     }
   } else if (gewaehlt && untenPunkt) {
-    zeilen.push(geldDe(untenPunkt.y))
+    const datum = untenPunkt.x === gewaehlt.punkt.x ? '' : ` (${datumDe(untenPunkt.x)})`
+    zeilen.push(`${legendeUnten ?? 'Wert 2'}: ${geldDe(untenPunkt.y)}${datum}`)
   }
 
   return (
-    <figure className="diagramm">
+    <figure className="diagramm" ref={ref}>
       {titel ? <figcaption>{titel}</figcaption> : null}
       <svg
-        viewBox={`0 0 ${KURVE_BREITE} ${KURVE_HOEHE}`}
+        viewBox={`0 0 ${breite} ${KURVE_HOEHE}`}
         role="img"
-        onMouseMove={zeigeMaus}
-        onMouseLeave={() => setzeAktiv(null)}
+        aria-label={`${beschreibung}. Zeiger antippen oder mit den Pfeiltasten bewegen; Pos1 und Ende springen an die Ränder.`}
+        tabIndex={0}
+        onPointerMove={zeigeZeiger}
+        onPointerDown={zeigeZeiger}
+        onPointerLeave={() => setzeAktiv(null)}
+        onFocus={() => setzeAktiv((wert) => wert ?? oben.length - 1)}
+        onBlur={() => setzeAktiv(null)}
+        onKeyDown={taste}
       >
-        {yAchse(geruest.raster, KURVE_HOEHE, KURVE_BREITE)}
-        {xAchse(geruest.marken, geruest.msVon, geruest.msBis, KURVE_BREITE, KURVE_HOEHE)}
+        <title>{beschreibung}</title>
+        {yAchse(geruest.raster, KURVE_HOEHE, breite)}
+        {xAchse(geruest.marken, geruest.msVon, geruest.msBis, breite, KURVE_HOEHE)}
         {geruest.fuellung ? <path className={`fuellung-${farbe}`} d={geruest.fuellung} /> : null}
         {geruest.pfadUnten ? <path
             className={gestrichelt ? 'kurve-duenn gestrichelt' : 'kurve-duenn'}
@@ -177,13 +196,14 @@ export default function ZweiLinien({
               zeilen,
               geruest.px(geruest.msOben[gewaehlt.i]),
               geruest.py(Number(gewaehlt.punkt.y)),
-              `${gewaehlt.punkt.x} · ${gewaehlt.punkt.y}${untenPunkt ? ` · ${untenPunkt.y}` : ''}`,
-              KURVE_BREITE,
+              `${gewaehlt.punkt.x} · ${gewaehlt.punkt.y}${untenPunkt ? ` · ${untenPunkt.x} · ${untenPunkt.y}` : ''}`,
+              breite,
               KURVE_HOEHE,
             )}
           </g>
         ) : null}
       </svg>
+      <DiagrammWert zeilen={zeilen} />
       {legendeOben || legendeUnten ? (
         <ul className="diagramm-legende">
           {legendeOben ? (

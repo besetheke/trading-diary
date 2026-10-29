@@ -6,8 +6,8 @@ import Betrag from './Betrag'
 import Balken from './diagramm/Balken'
 import Flaeche from './diagramm/Flaeche'
 import { monatKurz } from './diagramm/skala'
-import ZweiLinien from './diagramm/ZweiLinien'
-import { datumDe, prozent } from './format'
+import ZweiEbenen from './diagramm/ZweiEbenen'
+import { betrag, datumDe, prozent } from './format'
 import Ueberleitung from './Ueberleitung'
 import { useZeitraum } from './zeitraum'
 import ErgebnisBegriffe from './ErgebnisBegriffe'
@@ -62,6 +62,56 @@ function Umschalter<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+function KontowertDaten({ daten }: { daten: Performance }): JSX.Element {
+  const kontowert = new Map(daten.tage.map((tag) => [tag.datum, tag.kontowert]))
+  const realisiert = new Map(daten.realisiert_kumuliert.map((punkt) => [punkt.datum, punkt.wert]))
+  const tage = Array.from(new Set([...kontowert.keys(), ...realisiert.keys()])).sort((a, b) => b.localeCompare(a))
+  return (
+    <details className="perioden-tabelle">
+      <summary>Daten zum Diagramm ({tage.length} Tage)</summary>
+      <div className="tabelle-rahmen">
+        <table>
+          <thead>
+            <tr><th>Datum</th><th className="zahl">Kontowert laut IB</th><th className="zahl">Realisiert kumuliert</th></tr>
+          </thead>
+          <tbody>
+            {tage.map((datum) => (
+              <tr key={datum}>
+                <td>{datumDe(datum)}</td>
+                <td className="zahl"><Betrag wert={kontowert.get(datum) ?? null} /></td>
+                <td className="zahl"><Betrag wert={realisiert.get(datum) ?? null} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  )
+}
+
+function DrawdownDaten({ daten }: { daten: Performance }): JSX.Element {
+  return (
+    <details className="perioden-tabelle">
+      <summary>Daten zum Diagramm ({daten.tage.length} Tage)</summary>
+      <div className="tabelle-rahmen">
+        <table>
+          <thead><tr><th>Datum</th><th className="zahl">Drawdown</th></tr></thead>
+          <tbody>
+            {[...daten.tage].reverse().map((tag) => (
+              <tr key={tag.datum}>
+                <td>{datumDe(tag.datum)}</td>
+                <td className={`zahl ${tag.drawdown_prozent.startsWith('-') ? 'negativ' : ''}`} title={tag.drawdown_prozent}>
+                  {betrag(tag.drawdown_prozent)} %
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   )
 }
 
@@ -177,18 +227,18 @@ export default function Dashboard(): JSX.Element {
 
             {ansicht === 'kontowert' ? (
               <>
-                <ZweiLinien
+                <ZweiEbenen
                   oben={performance.tage.map((t) => ({ x: t.datum, y: t.kontowert }))}
                   unten={performance.realisiert_kumuliert.map((p) => ({ x: p.datum, y: p.wert }))}
-                  legendeOben="Kontowert laut IB"
-                  legendeUnten={`Realisiertes Ergebnis laut Journal${
-                    imZeitraum ? ' (ab Zeitraumbeginn)' : ''
-                  }`}
+                  titel="Kontowert und realisiertes Ergebnis"
+                  nameOben="Kontowert laut IB (EUR)"
+                  nameUnten={`Realisiert laut Journal (EUR)${imZeitraum ? ', ab Zeitraumbeginn' : ''}`}
                 />
+                <KontowertDaten daten={performance} />
                 <p className="sicht fussnote">
-                  Der Kontowert enthält Einzahlungen und unrealisierte Ergebnisse; das realisierte
-                  Ergebnis zählt nur abgeschlossene Geschäfte am Tag der Schließung. Wie beide
-                  zusammenhängen, zeigt die Überleitung darunter.
+                  Beide Panels haben dieselbe Zeitachse, aber eigene Werteachsen. Der Kontowert enthält
+                  Einzahlungen und unrealisierte Ergebnisse; das realisierte Ergebnis zählt nur abgeschlossene
+                  Geschäfte am Tag der Schließung. Wie beide zusammenhängen, zeigt die Überleitung darunter.
                 </p>
               </>
             ) : null}
@@ -198,7 +248,9 @@ export default function Dashboard(): JSX.Element {
                 <Flaeche
                   punkte={performance.tage.map((t) => ({ x: t.datum, y: t.drawdown_prozent }))}
                   einheit="prozent"
+                  titel="Drawdown in Prozent"
                 />
+                <DrawdownDaten daten={performance} />
                 <p className="sicht fussnote">
                   Abstand zum bisherigen Höchststand in Prozent, zeitgewichtet: Ein- und
                   Auszahlungen sind herausgerechnet (sonst sähe eine Einzahlung wie ein Gewinn
@@ -229,44 +281,47 @@ export default function Dashboard(): JSX.Element {
                 <Balken
                   balken={perioden.map((p) => ({ x: p.schluessel, y: p[kennzahl] }))}
                   beschriftung={beschrifte}
+                  titel={`${einteilung === 'woche' ? 'Wochen' : 'Monats'}werte: ${kennzahl === 'gewinn_ib' ? 'Gewinn laut IB' : 'Realisiert (Journal)'}`}
                 />
                 <details className="perioden-tabelle">
-                  <summary>Tabelle ({perioden.length})</summary>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{einteilung === 'woche' ? 'Woche' : 'Monat'}</th>
-                        <th>Zeitraum</th>
-                        <th className="zahl">Gewinn laut IB</th>
-                        <th className="zahl">Rendite</th>
-                        <th className="zahl">Realisiert (Journal)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...perioden].reverse().map((p) => (
-                        <tr key={p.schluessel}>
-                          <td>{beschrifte(p.schluessel)}</td>
-                          <td>
-                            {datumDe(p.beginn)} – {datumDe(p.ende)}
-                          </td>
-                          <td className="zahl">
-                            <Betrag wert={p.gewinn_ib} />
-                          </td>
-                          <td
-                            className={`zahl ${
-                              p.rendite_quote.startsWith('-') ? 'negativ' : 'positiv'
-                            }`}
-                            title={p.rendite_quote}
-                          >
-                            {prozent(p.rendite_quote)}
-                          </td>
-                          <td className="zahl">
-                            <Betrag wert={p.realisiert} />
-                          </td>
+                  <summary>Daten zum Diagramm ({perioden.length})</summary>
+                  <div className="tabelle-rahmen">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{einteilung === 'woche' ? 'Woche' : 'Monat'}</th>
+                          <th>Zeitraum</th>
+                          <th className="zahl">Gewinn laut IB</th>
+                          <th className="zahl">Rendite</th>
+                          <th className="zahl">Realisiert (Journal)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {[...perioden].reverse().map((p) => (
+                          <tr key={p.schluessel}>
+                            <td>{beschrifte(p.schluessel)}</td>
+                            <td>
+                              {datumDe(p.beginn)} – {datumDe(p.ende)}
+                            </td>
+                            <td className="zahl">
+                              <Betrag wert={p.gewinn_ib} />
+                            </td>
+                            <td
+                              className={`zahl ${
+                                p.rendite_quote.startsWith('-') ? 'negativ' : 'positiv'
+                              }`}
+                              title={p.rendite_quote}
+                            >
+                              {prozent(p.rendite_quote)}
+                            </td>
+                            <td className="zahl">
+                              <Betrag wert={p.realisiert} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </details>
                 <p className="sicht fussnote">
                   Gewinn laut IB = Veränderung des Kontowerts ohne Ein- und Auszahlungen

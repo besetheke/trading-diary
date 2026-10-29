@@ -6,6 +6,7 @@
 //   3. Kostenbremse    — Netto der Kette gegen die Grenze (Anteil × Breite)
 //   4. Kettenverlauf   — Short-Strike über Eröffnung und Rolls, Netto je Schritt
 
+import { useEffect, useState } from 'react'
 import type { RollerKetteStand, RollerRegeln, RollerStrategie } from './api'
 
 const GRUEN = '#0f5d50'
@@ -215,7 +216,8 @@ export function Kostenbremse(props: { kette: RollerKetteStand; regeln?: RollerRe
   if (!regeln || regeln.max_kettenverlust_anteil === null || regeln.max_kettenverlust_anteil === undefined) return null
   const grenze = regeln.max_kettenverlust_anteil * regeln.breite
   const verlust = Math.max(0, -k.netto)
-  const anteil = grenze > 0 ? Math.min(1, verlust / grenze) : 0
+  const anteil = grenze > 0 ? verlust / grenze : 0
+  const fuellstand = Math.min(1, anteil)
   const farbe = anteil >= 1 ? ROT : anteil >= 0.75 ? AMBER : GRUEN
   return (
     <figure className="kk-bild">
@@ -223,14 +225,19 @@ export function Kostenbremse(props: { kette: RollerKetteStand; regeln?: RollerRe
         Kostenbremse · Netto der Kette {n(k.netto)} gegen Grenze −{n(grenze)} ({n(regeln.max_kettenverlust_anteil * 100, 0)} % der Breite{' '}
         {n(regeln.breite, 0)})
       </figcaption>
-      <svg viewBox="0 0 560 34" role="img" aria-label="Kostenbremse">
+      <svg viewBox="0 0 560 34" role="img" aria-label={`Kostenbremse: ${n(anteil * 100, 0)} Prozent der Grenze`}>
         <rect x={20} y={8} width={520} height={16} fill={HELL} opacity={0.5} rx={3} />
-        <rect x={20} y={8} width={520 * anteil} height={16} fill={farbe} rx={3} />
-        <text x={24} y={20} fontSize={11} fill={anteil > 0.15 ? '#fff' : GRAU}>
+        <rect x={20} y={8} width={520 * fuellstand} height={16} fill={farbe} rx={3} />
+        <text x={24} y={20} fontSize={11} fill={fuellstand > 0.15 ? '#fff' : GRAU}>
           {n(anteil * 100, 0)} % der Grenze
         </text>
+        {anteil > 1 && <polygon points="540,4 551,16 540,28" fill={ROT} />}
       </svg>
-      {anteil >= 1 && <p className="warnung">Grenze erreicht: die Automatik rollt nicht weiter, du entscheidest über Weiterrollen oder Schließen.</p>}
+      {anteil >= 1 && (
+        <p className="warnung">
+          {anteil > 1 ? 'Grenze überschritten' : 'Grenze erreicht'}: die Automatik rollt nicht weiter, du entscheidest über Weiterrollen oder Schließen.
+        </p>
+      )}
     </figure>
   )
 }
@@ -251,7 +258,7 @@ export function Kettenverlauf(props: { kette: RollerKetteStand }): JSX.Element |
   const lo = Math.min(...shorts, k.spot ?? Infinity)
   const hi = Math.max(...shorts, k.spot ?? -Infinity)
   const rand = Math.max((hi - lo) * 0.2, 5)
-  const B = 560
+  const B = Math.max(560, positionen.length * 120)
   const H = 150
   const x = (i: number) => (positionen.length === 1 ? B / 2 : 40 + (i / (positionen.length - 1)) * (B - 80))
   const y = (w: number) => 20 + (1 - (w - (lo - rand)) / (hi + rand - (lo - rand))) * 80
@@ -265,7 +272,7 @@ export function Kettenverlauf(props: { kette: RollerKetteStand }): JSX.Element |
         Kettenverlauf · Short-Strike je Schritt ({rolls.length} {rolls.length === 1 ? 'Roll' : 'Rolls'}), darunter Netto des Schritts und
         kumuliert
       </figcaption>
-      <svg viewBox={`0 0 ${B} ${H}`} role="img" aria-label="Short-Strike über die Rolls der Kette">
+      <svg viewBox={`0 0 ${B} ${H}`} style={{ minWidth: `${B}px` }} role="img" aria-label="Short-Strike über die Rolls der Kette">
         {k.spot !== null && k.spot !== undefined && (
           <>
             <line x1={20} x2={B - 20} y1={y(k.spot)} y2={y(k.spot)} stroke={GRAU} strokeDasharray="3 3" />
@@ -302,37 +309,66 @@ export function Kettenverlauf(props: { kette: RollerKetteStand }): JSX.Element |
 
 // ------------------------------------------------------------------------------------------------ Karten
 
+function kostenAnteil(k: RollerKetteStand, regeln?: RollerRegeln): number | null {
+  if (!regeln || regeln.max_kettenverlust_anteil === null || regeln.max_kettenverlust_anteil === undefined) return null
+  const grenze = regeln.max_kettenverlust_anteil * regeln.breite
+  return grenze > 0 ? Math.max(0, -k.netto) / grenze : null
+}
+
+function hatHandlungsbedarf(k: RollerKetteStand, regeln?: RollerRegeln): boolean {
+  return Boolean(k.alarm || k.signal || k.gap || k.status === 'pruefen' || k.vorschlag) || (kostenAnteil(k, regeln) ?? 0) >= 0.75
+}
+
+function KettenkarteAufklappbar({ k, regeln }: { k: RollerKetteStand; regeln?: RollerRegeln }): JSX.Element {
+  const kritisch = hatHandlungsbedarf(k, regeln)
+  const [offen, setOffen] = useState(kritisch)
+  const bremse = kostenAnteil(k, regeln)
+  const delta = k.short_delta === null || k.short_delta === undefined ? null : Math.abs(k.short_delta)
+  useEffect(() => {
+    if (kritisch) setOffen(true)
+  }, [kritisch])
+  return (
+    <details className={`kettenkarte${kritisch ? ' bedarf' : ''}`} open={offen} onToggle={(e) => setOffen(e.currentTarget.open)}>
+      <summary>
+        <span className={`kk-zustand ${kritisch ? 'rot' : 'gruen'}`}>{kritisch ? 'Handlungsbedarf' : 'ruhig'}</span>{' '}
+        <strong>{k.kette_id}</strong> · {k.strategie} · Verfall {datum(k.aktiv.verfall)} · {k.dte ?? '—'} DTE
+        <span className="kk-kennzahlen">
+          |Δ| {delta === null ? '—' : n(delta, 3)} / {n(k.schwelle)} · Netto {n(k.netto)}
+          {bremse !== null ? ` · Bremse ${n(bremse * 100, 0)} %` : ''} · {k.rolls} {k.rolls === 1 ? 'Roll' : 'Rolls'}
+          {k.status === 'pruefen' ? ' · ANGEHALTEN' : ''}
+        </span>
+      </summary>
+      <div className="kettenkarte-inhalt">
+        {!regeln && <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p>}
+        <div className="kk-raster">
+          <StrikeLeiter kette={k} regeln={regeln} />
+          <RollRegel kette={k} regeln={regeln} />
+          <Kostenbremse kette={k} regeln={regeln} />
+          <Kettenverlauf kette={k} />
+        </div>
+        {k.grund && <p className="sicht">{k.grund}</p>}
+      </div>
+    </details>
+  )
+}
+
 export default function Kettenkarten(props: { strategie: RollerStrategie }): JSX.Element | null {
   const { strategie: s } = props
   if (s.ketten.length === 0) return null
   const regelnJe = new Map(s.vorgaben.map((v) => [v.name, v.regeln]))
+  const geordnet = [...s.ketten].sort((a, b) => {
+    const bedarf = Number(hatHandlungsbedarf(b, regelnJe.get(b.strategie))) - Number(hatHandlungsbedarf(a, regelnJe.get(a.strategie)))
+    return bedarf || (a.dte ?? 1e9) - (b.dte ?? 1e9) || a.kette_id.localeCompare(b.kette_id, 'de', { numeric: true })
+  })
+  const anzahlBedarf = geordnet.filter((k) => hatHandlungsbedarf(k, regelnJe.get(k.strategie))).length
   return (
     <section className="kettenkarten">
-      <h3>Ketten im Bild</h3>
+      <h3>Ketten nach Handlungsbedarf</h3>
       <p className="sicht">
-        Pro Kette: wo steht der Kurs gegen den Short, wann greift die Rollregel, wie weit ist die Kostenbremse und wie sich die Kette entwickelt
-        hat. Grün = in Ordnung, gelb = nahe an der Schwelle, rot = Schwelle überschritten oder Short im Geld.
+        {anzahlBedarf} von {geordnet.length} Ketten mit Handlungsbedarf oder nahe an einer Grenze; diese sind zuerst geöffnet.
+        Die übrigen lassen sich bei Bedarf aufklappen. Grün = in Ordnung, gelb = nahe an der Schwelle, rot = Schwelle überschritten oder Short im Geld.
       </p>
-      {s.ketten.map((k) => {
-        const regeln = regelnJe.get(k.strategie)
-        return (
-          <article key={k.kette_id} className="kettenkarte">
-            <header>
-              <strong>{k.kette_id}</strong> · {k.strategie} · Verfall {datum(k.aktiv.verfall)} · {k.dte ?? '—'} DTE · {k.rolls}{' '}
-              {k.rolls === 1 ? 'Roll' : 'Rolls'} · Netto {n(k.netto)}
-              {k.status === 'pruefen' ? ' · ANGEHALTEN' : ''}
-            </header>
-            {!regeln && <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p>}
-            <div className="kk-raster">
-              <StrikeLeiter kette={k} regeln={regeln} />
-              <RollRegel kette={k} regeln={regeln} />
-              <Kostenbremse kette={k} regeln={regeln} />
-              <Kettenverlauf kette={k} />
-            </div>
-            {k.grund && <p className="sicht">{k.grund}</p>}
-          </article>
-        )
-      })}
+      {geordnet.map((k) => <KettenkarteAufklappbar key={k.kette_id} k={k} regeln={regelnJe.get(k.strategie)} />)}
     </section>
   )
 }
