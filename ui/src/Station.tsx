@@ -476,10 +476,7 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
         </>
       )}
       {s.ketten.length === 0 && !shorts && <p className="hinweis">Keine offene Kette.</p>}
-      <details>
-        <summary>Alle Ketten als Karten (Strike-Leiter, Rollregel, Kostenbremse, Kettenverlauf)</summary>
-        <Kettenkarten strategie={s} />
-      </details>
+      <Kettenkarten strategie={s} />
       {meldung && <p className="hinweis">{meldung}</p>}
       {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
         <p className="sicht">
