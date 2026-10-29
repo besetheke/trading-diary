@@ -5,7 +5,7 @@ import Kettenkarten from "./Kettenkarte";
 import OffeneKetten from "./OffeneKetten";
 import ShortsUebersicht from "./ShortsUebersicht";
 import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
-import type { BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
+import type { RollerShorts, BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKette, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
 // AP-14a: Cockpit-Gerüst. Die Station bündelt alle Werkzeuge in einer
@@ -334,7 +334,9 @@ function EchtgeldReife(): JSX.Element | null {
   );
 }
 
-function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
+type KopfKontext = { lage: (k: RollerKetteStand) => JSX.Element; verlauf: (k: RollerKetteStand) => JSX.Element; laeuft: boolean };
+
+function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: RollerShorts | null; kopf?: (ctx: KopfKontext) => JSX.Element }): JSX.Element {
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
   const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
@@ -355,8 +357,51 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
       .finally(() => setzeLaeuft(null));
   };
   const zahl = (x: number | null | undefined, n = 2) => (x === null || x === undefined ? "—" : x.toFixed(n));
+  // Lage einer Kette: Hinweise und Freigabe-Schaltflaechen (gemeinsam fuer die Shorts-Zeile und die Restliste)
+  const lage = (k: RollerKetteStand): JSX.Element => (
+            <>
+              {k.status === "pruefen" && (
+                <div>
+                  <strong>ANGEHALTEN</strong> — {k.warnung}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    title="Erst den Bestand in der TWS prüfen; der Roller nimmt die Kette nur auf, wenn der Bestand passt"
+                    onClick={() => tu("kette-aufnehmen", { kette: k.kette_id })}>
+                    Geprüft — wieder aufnehmen
+                  </button>
+                </div>
+              )}
+              {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
+              {k.grund ?? "—"}
+              {k.vorschlag && (k.vorschlag as { art?: string }).art === "schliessen" && (
+                <div>
+                  Vorschlag: Kette schließen{(k.vorschlag as { tagesende?: boolean }).tagesende ? " (Tagesende)" : " (Early Exit)"},
+                  Rückkauf ca. {zahl((k.vorschlag as { debit?: number }).debit)}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                    Schließen freigeben
+                  </button>
+                </div>
+              )}
+              {k.vorschlag && (k.vorschlag as { art?: string }).art !== "schliessen" && (
+                <div>
+                  Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
+                  (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
+                  |Δ| neu {zahl(k.vorschlag.neu_delta === null ? null : Math.abs(k.vorschlag.neu_delta), 3)}), netto{" "}
+                  {zahl(k.vorschlag.netto)}, Debit-Rahmen {zahl(k.vorschlag.max_debit)}{" "}
+                  <button disabled={laeuft !== null || !s.paper}
+                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
+                    Roll freigeben
+                  </button>
+                </div>
+              )}
+            </>
+  );
+  const verlauf = (k: RollerKetteStand): JSX.Element => <KettenVerlauf k={k} offen />;
+  const vorShorts = new Set((shorts?.positionen ?? []).map((z) => z.kette).filter(Boolean));
+  const restKetten = shorts ? s.ketten.filter((k) => !vorShorts.has(k.kette_id)) : s.ketten;
   return (
     <>
+      {kopf?.({ lage, verlauf, laeuft: laeuft !== null })}
       <h3>Strategien (Paper)</h3>
       <p className="sicht">
         {s.modus === "live"
@@ -420,55 +465,21 @@ function StrategieKarte({ s }: { s: RollerStrategie }): JSX.Element {
         </button>
       </p>
       <p className="hinweis">{s.vorgaben.find((v) => v.name === wahl)?.text}</p>
-      {s.ketten.length === 0 ? (
-        <p className="hinweis">Keine offene Kette.</p>
-      ) : (
-        <OffeneKetten
-          ketten={s.ketten}
-          verfall={verfall}
-          zahl={zahl}
-          verlauf={(k) => <KettenVerlauf k={k} offen />}
-          lage={(k) => (
-            <>
-              {k.status === "pruefen" && (
-                <div>
-                  <strong>ANGEHALTEN</strong> — {k.warnung}{" "}
-                  <button disabled={laeuft !== null || !s.paper}
-                    title="Erst den Bestand in der TWS prüfen; der Roller nimmt die Kette nur auf, wenn der Bestand passt"
-                    onClick={() => tu("kette-aufnehmen", { kette: k.kette_id })}>
-                    Geprüft — wieder aufnehmen
-                  </button>
-                </div>
-              )}
-              {k.signal ? <strong>{k.gap ? "GAP · " : ""}ROLL-SIGNAL · </strong> : ""}
-              {k.grund ?? "—"}
-              {k.vorschlag && (k.vorschlag as { art?: string }).art === "schliessen" && (
-                <div>
-                  Vorschlag: Kette schließen{(k.vorschlag as { tagesende?: boolean }).tagesende ? " (Tagesende)" : " (Early Exit)"},
-                  Rückkauf ca. {zahl((k.vorschlag as { debit?: number }).debit)}{" "}
-                  <button disabled={laeuft !== null || !s.paper}
-                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
-                    Schließen freigeben
-                  </button>
-                </div>
-              )}
-              {k.vorschlag && (k.vorschlag as { art?: string }).art !== "schliessen" && (
-                <div>
-                  Vorschlag: {verfall(k.vorschlag.neu_verfall)} {k.vorschlag.neu_short}/{k.vorschlag.neu_long}{" "}
-                  (+{k.vorschlag.wochen} Wo., {k.vorschlag.verschiebung === 0 ? "horizontal" : `${k.vorschlag.verschiebung} Pkt diagonal`},
-                  |Δ| neu {zahl(k.vorschlag.neu_delta === null ? null : Math.abs(k.vorschlag.neu_delta), 3)}), netto{" "}
-                  {zahl(k.vorschlag.netto)}, Debit-Rahmen {zahl(k.vorschlag.max_debit)}{" "}
-                  <button disabled={laeuft !== null || !s.paper}
-                    onClick={() => tu("roll-freigabe", { kette: k.kette_id })}>
-                    Roll freigeben
-                  </button>
-                </div>
-              )}
-            </>
+      {restKetten.length > 0 && (
+        <>
+          {shorts && (
+            <p className="sicht">
+              Ketten ohne zugeordnete Short-Position im Konto ({restKetten.length}) — z. B. gerade eröffnet oder Bestand noch nicht geladen:
+            </p>
           )}
-        />
+          <OffeneKetten ketten={restKetten} verfall={verfall} zahl={zahl} verlauf={verlauf} lage={lage} />
+        </>
       )}
-      <Kettenkarten strategie={s} />
+      {s.ketten.length === 0 && !shorts && <p className="hinweis">Keine offene Kette.</p>}
+      <details>
+        <summary>Alle Ketten als Karten (Strike-Leiter, Rollregel, Kostenbremse, Kettenverlauf)</summary>
+        <Kettenkarten strategie={s} />
+      </details>
       {meldung && <p className="hinweis">{meldung}</p>}
       {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
         <p className="sicht">
@@ -601,8 +612,12 @@ export function RollerSeite(): JSX.Element {
         Herzschlag vor {alter} s
       </p>
 
-      <ShortsUebersicht paper={s.shorts} />
-      {s.strategie && <StrategieKarte s={s.strategie} />}
+      {s.strategie ? (
+        <StrategieKarte s={s.strategie} shorts={s.shorts}
+          kopf={(ctx) => <ShortsUebersicht paper={s.shorts} strategie={s.strategie ?? undefined} lage={ctx.lage} verlauf={ctx.verlauf} />} />
+      ) : (
+        <ShortsUebersicht paper={s.shorts} />
+      )}
       {s.strategie && <EchtgeldReife />}
 
       <h3>Breaches ({s.breaches.length})</h3>

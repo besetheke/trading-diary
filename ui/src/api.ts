@@ -571,6 +571,10 @@ export interface RollerShort {
   deckung?: 'spread' | 'debit' | 'kalender' | 'diagonal' | 'aktien' | null
   long_verfall?: string | null
   daten_alt?: string | null
+  kurswert?: number | null
+  unrealisiert?: number | null
+  einstand?: number
+  strikes?: number[]
 }
 
 export interface RollerShorts {

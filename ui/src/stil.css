@@ -1554,3 +1554,13 @@ table.shorts td.alt { color: var(--grau); font-style: italic; }
 .kalender-wert span {
   display: block;
 }
+
+/* Shorts-Zeile: Kette und Position an einer Stelle (aufgeklappt) */
+table.shorts tr.klickbar { cursor: pointer; }
+table.shorts tr.klickbar:hover, table.shorts tr.gewaehlt { filter: brightness(0.97); }
+table.shorts td.gewinn { color: var(--gruen); }
+table.shorts td.verlust { color: var(--rot); }
+table.shorts .verlaufszeile td { white-space: normal; padding: 0; }
+.shorts-details { padding: 0.4rem 1rem 0.8rem; }
+.shorts-details .lage-block { margin: 0.4rem 0; }
+.kette-hinweis { color: var(--rot); font-weight: 600; }

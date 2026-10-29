@@ -1,16 +1,21 @@
 // AP-19: Shorts im Konto — jede Short-Option (Spread oder naked) mit Ampel, getrennt nach Indizes und Einzelwerten.
-// Ziel: auf einen Blick sehen, was ins Geld läuft und gerollt werden muss. Bewertet wird im Roller (roller/shorts.py);
-// hier wird nur gezeigt. Der Roller handelt davon nur seine eigenen Ketten, alles andere ist Anzeige.
+// Eine Zeile je Position wie in der TWS (Ticker, Verfall, Strikes mit Art, Position, Kurs, DTE, Kurswert, unrealisiert);
+// gehört die Position zu einer Roller-Kette, steht die Kette in derselben Zeile, und ein Klick klappt darunter alles
+// auf, was man über Kette und Position wissen muss: Lage mit Freigabe, Kettenhistorie, Strike-Leiter, Rollregel,
+// Kostenbremse, Kettenverlauf. Bewertet wird im Roller (roller/shorts.py); hier wird nur gezeigt.
+// Reihenfolge (Nutzer 29.10.2026): Ticker alphabetisch, dann |Δ| absteigend, dann DTE aufsteigend.
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { fehlerText, holeRollerLive, sendeRollerBefehl } from './api'
-import type { Ampel, RollerShort, RollerShorts } from './api'
+import type { Ampel, RollerKetteStand, RollerRegeln, RollerShort, RollerShorts, RollerStrategie } from './api'
 import { zeitDe } from './format'
+import { Kettenverlauf, Kostenbremse, RollRegel, StrikeLeiter } from './Kettenkarte'
 
 const AMPEL_TEXT: Record<Ampel, string> = { rot: 'handeln', gelb: 'beobachten', grau: 'ohne Daten', gruen: 'ok' }
 const REGEL =
-  'rot: Short im Geld oder |Δ| ≥ Schwelle (bei DTE ≤ 1 wird gelb zu rot) · gelb: |Δ| ≥ 80 % der Schwelle oder ' +
-  'Abstand unter 1 % (Index) bzw. 3 % (Einzelwert) · ohne Delta entscheidet der Abstand'
+  'rot: Short im Geld oder |Δ| ≥ Schwelle (bei DTE ≤ 1 wird gelb zu rot) · gelb: |Δ| ≥ 80 % der Schwelle · ' +
+  'ohne Delta von IB entscheidet ersatzweise der Abstand (unter 1 % Index, 3 % Einzelwert)'
 const HERKUNFT: Record<RollerShort['schwelle_herkunft'], string> = {
   roller: 'Schwelle der Roller-Kette',
   position: 'von Hand für diese Position',
@@ -18,18 +23,7 @@ const HERKUNFT: Record<RollerShort['schwelle_herkunft'], string> = {
   staffel: 'DTE-Staffel des Rollers',
 }
 const SPEICHER = 'shorts-nur-handlungsbedarf'
-
 const MONAT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-// Verfall wie in der TWS: Oct29'26
-function tws(jjjjmmtt: string): string {
-  return jjjjmmtt.length === 8 ? `${MONAT[Number(jjjjmmtt.slice(4, 6)) - 1]}${jjjjmmtt.slice(6, 8)}'${jjjjmmtt.slice(2, 4)}` : jjjjmmtt
-}
-
-function strike(x: number): string {
-  return x.toLocaleString('en-US', { maximumFractionDigits: 2, useGrouping: false })
-}
-
 const ART_TWS: Record<string, string> = {
   BPS: 'Bull-Put',
   BCS: 'Bear-Call',
@@ -41,13 +35,26 @@ const ART_TWS: Record<string, string> = {
   'Diagonal Call': 'Call-Diagonal',
 }
 
-// Bezeichnung wie in der TWS: Einzelposition „Oct30'26 265 CALL“, Spread „Oct29'26 7655/7625 Bull-Put“ (Strikes zuerst, dann die Art).
-function bezeichnung(z: RollerShort): string {
+// Verfall wie in der TWS: Oct29'26
+function tws(jjjjmmtt: string): string {
+  return jjjjmmtt.length === 8 ? `${MONAT[Number(jjjjmmtt.slice(4, 6)) - 1]}${jjjjmmtt.slice(6, 8)}'${jjjjmmtt.slice(2, 4)}` : jjjjmmtt
+}
+
+function strike(x: number): string {
+  return x.toLocaleString('en-US', { maximumFractionDigits: 2, useGrouping: false })
+}
+
+function verfallText(z: RollerShort): string {
+  return z.long_verfall ? `${tws(z.verfall)}/${tws(z.long_verfall)}` : tws(z.verfall)
+}
+
+// Strikes zuerst, dann die Art wie in der TWS: „7655/7625 Bull-Put“, Einzelposition „265 CALL“. Puts absteigend, Calls aufsteigend.
+function strikeText(z: RollerShort): string {
   const recht = z.recht === 'P' ? 'PUT' : 'CALL'
-  if (z.long === null) return `${tws(z.verfall)} ${strike(z.short)} ${recht}`
-  const verfall = z.long_verfall ? `${tws(z.verfall)}/${tws(z.long_verfall)}` : tws(z.verfall)
-  const strikes = z.deckung === 'kalender' ? strike(z.short) : `${strike(z.short)}/${strike(z.long)}`
-  return `${verfall} ${strikes} ${ART_TWS[z.art] ?? z.art}`
+  if (z.long === null) return `${strike(z.short)} ${recht}`
+  const strikes = z.strikes && z.strikes.length > 0 ? z.strikes : [z.short, z.long]
+  const werte = z.deckung === 'kalender' ? [z.short] : strikes
+  return `${werte.map(strike).join('/')} ${ART_TWS[z.art] ?? z.art}`
 }
 
 // Vorzeichen wie in der TWS: Short-Positionen und Credit-Spreads negativ, Debit-Spreads, Kalender und Diagonale positiv.
@@ -62,6 +69,18 @@ function zahl(x: number | null | undefined, stellen = 0): string {
     : x.toLocaleString('de-DE', { minimumFractionDigits: stellen, maximumFractionDigits: stellen })
 }
 
+// Ticker alphabetisch, dann |Δ| absteigend (gefährdetste zuerst; ohne Delta zuletzt), dann DTE aufsteigend.
+export function ordne(zeilen: RollerShort[]): RollerShort[] {
+  return [...zeilen].sort(
+    (a, b) =>
+      a.symbol.localeCompare(b.symbol, 'de') ||
+      (b.delta ?? -1) - (a.delta ?? -1) ||
+      a.dte - b.dte ||
+      a.verfall.localeCompare(b.verfall) ||
+      a.short - b.short,
+  )
+}
+
 function Balken({ z }: { z: RollerShort }): JSX.Element {
   if (z.ohne_delta || z.delta_anteil === null) {
     return (
@@ -70,7 +89,7 @@ function Balken({ z }: { z: RollerShort }): JSX.Element {
       </span>
     )
   }
-  const breite = Math.min(z.delta_anteil, 1.25) / 1.25 * 100
+  const breite = (Math.min(z.delta_anteil, 1.25) / 1.25) * 100
   return (
     <span className="delta-balken" title={`${Math.round(z.delta_anteil * 100)} % der Schwelle (${HERKUNFT[z.schwelle_herkunft]})`}>
       <span className={`fuellung ${z.ampel}`} style={{ width: `${breite}%` }} />
@@ -82,19 +101,20 @@ function Balken({ z }: { z: RollerShort }): JSX.Element {
   )
 }
 
-function SchwelleForm(props: { z: RollerShort; konto: 'paper' | 'live'; fertig: () => void }): JSX.Element {
-  const { z, konto, fertig } = props
+function SchwelleForm(props: { z: RollerShort; konto: 'paper' | 'live' }): JSX.Element {
+  const { z, konto } = props
   const [wert, setzeWert] = useState(z.schwelle === null ? '' : String(z.schwelle))
   const [fehler, setzeFehler] = useState<string | null>(null)
+  const [gesendet, setzeGesendet] = useState(false)
   const senden = (p: { ticker?: string; position?: string; wert?: string }): void => {
     setzeFehler(null)
     sendeRollerBefehl('schwelle-setzen', { ...p, konto })
-      .then(fertig)
+      .then(() => setzeGesendet(true))
       .catch((e: unknown) => setzeFehler(fehlerText(e)))
   }
   return (
     <div className="schwelle-form">
-      |Δ|-Schwelle{' '}
+      |Δ|-Schwelle ({HERKUNFT[z.schwelle_herkunft]}){' '}
       <input value={wert} onChange={(e) => setzeWert(e.target.value)} size={5} aria-label="Schwelle" />{' '}
       <button type="button" onClick={() => senden({ ticker: z.symbol, wert })}>
         für {z.symbol}
@@ -111,30 +131,76 @@ function SchwelleForm(props: { z: RollerShort; konto: 'paper' | 'live'; fertig: 
         <button type="button" onClick={() => senden({ position: z.key })}>
           Position zurücksetzen
         </button>
-      ) : null}{' '}
-      <button type="button" onClick={fertig}>
-        Abbrechen
-      </button>
-      <span className="sicht"> Neu bewertet wird bei der nächsten Prüfung (alle 2 Minuten).</span>
+      ) : null}
+      <span className="sicht">
+        {gesendet ? ' Gespeichert — gilt ab der nächsten Prüfung (alle 2 Minuten).' : ' Gilt ab der nächsten Prüfung (alle 2 Minuten).'}
+      </span>
       {fehler ? <p className="meldung">{fehler}</p> : null}
     </div>
   )
 }
 
-function Abschnitt(props: {
-  titel: string
-  zeilen: RollerShort[]
-  nurHandeln: boolean
-  konto: 'paper' | 'live'
-  zurKette: (kette: string) => void
-}): JSX.Element | null {
-  const { titel, zeilen, nurHandeln, konto, zurKette } = props
-  const [bearbeiten, setzeBearbeiten] = useState<string | null>(null)
+type KettenInfo = { kette: RollerKetteStand; regeln?: RollerRegeln }
+
+interface Werkzeuge {
+  ketten: Map<string, KettenInfo>
+  lage?: (k: RollerKetteStand) => ReactNode
+  verlauf?: (k: RollerKetteStand) => ReactNode
+}
+
+// Was an der Kette hängt: Hinweis in der Zeile (Signal, Vorschlag, angehalten).
+function KettenZeile({ k }: { k: RollerKetteStand }): JSX.Element {
+  const hinweis = k.status === 'pruefen' ? 'ANGEHALTEN' : k.vorschlag ? 'Vorschlag' : k.signal ? 'ROLL-SIGNAL' : null
+  return (
+    <>
+      <strong>{k.kette_id}</strong> · {k.rolls} {k.rolls === 1 ? 'Roll' : 'Rolls'} · Netto {zahl(k.netto, 1)}
+      {hinweis ? <span className="kette-hinweis"> · {hinweis}</span> : null}
+    </>
+  )
+}
+
+// Aufgeklappt: alles zu Kette und Position an einer Stelle.
+function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge }): JSX.Element {
+  const { z, konto, w } = props
+  const info = z.kette ? w.ketten.get(z.kette) : undefined
+  return (
+    <div className="shorts-details">
+      <p className="sicht">
+        <strong>{z.symbol}</strong> {verfallText(z)} {strikeText(z)} · {z.art}
+        {z.naked ? ' · ungedeckt' : ''} · Menge {menge(z)} · Einstand {zahl(z.einstand, 2)} · Kurswert {zahl(z.kurswert, 2)} · unrealisiert{' '}
+        {zahl(z.unrealisiert, 2)}
+        {z.grund ? ` · ${z.grund}` : ''}
+      </p>
+      {info ? (
+        <>
+          {w.lage ? <div className="lage-block">{w.lage(info.kette)}</div> : null}
+          {w.verlauf ? w.verlauf(info.kette) : null}
+          <div className="kk-raster">
+            <StrikeLeiter kette={info.kette} regeln={info.regeln} />
+            <RollRegel kette={info.kette} regeln={info.regeln} />
+            <Kostenbremse kette={info.kette} regeln={info.regeln} />
+            <Kettenverlauf kette={info.kette} />
+          </div>
+          {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
+        </>
+      ) : z.kette ? (
+        <p className="sicht">Kette {z.kette} ist nur im Dienst bekannt, die Kettendaten fehlen im Status.</p>
+      ) : (
+        <SchwelleForm z={z} konto={konto} />
+      )}
+    </div>
+  )
+}
+
+function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: boolean; konto: 'paper' | 'live'; w: Werkzeuge }): JSX.Element | null {
+  const { titel, zeilen, nurHandeln, konto, w } = props
+  const [offen, setzeOffen] = useState<string | null>(null)
   if (zeilen.length === 0) return null
-  const sichtbar = nurHandeln ? zeilen.filter((z) => z.ampel === 'rot' || z.ampel === 'gelb' || z.ampel === 'grau') : zeilen
+  const geordnet = ordne(zeilen)
+  const sichtbar = nurHandeln ? geordnet.filter((z) => z.ampel === 'rot' || z.ampel === 'gelb' || z.ampel === 'grau') : geordnet
   const ausgeblendet = zeilen.length - sichtbar.length
   const okJeTicker = Object.entries(
-    zeilen.filter((z) => !sichtbar.includes(z)).reduce<Record<string, number>>((a, z) => ({ ...a, [z.symbol]: (a[z.symbol] ?? 0) + 1 }), {}),
+    geordnet.filter((z) => !sichtbar.includes(z)).reduce<Record<string, number>>((a, z) => ({ ...a, [z.symbol]: (a[z.symbol] ?? 0) + 1 }), {}),
   )
   return (
     <>
@@ -148,94 +214,94 @@ function Abschnitt(props: {
               <tr>
                 <th title={REGEL}>●</th>
                 <th>Ticker</th>
-                <th className="zahl" title="Wie in der TWS: Short und Credit-Spread negativ">Menge</th>
-                <th>Position</th>
+                <th>Verfall</th>
+                <th>Strikes</th>
+                <th className="zahl" title="Wie in der TWS: Short und Credit-Spread negativ">Position</th>
+                <th className="zahl" title="Kurs des Basiswerts">Kurs</th>
                 <th className="zahl">DTE</th>
-                <th className="zahl">Kurs</th>
-                <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
+                <th className="zahl" title="Mittelkurs x Multiplikator x Menge, Short negativ (wie KRSWRT der TWS)">Kurswert</th>
+                <th className="zahl" title="Kurswert minus Einstand (wie UNRLSRTR G&V der TWS)">Unrealisiert</th>
                 <th title={`|Δ| des Shorts gegen die Schwelle; Strich = Schwelle. ${REGEL}`}>|Δ| / Schwelle</th>
-                <th>Quelle</th>
-                <th>Grund</th>
+                <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
+                <th title="Roller-Kette dieser Position: Rolls, Netto der Kette">Kette</th>
               </tr>
             </thead>
             <tbody>
               {sichtbar.map((z, i) => {
-                const neueGruppe = z.gruppe !== null && sichtbar[i - 1]?.gruppe !== z.gruppe
-                return [
-                  <tr key={z.key} className={`ampel-${z.ampel}${z.gruppe ? ' in-gruppe' : ''}${neueGruppe ? ' gruppen-anfang' : ''}`}>
-                    <td title={AMPEL_TEXT[z.ampel]}>
-                      <span className={`punkt ${z.ampel}`} aria-label={AMPEL_TEXT[z.ampel]} />
-                    </td>
-                    <td>{z.symbol}</td>
-                    <td className="zahl">{menge(z)}</td>
-                    <td title={`${z.art}, ${z.recht === 'P' ? 'Put' : 'Call'}-Seite`}>
-                      {bezeichnung(z)}
-                      {z.naked ? <span className="marke-naked" title="Risiko weder durch ein Long-Bein noch durch Aktien begrenzt"> ungedeckt</span> : null}
-                      {z.deckung === 'aktien' ? <span className="sicht" title="Durch Aktien im Depot gedeckt"> · Aktien</span> : null}
-                      {z.gruppe ? (
-                        <span className="sicht" title="Short Put und Short Call desselben Verfalls">
-                          {' · '}
-                          {z.deckung === 'kalender' || z.deckung === 'diagonal' ? 'DC' : 'IC'}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="zahl">{z.dte}</td>
-                    <td className={`zahl${z.daten_alt ? ' alt' : ''}`}
-                      title={z.daten_alt ? `Letzter bekannter Wert vom ${zeitDe(z.daten_alt)} (IB liefert gerade nichts)` : undefined}>
-                      {zahl(z.spot, z.klasse === 'index' ? 0 : 2)}
-                      {z.daten_alt ? <span className="sicht"> · {z.daten_alt.slice(11, 16)}</span> : null}
-                    </td>
-                    <td className={`zahl${z.abstand !== null && z.abstand < 0 ? ' im-geld' : ''}`}>
-                      {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
-                      {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
-                    </td>
-                    <td>
-                      <Balken z={z} />
-                      {!z.kette ? (
-                        <button type="button" className="klein" title="Schwelle überschreiben"
-                          onClick={() => setzeBearbeiten(bearbeiten === z.key ? null : z.key)}>
-                          ✎
-                        </button>
-                      ) : null}
-                    </td>
-                    <td>
-                      {z.kette ? (
-                        <button type="button" className="link" onClick={() => zurKette(z.kette as string)}>
-                          Roller {z.kette}
-                        </button>
-                      ) : (
-                        'manuell'
-                      )}
-                    </td>
-                    <td className="grund" title={z.grund}>{z.grund || '—'}</td>
-                  </tr>,
-                  bearbeiten === z.key ? (
-                    <tr key={`${z.key}-form`}>
-                      <td colSpan={10}>
-                        <SchwelleForm z={z} konto={konto} fertig={() => setzeBearbeiten(null)} />
+                const neuerTicker = i > 0 && sichtbar[i - 1].symbol !== z.symbol
+                const aufgeklappt = offen === z.key
+                const info = z.kette ? w.ketten.get(z.kette) : undefined
+                return (
+                  <Fragment key={z.key}>
+                    <tr
+                      className={`klickbar ampel-${z.ampel}${neuerTicker ? ' gruppen-anfang' : ''}${aufgeklappt ? ' gewaehlt' : ''}`}
+                      id={z.kette ? `kette-${z.kette}` : undefined}
+                      onClick={() => setzeOffen(aufgeklappt ? null : z.key)}
+                      title={`${z.grund || AMPEL_TEXT[z.ampel]} — Klicken: Kette und Position aufklappen`}
+                    >
+                      <td title={AMPEL_TEXT[z.ampel]}>
+                        <span className={`punkt ${z.ampel}`} aria-label={AMPEL_TEXT[z.ampel]} />
                       </td>
+                      <td>
+                        {aufgeklappt ? '▾' : '▸'} {z.symbol}
+                      </td>
+                      <td>{verfallText(z)}</td>
+                      <td>
+                        {strikeText(z)}
+                        {z.naked ? <span className="marke-naked" title="Risiko weder durch ein Long-Bein noch durch Aktien begrenzt"> ungedeckt</span> : null}
+                        {z.deckung === 'aktien' ? <span className="sicht" title="Durch Aktien im Depot gedeckt"> · Aktien</span> : null}
+                        {z.gruppe ? (
+                          <span className="sicht" title="Short Put und Short Call desselben Verfalls">
+                            {' · '}
+                            {z.deckung === 'kalender' || z.deckung === 'diagonal' ? 'DC' : 'IC'}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="zahl">{menge(z)}</td>
+                      <td
+                        className={`zahl${z.daten_alt ? ' alt' : ''}`}
+                        title={z.daten_alt ? `Letzter bekannter Wert vom ${zeitDe(z.daten_alt)} (IB liefert gerade nichts)` : undefined}
+                      >
+                        {zahl(z.spot, z.klasse === 'index' ? 0 : 2)}
+                        {z.daten_alt ? <span className="sicht"> · {z.daten_alt.slice(11, 16)}</span> : null}
+                      </td>
+                      <td className="zahl">{z.dte}</td>
+                      <td className="zahl">{zahl(z.kurswert, 0)}</td>
+                      <td className={`zahl${z.unrealisiert !== null && z.unrealisiert !== undefined ? (z.unrealisiert < 0 ? ' verlust' : ' gewinn') : ''}`}>
+                        {zahl(z.unrealisiert, 0)}
+                      </td>
+                      <td>
+                        <Balken z={z} />
+                      </td>
+                      <td className={`zahl${z.abstand !== null && z.abstand < 0 ? ' im-geld' : ''}`}>
+                        {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
+                        {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
+                      </td>
+                      <td>{info ? <KettenZeile k={info.kette} /> : z.kette ? z.kette : <span className="sicht">manuell</span>}</td>
                     </tr>
-                  ) : null,
-                ]
+                    {aufgeklappt ? (
+                      <tr className="verlaufszeile">
+                        <td colSpan={12}>
+                          <div className="verlauf-innen">
+                            <Details z={z} konto={konto} w={w} />
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                )
               })}
             </tbody>
           </table>
         </div>
       ) : null}
-      {ausgeblendet > 0 ? (
-        <p className="sicht">
-          ok, ausgeblendet: {okJeTicker.map(([t, n]) => `${t} ${n}`).join(' · ')}
-        </p>
-      ) : null}
+      {ausgeblendet > 0 ? <p className="sicht">ok, ausgeblendet: {okJeTicker.map(([t, n]) => `${t} ${n}`).join(' · ')}</p> : null}
     </>
   )
 }
 
-function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'live'; nurHandeln: boolean; paper?: boolean }): JSX.Element {
-  const { titel, daten, konto, nurHandeln, paper } = props
-  const zurKette = (kette: string): void => {
-    document.getElementById(`kette-${kette}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'live'; nurHandeln: boolean; paper?: boolean; w: Werkzeuge }): JSX.Element {
+  const { titel, daten, konto, nurHandeln, paper, w } = props
   const z = daten.zaehler ?? {}
   const index = daten.positionen.filter((p) => p.klasse === 'index')
   const einzel = daten.positionen.filter((p) => p.klasse === 'einzelwert')
@@ -251,8 +317,8 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
       </p>
       {daten.fehler ? <p className="warnung">{daten.fehler}</p> : null}
       {daten.positionen.length === 0 && !daten.fehler ? <p className="hinweis">Keine Short-Optionen im Konto.</p> : null}
-      <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} zurKette={zurKette} />
-      <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} zurKette={zurKette} />
+      <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} w={w} />
+      <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} w={w} />
     </div>
   )
 }
@@ -281,7 +347,13 @@ function Reiter(props: { konto: Konto; gewaehlt: boolean; waehle: () => void; da
   )
 }
 
-export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null | undefined }): JSX.Element {
+export default function ShortsUebersicht(props: {
+  paper: RollerShorts | null | undefined
+  strategie?: RollerStrategie
+  lage?: (k: RollerKetteStand) => ReactNode
+  verlauf?: (k: RollerKetteStand) => ReactNode
+}): JSX.Element {
+  const { paper, strategie, lage, verlauf } = props
   const [nurHandeln, setzeNurHandeln] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SPEICHER) !== '0'
@@ -325,6 +397,10 @@ export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null
     setzeKonto(k)
     merke(KONTO_SPEICHER, k)
   }
+  const regelnJe = new Map((strategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
+  const ketten = new Map<string, KettenInfo>((strategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: regelnJe.get(k.strategie) }]))
+  const wPaper: Werkzeuge = { ketten, lage, verlauf }
+  const wLive: Werkzeuge = { ketten: new Map() } // die Roller-Ketten gehören zum Paper-Konto
   const liveDaten = live && live !== 'alt' ? live : null
   const liveHinweis = live === undefined ? 'frage …' : live === 'alt' ? 'Dienst ohne Übersicht (alter Stand)' : 'nicht verbunden'
   return (
@@ -342,7 +418,7 @@ export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null
       </div>
       {konto === 'live' ? (
         liveDaten ? (
-          <Block titel="LIVE-Konto" daten={liveDaten} konto="live" nurHandeln={nurHandeln} />
+          <Block titel="LIVE-Konto" daten={liveDaten} konto="live" nurHandeln={nurHandeln} w={wLive} />
         ) : (
           <div className="shorts-block">
             <p className="warnung">
@@ -359,7 +435,7 @@ export default function ShortsUebersicht({ paper }: { paper: RollerShorts | null
           </div>
         )
       ) : paper ? (
-        <Block titel="PAPER-Konto" daten={paper} konto="paper" nurHandeln={nurHandeln} paper />
+        <Block titel="PAPER-Konto" daten={paper} konto="paper" nurHandeln={nurHandeln} paper w={wPaper} />
       ) : (
         <p className="hinweis">Der Roller liefert noch keine Übersicht (älterer Stand des Dienstes).</p>
       )}
