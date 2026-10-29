@@ -19,8 +19,41 @@ const HERKUNFT: Record<RollerShort['schwelle_herkunft'], string> = {
 }
 const SPEICHER = 'shorts-nur-handlungsbedarf'
 
-function datum(jjjjmmtt: string): string {
-  return jjjjmmtt.length === 8 ? `${jjjjmmtt.slice(6, 8)}.${jjjjmmtt.slice(4, 6)}.` : jjjjmmtt
+const MONAT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Verfall wie in der TWS: Oct29'26
+function tws(jjjjmmtt: string): string {
+  return jjjjmmtt.length === 8 ? `${MONAT[Number(jjjjmmtt.slice(4, 6)) - 1]}${jjjjmmtt.slice(6, 8)}'${jjjjmmtt.slice(2, 4)}` : jjjjmmtt
+}
+
+function strike(x: number): string {
+  return x.toLocaleString('en-US', { maximumFractionDigits: 2, useGrouping: false })
+}
+
+const ART_TWS: Record<string, string> = {
+  BPS: 'Bull-Put',
+  BCS: 'Bear-Call',
+  'Debit Put': 'Bear-Put',
+  'Debit Call': 'Bull-Call',
+  'Kalender Put': 'Put-Kalender',
+  'Kalender Call': 'Call-Kalender',
+  'Diagonal Put': 'Put-Diagonal',
+  'Diagonal Call': 'Call-Diagonal',
+}
+
+// Bezeichnung wie in der TWS: Einzelposition „Oct30'26 265 CALL“, Spread „Oct29'26 7655/7625 Bull-Put“ (Strikes zuerst, dann die Art).
+function bezeichnung(z: RollerShort): string {
+  const recht = z.recht === 'P' ? 'PUT' : 'CALL'
+  if (z.long === null) return `${tws(z.verfall)} ${strike(z.short)} ${recht}`
+  const verfall = z.long_verfall ? `${tws(z.verfall)}/${tws(z.long_verfall)}` : tws(z.verfall)
+  const strikes = z.deckung === 'kalender' ? strike(z.short) : `${strike(z.short)}/${strike(z.long)}`
+  return `${verfall} ${strikes} ${ART_TWS[z.art] ?? z.art}`
+}
+
+// Vorzeichen wie in der TWS: Short-Positionen und Credit-Spreads negativ, Debit-Spreads, Kalender und Diagonale positiv.
+function menge(z: RollerShort): number {
+  const positiv = z.deckung === 'debit' || z.deckung === 'kalender' || z.deckung === 'diagonal'
+  return positiv ? z.menge : -z.menge
 }
 
 function zahl(x: number | null | undefined, stellen = 0): string {
@@ -115,11 +148,9 @@ function Abschnitt(props: {
               <tr>
                 <th title={REGEL}>●</th>
                 <th>Ticker</th>
-                <th>Art</th>
-                <th>Verfall</th>
+                <th className="zahl" title="Wie in der TWS: Short und Credit-Spread negativ">Menge</th>
+                <th>Position</th>
                 <th className="zahl">DTE</th>
-                <th className="zahl">Short/Long</th>
-                <th className="zahl">Menge</th>
                 <th className="zahl">Kurs</th>
                 <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
                 <th title={`|Δ| des Shorts gegen die Schwelle; Strich = Schwelle. ${REGEL}`}>|Δ| / Schwelle</th>
@@ -136,8 +167,9 @@ function Abschnitt(props: {
                       <span className={`punkt ${z.ampel}`} aria-label={AMPEL_TEXT[z.ampel]} />
                     </td>
                     <td>{z.symbol}</td>
-                    <td>
-                      {z.art}
+                    <td className="zahl">{menge(z)}</td>
+                    <td title={`${z.art}, ${z.recht === 'P' ? 'Put' : 'Call'}-Seite`}>
+                      {bezeichnung(z)}
                       {z.naked ? <span className="marke-naked" title="Risiko weder durch ein Long-Bein noch durch Aktien begrenzt"> ungedeckt</span> : null}
                       {z.deckung === 'aktien' ? <span className="sicht" title="Durch Aktien im Depot gedeckt"> · Aktien</span> : null}
                       {z.gruppe ? (
@@ -147,14 +179,7 @@ function Abschnitt(props: {
                         </span>
                       ) : null}
                     </td>
-                    <td>{datum(z.verfall)}</td>
                     <td className="zahl">{z.dte}</td>
-                    <td className="zahl">
-                      {zahl(z.short, z.short % 1 ? 1 : 0)}
-                      {z.long !== null ? `/${zahl(z.long, z.long % 1 ? 1 : 0)}` : ''}
-                      {z.long_verfall ? <span className="sicht" title="Verfall des Long-Beins"> ({datum(z.long_verfall)})</span> : null}
-                    </td>
-                    <td className="zahl">{z.menge}</td>
                     <td className={`zahl${z.daten_alt ? ' alt' : ''}`}
                       title={z.daten_alt ? `Letzter bekannter Wert vom ${zeitDe(z.daten_alt)} (IB liefert gerade nichts)` : undefined}>
                       {zahl(z.spot, z.klasse === 'index' ? 0 : 2)}
@@ -186,7 +211,7 @@ function Abschnitt(props: {
                   </tr>,
                   bearbeiten === z.key ? (
                     <tr key={`${z.key}-form`}>
-                      <td colSpan={12}>
+                      <td colSpan={10}>
                         <SchwelleForm z={z} konto={konto} fertig={() => setzeBearbeiten(null)} />
                       </td>
                     </tr>
