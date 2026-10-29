@@ -321,7 +321,7 @@ function hatHandlungsbedarf(k: RollerKetteStand, regeln?: RollerRegeln): boolean
 
 function KettenkarteAufklappbar({ k, regeln }: { k: RollerKetteStand; regeln?: RollerRegeln }): JSX.Element {
   const kritisch = hatHandlungsbedarf(k, regeln)
-  const [offen, setOffen] = useState(kritisch)
+  const [offen, setOffen] = useState(true)
   const bremse = kostenAnteil(k, regeln)
   const delta = k.short_delta === null || k.short_delta === undefined ? null : Math.abs(k.short_delta)
   useEffect(() => {
@@ -365,8 +365,8 @@ export default function Kettenkarten(props: { strategie: RollerStrategie }): JSX
     <section className="kettenkarten">
       <h3>Ketten nach Handlungsbedarf</h3>
       <p className="sicht">
-        {anzahlBedarf} von {geordnet.length} Ketten mit Handlungsbedarf oder nahe an einer Grenze; diese sind zuerst geöffnet.
-        Die übrigen lassen sich bei Bedarf aufklappen. Grün = in Ordnung, gelb = nahe an der Schwelle, rot = Schwelle überschritten oder Short im Geld.
+        {anzahlBedarf} von {geordnet.length} Ketten mit Handlungsbedarf oder nahe an einer Grenze; diese stehen oben.
+        Alle Karten sind zunächst geöffnet und lassen sich einklappen. Grün = in Ordnung, gelb = nahe an der Schwelle, rot = Schwelle überschritten oder Short im Geld.
       </p>
       {geordnet.map((k) => <KettenkarteAufklappbar key={k.kette_id} k={k} regeln={regelnJe.get(k.strategie)} />)}
     </section>
