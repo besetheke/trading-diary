@@ -1564,3 +1564,6 @@ table.shorts .verlaufszeile td { white-space: normal; padding: 0; }
 .shorts-details { padding: 0.4rem 1rem 0.8rem; }
 .shorts-details .lage-block { margin: 0.4rem 0; }
 .kette-hinweis { color: var(--rot); font-weight: 600; }
+.kette-im-trade { border-top: 1px solid var(--rand); padding-top: 0.4rem; margin-top: 0.4rem; }
+.kette-im-trade h5 { margin: 0.2rem 0 0.4rem; font-size: 0.95rem; }
+.rest-ketten { margin-top: 0.8rem; }

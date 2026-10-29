@@ -63,6 +63,10 @@ function menge(z: RollerShort): number {
   return positiv ? z.menge : -z.menge
 }
 
+function kettenVon(z: RollerShort): string[] {
+  return z.ketten && z.ketten.length > 0 ? z.ketten : z.kette ? [z.kette] : []
+}
+
 function zahl(x: number | null | undefined, stellen = 0): string {
   return x === null || x === undefined
     ? '—'
@@ -146,6 +150,7 @@ interface Werkzeuge {
   ketten: Map<string, KettenInfo>
   lage?: (k: RollerKetteStand) => ReactNode
   verlauf?: (k: RollerKetteStand) => ReactNode
+  rest?: ReactNode
 }
 
 // Was an der Kette hängt: Hinweis in der Zeile (Signal, Vorschlag, angehalten).
@@ -159,11 +164,11 @@ function KettenZeile({ k }: { k: RollerKetteStand }): JSX.Element {
   )
 }
 
-// Aufgeklappt: alles zu Kette und Position an einer Stelle.
+// Aufgeklappt, direkt unter dem Trade: Ketteninfo, Lage mit Freigabe, Kettentrades und die Karten fürs Rollen —
+// für jede Kette, die diese Position hält.
 function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge }): JSX.Element {
   const { z, konto, w } = props
-  const info = z.kette ? w.ketten.get(z.kette) : undefined
-  const [karten, setzeKarten] = useState(false)
+  const ids = kettenVon(z)
   return (
     <div className="shorts-details">
       <p className="sicht">
@@ -172,32 +177,30 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
         {zahl(z.unrealisiert, 2)}
         {z.grund ? ` · ${z.grund}` : ''}
       </p>
-      {info ? (
-        <>
-          {w.lage ? <div className="lage-block">{w.lage(info.kette)}</div> : null}
-          {w.verlauf ? w.verlauf(info.kette) : null}
-          <p>
-            <button type="button" onClick={() => setzeKarten(!karten)} aria-expanded={karten}>
-              {karten ? 'Karten fürs Rollen ausblenden' : 'Details: Karten fürs Rollen (Strike-Leiter, Rollregel, Kostenbremse, Verlauf)'}
-            </button>
-          </p>
-          {karten ? (
-            <>
-              <div className="kk-raster">
-                <StrikeLeiter kette={info.kette} regeln={info.regeln} />
-                <RollRegel kette={info.kette} regeln={info.regeln} />
-                <Kostenbremse kette={info.kette} regeln={info.regeln} />
-                <Kettenverlauf kette={info.kette} />
-              </div>
-              {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
-            </>
-          ) : null}
-        </>
-      ) : z.kette ? (
-        <p className="sicht">Kette {z.kette} ist nur im Dienst bekannt, die Kettendaten fehlen im Status.</p>
-      ) : (
-        <SchwelleForm z={z} konto={konto} />
-      )}
+      {ids.length === 0 ? <SchwelleForm z={z} konto={konto} /> : null}
+      {ids.map((id) => {
+        const info = w.ketten.get(id)
+        if (!info) return <p key={id} className="sicht">Kette {id}: Kettendaten fehlen im Status.</p>
+        const k = info.kette
+        return (
+          <div key={id} className="kette-im-trade">
+            <h5>
+              Kette {k.kette_id} · {k.strategie} · {k.rolls} {k.rolls === 1 ? 'Roll' : 'Rolls'} · Netto {zahl(k.netto, 2)}
+              {k.pt_limit !== null && k.pt_limit !== undefined ? ` · PT ${zahl(k.pt_limit, 2)}` : ''}
+              {k.erstkredit !== null && k.erstkredit !== undefined ? ` · Erstkredit ${zahl(k.erstkredit, 2)}` : ''}
+            </h5>
+            {w.lage ? <div className="lage-block">{w.lage(k)}</div> : null}
+            {w.verlauf ? w.verlauf(k) : null}
+            <div className="kk-raster">
+              <StrikeLeiter kette={k} regeln={info.regeln} />
+              <RollRegel kette={k} regeln={info.regeln} />
+              <Kostenbremse kette={k} regeln={info.regeln} />
+              <Kettenverlauf kette={k} />
+            </div>
+            {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -241,7 +244,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
               {sichtbar.map((z, i) => {
                 const neuerTicker = i > 0 && sichtbar[i - 1].symbol !== z.symbol
                 const aufgeklappt = offen === z.key
-                const info = z.kette ? w.ketten.get(z.kette) : undefined
+                const infos = kettenVon(z).map((id) => w.ketten.get(id)).filter((x): x is KettenInfo => Boolean(x))
                 return (
                   <Fragment key={z.key}>
                     <tr
@@ -288,8 +291,19 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                         {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
                       </td>
-                      <td className="zahl">{info ? info.kette.rolls : '—'}</td>
-                      <td>{info ? <KettenZeile k={info.kette} /> : z.kette ? z.kette : <span className="sicht">manuell</span>}</td>
+                      <td className="zahl">{infos.length > 0 ? infos.map((i) => i.kette.rolls).join(' / ') : '—'}</td>
+                      <td>
+                        {infos.length > 0
+                          ? infos.map((i, n) => (
+                              <Fragment key={i.kette.kette_id}>
+                                {n > 0 ? ' · ' : ''}
+                                <KettenZeile k={i.kette} />
+                              </Fragment>
+                            ))
+                          : kettenVon(z).length > 0
+                            ? kettenVon(z).join(', ')
+                            : <span className="sicht">manuell</span>}
+                      </td>
                     </tr>
                     {aufgeklappt ? (
                       <tr className="verlaufszeile">
@@ -331,6 +345,7 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
       {daten.positionen.length === 0 && !daten.fehler ? <p className="hinweis">Keine Short-Optionen im Konto.</p> : null}
       <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} w={w} />
       <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} w={w} />
+      {w.rest}
     </div>
   )
 }
@@ -364,8 +379,9 @@ export default function ShortsUebersicht(props: {
   strategie?: RollerStrategie
   lage?: (k: RollerKetteStand) => ReactNode
   verlauf?: (k: RollerKetteStand) => ReactNode
+  rest?: ReactNode
 }): JSX.Element {
-  const { paper, strategie, lage, verlauf } = props
+  const { paper, strategie, lage, verlauf, rest } = props
   const [nurHandeln, setzeNurHandeln] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SPEICHER) !== '0'
@@ -411,7 +427,7 @@ export default function ShortsUebersicht(props: {
   }
   const regelnJe = new Map((strategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
   const ketten = new Map<string, KettenInfo>((strategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: regelnJe.get(k.strategie) }]))
-  const wPaper: Werkzeuge = { ketten, lage, verlauf }
+  const wPaper: Werkzeuge = { ketten, lage, verlauf, rest }
   const wLive: Werkzeuge = { ketten: new Map() } // die Roller-Ketten gehören zum Paper-Konto
   const liveDaten = live && live !== 'alt' ? live : null
   const liveHinweis = live === undefined ? 'frage …' : live === 'alt' ? 'Dienst ohne Übersicht (alter Stand)' : 'nicht verbunden'

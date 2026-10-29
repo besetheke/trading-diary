@@ -308,7 +308,7 @@ function RestKarten({ s }: { s: RollerStrategie }): JSX.Element {
   return <Kettenkarten strategie={s} />;
 }
 
-type KopfKontext = { lage: (k: RollerKetteStand) => JSX.Element; verlauf: (k: RollerKetteStand) => JSX.Element; laeuft: boolean };
+type KopfKontext = { lage: (k: RollerKetteStand) => JSX.Element; verlauf: (k: RollerKetteStand) => JSX.Element; laeuft: boolean; rest: JSX.Element | null };
 
 function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: RollerShorts | null; kopf?: (ctx: KopfKontext) => JSX.Element }): JSX.Element {
   const [meldung, setzeMeldung] = useState<string | null>(null);
@@ -371,11 +371,19 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
             </>
   );
   const verlauf = (k: RollerKetteStand): JSX.Element => <KettenVerlauf k={k} offen />;
-  const vorShorts = new Set((shorts?.positionen ?? []).map((z) => z.kette).filter(Boolean));
+  const vorShorts = new Set((shorts?.positionen ?? []).flatMap((z) => (z.ketten && z.ketten.length > 0 ? z.ketten : z.kette ? [z.kette] : [])));
   const restKetten = shorts ? s.ketten.filter((k) => !vorShorts.has(k.kette_id)) : s.ketten;
+  const rest = restKetten.length > 0 ? (
+    <div className="rest-ketten">
+      <h4>Roller-Ketten ohne zugeordnete Position ({restKetten.length})</h4>
+      <p className="sicht">Z. B. gerade eröffnet oder Bestand noch nicht geladen; Klick auf eine Kette klappt ihren Verlauf auf.</p>
+      <OffeneKetten ketten={restKetten} verfall={verfall} zahl={zahl} verlauf={verlauf} lage={lage} />
+      <RestKarten s={{ ...s, ketten: restKetten }} />
+    </div>
+  ) : null;
   return (
     <>
-      {kopf?.({ lage, verlauf, laeuft: laeuft !== null })}
+      {kopf?.({ lage, verlauf, laeuft: laeuft !== null, rest })}
       <h3>Strategien (Paper)</h3>
       <p className="sicht">
         {s.modus === "live"
@@ -439,18 +447,6 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
         </button>
       </p>
       <p className="hinweis">{s.vorgaben.find((v) => v.name === wahl)?.text}</p>
-      {restKetten.length > 0 && (
-        <>
-          {shorts && (
-            <p className="sicht">
-              Ketten ohne zugeordnete Short-Position im Konto ({restKetten.length}) — z. B. gerade eröffnet oder Bestand noch nicht geladen:
-            </p>
-          )}
-          <OffeneKetten ketten={restKetten} verfall={verfall} zahl={zahl} verlauf={verlauf} lage={lage} />
-        </>
-      )}
-      {s.ketten.length === 0 && !shorts && <p className="hinweis">Keine offene Kette.</p>}
-      {restKetten.length > 0 && <RestKarten s={{ ...s, ketten: restKetten }} />}
       {meldung && <p className="hinweis">{meldung}</p>}
       {s.tagesprogramm && s.tagesprogramm.strategien.length > 0 && (
         <p className="sicht">
@@ -589,7 +585,7 @@ export function RollerSeite(): JSX.Element {
 
       {s.strategie ? (
         <StrategieKarte s={s.strategie} shorts={s.shorts}
-          kopf={(ctx) => <ShortsUebersicht paper={s.shorts} strategie={s.strategie ?? undefined} lage={ctx.lage} verlauf={ctx.verlauf} />} />
+          kopf={(ctx) => <ShortsUebersicht paper={s.shorts} strategie={s.strategie ?? undefined} lage={ctx.lage} verlauf={ctx.verlauf} rest={ctx.rest} />} />
       ) : (
         <ShortsUebersicht paper={s.shorts} />
       )}

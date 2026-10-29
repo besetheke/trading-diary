@@ -561,6 +561,7 @@ export interface RollerShort {
   schwelle: number | null
   schwelle_herkunft: 'roller' | 'position' | 'ticker' | 'staffel'
   kette: string | null
+  ketten?: string[]
   abstand: number | null
   abstand_pct: number | null
   delta: number | null
