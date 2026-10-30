@@ -241,6 +241,58 @@ function JournalSchritte({ j }: { j: JournalKetteKurz }): JSX.Element {
   )
 }
 
+// Kostenbasis der Kette(n) als Tabelle (analytics/kostenbasis.py): netto nach Kommission, Wheel samt Put-Prämie,
+// bei Aktien je Aktie (anteilig auf die gehaltenen Stück), sonst je Einheit mit Breakeven am Verfall.
+function KostenbasisTabelle({ z }: { z: RollerShort }): JSX.Element | null {
+  const k = z.journal?.kostenbasis
+  if (!k) return null
+  const w = z.journal?.waehrung ?? ''
+  const d = (x: string | null) => (x === null ? null : Number(x))
+  const be = d(k.breakeven)
+  const mitAktien = k.aktien_einstand !== null
+  const abstand =
+    be === null || z.spot === null ? null : mitAktien || z.recht === 'P' ? z.spot - be : be - z.spot
+  const zeilen: [string, string, string?][] = [
+    ['Realisiert (abgeschlossene Glieder, netto)', `${zahl(d(k.realisiert), 2)} ${w}`],
+    ['Offene Prämien (netto)', `${zahl(d(k.praemien_offen), 2)} ${w}`],
+  ]
+  if (mitAktien) {
+    zeilen.push([`Aktien-Einstand (${zahl(d(k.aktien_stueck), 0)} Stück)`, `${zahl(d(k.aktien_einstand), 2)} ${w}`])
+  }
+  zeilen.push(['Netto der Kette (Prämien und Ergebnisse)', `${zahl(d(k.netto), 2)} ${w}`, 'summe'])
+  if (mitAktien) {
+    zeilen.push(['Kostenbasis gesamt (Einstand − Netto)', `${zahl(d(k.kostenbasis), 2)} ${w}`, 'summe'])
+    zeilen.push(['Kostenbasis je Aktie = Breakeven', zahl(d(k.je_aktie), 4), 'summe'])
+  } else {
+    zeilen.push(['Netto je Einheit (÷ Kontrakte × Multiplikator)', zahl(d(k.je_einheit), 2)])
+    zeilen.push(['Breakeven am Verfall', zahl(be, 2), 'summe'])
+  }
+  zeilen.push(['Kurs jetzt', zahl(z.spot, 2)])
+  zeilen.push(['Abstand zum Breakeven (positiv = im Plus)', abstand === null ? '—' : `${abstand > 0 ? '+' : ''}${zahl(abstand, 2)}`,
+    abstand !== null && abstand < 0 ? 'verlust' : 'summe'])
+  if (k.max_verlust !== null) zeilen.push(['Höchster Verlust am Verfall (Spread)', `${zahl(d(k.max_verlust), 2)} ${w}`])
+  return (
+    <div className="tabelle-rahmen">
+      <table className="strategie-tabelle kostenbasis">
+        <thead>
+          <tr>
+            <th>Kostenbasis{z.journal && z.journal.ketten > 1 ? ` (${z.journal.ketten} Ketten zusammen)` : ''}</th>
+            <th className="zahl">Betrag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {zeilen.map(([text, wert, art]) => (
+            <tr key={text} className={art ?? undefined}>
+              <td>{text}</td>
+              <td className="zahl">{wert}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Karten({ info }: { info: KettenInfo }): JSX.Element {
   return (
     <div className="kk-raster">
@@ -283,6 +335,7 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
         {zahl(z.unrealisiert, 2)}
         {z.grund ? ` · ${z.grund}` : ''}
       </p>
+      <KostenbasisTabelle z={z} />
       {ids.length === 0 ? (
         <div className="kette-im-trade">
           <h5>
@@ -355,7 +408,6 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                 <th className="zahl" title="Kurswert minus Einstand (wie UNRLSRTR G&V der TWS)">Unrealisiert</th>
                 <th title={`|Δ| des Shorts gegen die Schwelle; Strich = Schwelle. ${REGEL}`}>|Δ| / Schwelle</th>
                 <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
-                <th className="zahl" title="Anzahl Ketten dieser Position (Roller, sonst Journal)">Ketten</th>
                 <th className="zahl" title="Anzahl Rolls der Kette(n)">Rolls</th>
                 <th title="Roller-Kette dieser Position: Netto der Kette, Hinweis">Kette</th>
               </tr>
@@ -411,7 +463,6 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                         {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
                       </td>
-                      <td className="zahl">{infos.length > 0 ? infos.length : z.journal ? z.journal.ketten : '—'}</td>
                       <td className="zahl">{infos.length > 0 ? infos.map((i) => i.kette.rolls).join(' / ') : z.journal ? z.journal.anzahl_rolls : '—'}</td>
                       <td>
                         {infos.length > 0
@@ -428,7 +479,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                     </tr>
                     {aufgeklappt ? (
                       <tr className="verlaufszeile">
-                        <td colSpan={14}>
+                        <td colSpan={13}>
                           <div className="verlauf-innen">
                             <Details z={z} konto={konto} w={w} />
                           </div>

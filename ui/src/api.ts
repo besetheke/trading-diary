@@ -554,7 +554,13 @@ export interface JournalKetteKurz {
     chain_id: number; sequenz: number; art: string; typ: string; verfall: string | null
     short: string | null; long: string | null; menge: string | null
     eroeffnet_am: string | null; geschlossen_am: string | null; netto: string | null; waehrung: string | null
+    offen?: boolean; betrag?: string | null; stueck?: string | null
   }[]
+  kostenbasis?: {
+    realisiert: string | null; praemien_offen: string | null; aktien_einstand: string | null; aktien_stueck: string
+    netto: string | null; kostenbasis: string | null; je_aktie: string | null; je_einheit: string | null
+    breakeven: string | null; max_verlust: string | null
+  }
 }
 
 export type Ampel = 'rot' | 'gelb' | 'grau' | 'gruen'

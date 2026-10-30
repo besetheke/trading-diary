@@ -86,3 +86,20 @@ def test_jedes_konto_sucht_in_seinem_journal(migrated_db, tmp_path, monkeypatch,
                                        hole_roller_status=lambda port: _status()))
     assert "journal" in _positionen(nur_paper, "/roller-status")[0]
     assert "journal" not in _positionen(nur_paper, "/roller-status-live")[0]
+
+
+def test_kostenbasis_der_position(migrated_db):
+    """Von Hand: abgeschlossenes Glied +92,00 EUR. Offenes Glied 18800/18700, 1 Kontrakt, Multiplikator 5,
+    Kommission −2,00 je Ausführung: Verkauf 90 × 5 − 2 = +448,00, Kauf −55 × 5 − 2 = −277,00 → Zufluss +171,00.
+    Netto 263,00 · je Einheit 263 ÷ 5 = 52,60 · Breakeven 18.800 − 52,60 = 18.747,40
+    · höchster Verlust (100 − 52,60) × 5 = 237,00."""
+    befuelle(migrated_db, ausfuehrungen=[{**a, "buchungskurs": Decimal("1")} for a in AUSFUEHRUNGEN])
+    rebuild(migrated_db)
+    status = _status()
+    status["shorts"]["positionen"][0]["multiplikator"] = "5"
+    k = TestClient(erzeuge_app(migrated_db, roller_port=8600, hole_roller_status=lambda port: status))
+    kb = _positionen(k, "/roller-status")[0]["journal"]["kostenbasis"]
+    assert {f: Decimal(kb[f]) for f in ("realisiert", "praemien_offen", "netto", "je_einheit", "breakeven", "max_verlust")} == {
+        "realisiert": Decimal("92.00"), "praemien_offen": Decimal("171.00"), "netto": Decimal("263.00"),
+        "je_einheit": Decimal("52.60"), "breakeven": Decimal("18747.40"), "max_verlust": Decimal("237.00")}
+    assert kb["aktien_einstand"] is None and kb["je_aktie"] is None

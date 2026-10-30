@@ -794,6 +794,8 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
             position[feld] = _fasse_ketten_zusammen([info[c] for c in treffer])
             if feld == "journal":
                 position[feld]["schritte"] = [s for c in treffer for s in schritte.get(c, [])]
+                position[feld]["kostenbasis"] = _kostenbasis_der_position(
+                    position, position[feld]["schritte"])
     return status
 
 
@@ -804,15 +806,19 @@ def _kettenschritte(verbindung: Connection, ids: list[int]) -> dict[int, list[di
         return {}
     zeilen = verbindung.execute(
         select(chain_links.c.chain_id, chain_links.c.sequenz, chain_links.c.verknuepfungstyp,
+               structures.c.structure_id,
                structures.c.typ, structures.c.expiry, structures.c.short_strike,
                structures.c.long_strike, structures.c.menge, structures.c.eroeffnet_am,
                structures.c.geschlossen_am, structures.c.netto_pnl, structures.c.waehrung)
         .join(structures, structures.c.structure_id == chain_links.c.structure_id)
-        .where(chain_links.c.chain_id.in_(ids))
+        .where(chain_links.c.chain_id.in_(ids), chain_links.c.sicht == SICHT)
         .order_by(chain_links.c.chain_id, chain_links.c.sequenz)
     ).all()
+    offen_je = _offener_zufluss_je_struktur(
+        verbindung, [z.structure_id for z in zeilen if z.geschlossen_am is None])
     aus: dict[int, list[dict]] = {}
     for z in zeilen:
+        zufluss, stueck = offen_je.get(z.structure_id, (None, None))
         aus.setdefault(z.chain_id, []).append({
             "chain_id": z.chain_id, "sequenz": z.sequenz, "art": z.verknuepfungstyp, "typ": z.typ,
             "verfall": z.expiry.isoformat() if z.expiry else None,
@@ -821,7 +827,61 @@ def _kettenschritte(verbindung: Connection, ids: list[int]) -> dict[int, list[di
             "eroeffnet_am": z.eroeffnet_am.isoformat() if z.eroeffnet_am else None,
             "geschlossen_am": z.geschlossen_am.isoformat() if z.geschlossen_am else None,
             "netto": _als_text(z.netto_pnl), "waehrung": z.waehrung,
+            # Kostenbasis (AP-19): abgeschlossen das Ergebnis netto, offen der Zufluss netto
+            "offen": z.geschlossen_am is None,
+            "betrag": (_als_text(z.netto_pnl) if z.geschlossen_am is not None
+                       else _als_text(zufluss)),
+            "stueck": _als_text(stueck) if z.typ == "Stock" else None,
         })
+    return aus
+
+
+def _kostenbasis_der_position(position: dict, schritte: list[dict]) -> dict:
+    """Kostenbasis der Kette(n) einer Position (analytics/kostenbasis.py) als Text-Beträge."""
+    from analytics.kostenbasis import Glied, kostenbasis
+
+    def dez(x) -> Decimal | None:
+        return None if x is None else Decimal(str(x))
+    glieder = [Glied(s["sequenz"], s["art"], s["typ"], s["offen"], dez(s["betrag"]),
+                     dez(s.get("stueck")) or Decimal("0")) for s in schritte]
+    k = kostenbasis(glieder, recht=position.get("recht"), short=dez(position.get("short")),
+                    long=dez(position.get("long")) if not position.get("long_verfall") else None,
+                    kontrakte=dez(position.get("menge")),
+                    multiplikator=dez(position.get("multiplikator") or 100))
+    return {f: (_als_text(getattr(k, f)) if isinstance(getattr(k, f), Decimal) else getattr(k, f))
+            for f in ("realisiert", "praemien_offen", "aktien_einstand", "aktien_stueck", "netto",
+                      "kostenbasis", "je_aktie", "je_einheit", "breakeven", "max_verlust")}
+
+
+def _offener_zufluss_je_struktur(verbindung: Connection,
+                                 structure_ids: list[int]) -> dict[int, tuple[Decimal, Decimal]]:
+    """Je offener Struktur: Zufluss netto der offenen Legs in Positionswährung (Verkauf positiv,
+    Kauf negativ, Kommission abgezogen) und Stückzahl — wie der Einstand in
+    analytics/unrealisiert.py, nur mit umgekehrtem Vorzeichen und ohne Umrechnung (AP-19)."""
+    if not structure_ids:
+        return {}
+    offene = [dict(z) for z in verbindung.execute(
+        select(legs.c.structure_id, legs.c.conid, legs.c.open_exec_id, legs.c.menge,
+               legs.c.kommission_gesamt, legs.c.open_faktor)
+        .where(legs.c.structure_id.in_(structure_ids), legs.c.sicht == SICHT,
+               legs.c.close_exec_id.is_(None))
+    ).mappings()]
+    if not offene:
+        return {}
+    _stichtag, _bestand, exec_je_id, mult = _bewertungsgrundlage(verbindung, offene, None)
+    aus: dict[int, tuple[Decimal, Decimal]] = {}
+    for leg in offene:
+        a = exec_je_id.get(leg["open_exec_id"])
+        m = mult.get(leg["conid"])
+        if a is None or m is None:
+            continue
+        faktor = leg.get("open_faktor") or Decimal(1)
+        preis = a["preis"] if faktor == 1 else a["preis"] / faktor
+        menge = abs(leg["menge"])
+        vorzeichen = 1 if a["side"] == "BUY" else -1
+        einstand = vorzeichen * preis * menge * m - (leg["kommission_gesamt"] or Decimal("0"))
+        zufluss, stueck = aus.get(leg["structure_id"], (Decimal("0"), Decimal("0")))
+        aus[leg["structure_id"]] = (zufluss - einstand, stueck + menge)
     return aus
 
 

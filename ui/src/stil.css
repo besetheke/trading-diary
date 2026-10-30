@@ -1567,3 +1567,16 @@ table.shorts .verlaufszeile td { white-space: normal; padding: 0; }
 .kette-im-trade { border-top: 1px solid var(--rand); padding-top: 0.4rem; margin-top: 0.4rem; }
 .kette-im-trade h5 { margin: 0.2rem 0 0.4rem; font-size: 0.95rem; }
 .rest-ketten { margin-top: 0.8rem; }
+table.kostenbasis { max-width: 34rem; margin: 0.4rem 0; }
+table.kostenbasis tr.summe td { font-weight: 600; }
+table.kostenbasis tr.verlust td { font-weight: 600; color: #b42318; }
+
+/* Shorts-Liste ohne horizontales Scrollen (Nutzer 30.10.2026): volle Fensterbreite statt der 72rem der Seite,
+   kleinere Schrift, enge Zellen, schmaler Delta-Balken. */
+.shorts-uebersicht { width: calc(100vw - 3rem); position: relative; left: 50%; transform: translateX(-50%); max-width: 110rem; }
+table.shorts { font-size: 0.8rem; }
+table.shorts th, table.shorts td { padding: 0.18rem 0.35rem; }
+table.shorts .delta-balken { width: 6.5rem; height: 1rem; }
+table.shorts .delta-balken .text { font-size: 0.72rem; }
+table.shorts .sicht, table.shorts .marke-naked { font-size: 0.72rem; }
+table.shorts .punkt { width: 0.6rem; height: 0.6rem; }
