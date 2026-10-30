@@ -309,6 +309,7 @@ interface Werkzeuge {
   lage?: (k: RollerKetteStand) => ReactNode
   verlauf?: (k: RollerKetteStand) => ReactNode
   rest?: ReactNode
+  journalStand?: string | null
 }
 
 // Was an der Kette hängt: Hinweis in der Zeile (Signal, Vorschlag, angehalten).
@@ -327,6 +328,7 @@ function KettenZeile({ k }: { k: RollerKetteStand }): JSX.Element {
 function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge }): JSX.Element {
   const { z, konto, w } = props
   const ids = kettenVon(z)
+  const journalStand = w.journalStand
   return (
     <div className="shorts-details">
       <p className="sicht">
@@ -347,7 +349,8 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
                 {z.journal.realisiert_bisher !== null ? ` · bisher realisiert ${zahl(Number(z.journal.realisiert_bisher), 2)} ${z.journal.waehrung ?? ''}` : ''}
               </>
             ) : (
-              'Keine Kette im Journal gefunden (heute eröffnet oder Flex-Import steht noch aus)'
+              `Keine Kette im Journal gefunden — heute eröffnet oder gerollt, oder der Flex-Import fehlt${
+                journalStand ? ` (letzter Flex-Import ${zeitDe(journalStand)})` : ''}`
             )}
           </h5>
           {z.journal && (z.journal.schritte ?? []).length > 0 ? <JournalSchritte j={z.journal} /> : null}
@@ -514,6 +517,12 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
         <span className="sicht">{daten.stand ? `Stand ${zeitDe(daten.stand)}` : ''}</span>
       </p>
       {daten.fehler ? <p className="warnung">{daten.fehler}</p> : null}
+      {daten.journal_stand && Date.now() - new Date(daten.journal_stand).getTime() > 2 * 86400000 ? (
+        <p className="warnung">
+          Journal-Stand {zeitDe(daten.journal_stand)}: der letzte Flex-Import ist älter als zwei Tage — Kettentrades, Rolls und
+          Kostenbasis fehlen für neuere Rolls. Flex-Abruf prüfen (z. B. Token abgelaufen).
+        </p>
+      ) : null}
       {daten.positionen.length === 0 && !daten.fehler ? <p className="hinweis">Keine Short-Optionen im Konto.</p> : null}
       <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} w={w} />
       <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} w={w} />
@@ -599,8 +608,8 @@ export default function ShortsUebersicht(props: {
   }
   const regelnJe = new Map((strategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
   const ketten = new Map<string, KettenInfo>((strategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: regelnJe.get(k.strategie) }]))
-  const wPaper: Werkzeuge = { ketten, lage, verlauf, rest }
-  const wLive: Werkzeuge = { ketten: new Map() } // die Roller-Ketten gehören zum Paper-Konto
+  const wPaper: Werkzeuge = { ketten, lage, verlauf, rest, journalStand: paper?.journal_stand }
+  const wLive: Werkzeuge = { ketten: new Map(), journalStand: live && live !== 'alt' ? live.journal_stand : null } // die Roller-Ketten gehören zum Paper-Konto
   const liveDaten = live && live !== 'alt' ? live : null
   const liveHinweis = live === undefined ? 'frage …' : live === 'alt' ? 'Dienst ohne Übersicht (alter Stand)' : 'nicht verbunden'
   return (

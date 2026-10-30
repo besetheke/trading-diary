@@ -787,6 +787,11 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
                 "waehrung": waehrung_je.get(chain_id),
                 "praemie_offen_eur": u[2], "praemie_aktuell_eur": u[3], "unrealisiert_eur": u[0],
             }
+    # Stand des Journals: letzter Flex-Import (ohne aktuellen Import fehlen neue Rolls und Ketten)
+    if status.get("shorts"):
+        letzter = verbindung.execute(select(func.max(import_runs.c.importiert_am))
+                                     .where(import_runs.c.quelle == "flex")).scalar()
+        status["shorts"]["journal_stand"] = letzter.isoformat() if letzter else None
     schritte = _kettenschritte(verbindung, sorted({c for _, tr, feld in positionen
                                                     if feld == "journal" for c in tr}))
     for position, treffer, feld in positionen:

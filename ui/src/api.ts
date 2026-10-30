@@ -606,6 +606,7 @@ export interface RollerShorts {
   zaehler: Partial<Record<Ampel, number>>
   positionen: RollerShort[]
   ueberschreibung?: { ticker?: Record<string, number>; position?: Record<string, number> }
+  journal_stand?: string | null
 }
 
 export interface RollerStatus {
