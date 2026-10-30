@@ -672,7 +672,18 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
         </p>
       ) : null}
       {daten.positionen.length === 0 && !daten.fehler ? <p className="hinweis">Keine Short-Optionen im Konto.</p> : null}
-      {w.strategie ? <AutomatikSektion zeilen={auto} konto={konto} w={w} s={w.strategie} /> : null}
+      {w.strategie ? (
+        <AutomatikSektion zeilen={auto} konto={konto} w={w} s={w.strategie} />
+      ) : (
+        <div className="automatik-sektion">
+          <h4>Roller-Automatik</h4>
+          <p className="sicht">
+            {konto === 'live'
+              ? 'Hier erscheinen offene Ketten, geplante Eröffnungen (Montag 15:45) und geschlossene Ketten, sobald der Live-Dienst mit Orders läuft (Start-Dienst-Live.ps1). Aktuell läuft nur der lesende Live-Dienst, er eröffnet und managt nichts.'
+              : 'Der Roller liefert keinen Strategie-Status (älterer Stand oder Dienst nicht erreichbar).'}
+          </p>
+        </div>
+      )}
       <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} w={w} />
       <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} w={w} />
       {w.rest}
