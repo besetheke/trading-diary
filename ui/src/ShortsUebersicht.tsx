@@ -7,8 +7,9 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { fehlerText, holeRollerLive, sendeRollerBefehl } from './api'
-import type { Ampel, RollerKetteStand, RollerRegeln, RollerShort, RollerShorts, RollerStrategie } from './api'
+import type { Ampel, JournalKetteKurz, RollerKetteStand, RollerRegeln, RollerShort, RollerShorts, RollerStrategie } from './api'
 import { zeitDe } from './format'
 import { Kettenverlauf, Kostenbremse, RollRegel, StrikeLeiter } from './Kettenkarte'
 
@@ -146,6 +147,111 @@ function SchwelleForm(props: { z: RollerShort; konto: 'paper' | 'live' }): JSX.E
 
 type KettenInfo = { kette: RollerKetteStand; regeln?: RollerRegeln }
 
+// DTE-Staffel des Rollers (STAFFEL_STANDARD) — Grundlage der Schwelle manueller Positionen (OF-109).
+const STAFFEL_STANDARD: [number, number][] = [[7, 0.38], [14, 0.42], [21, 0.46], [28, 0.5]]
+
+function jjjjmmtt(iso: string | null): string {
+  return iso ? iso.slice(0, 10).replace(/-/g, '') : ''
+}
+
+// Eine Position ohne Roller-Kette als „Kette“ für die Karten: Strikes, Kurs, Delta und Schwelle aus der Übersicht,
+// Rolls und Verlauf aus der Kette im Journal (Glieder in Reihenfolge; Netto je Glied ist das Ergebnis des Glieds).
+function kunstKette(z: RollerShort): KettenInfo {
+  const j = z.journal
+  const schritte = j?.schritte ?? []
+  const verlauf = schritte.map((s, i) => {
+    const vorher = schritte[i - 1]
+    return {
+      art: i === 0 ? 'eroeffnung' : s.art === 'close' ? 'schliessen' : 'roll',
+      netto: s.netto === null ? null : Number(s.netto),
+      zeit: s.eroeffnet_am,
+      von: vorher
+        ? { verfall: jjjjmmtt(vorher.verfall), short: Number(vorher.short ?? 0), long: Number(vorher.long ?? vorher.short ?? 0) }
+        : null,
+    }
+  })
+  // naked: keine Breite — für den Bildrand 1 % des Strikes, damit die Leiter nicht auf null schrumpft
+  const breite = z.long !== null && z.long !== z.short ? Math.abs(z.short - z.long) : Math.max(z.short * 0.01, 1)
+  const regeln: RollerRegeln = {
+    seite: z.recht === 'P' ? 'BPS' : 'BCS',
+    ziel_delta: 0,
+    breite,
+    ziel_dte: 0,
+    verfall_modus: '',
+    pt_restwert: 0,
+    kontrakte: z.menge,
+    staffel: STAFFEL_STANDARD,
+    delta_puffer: 0,
+    gap_aufschlag: 0.1,
+    roll_wochen_max: 0,
+    max_verschiebung: 0,
+    max_debit_normal: 0,
+    early_exit_delta: 0,
+    early_exit_fenster_min: 0,
+    max_kettenverlust_anteil: null,
+    max_rolls_pro_tag: 0,
+    tagesende_schliessen: false,
+    multiplikator: '100',
+    waehrung: j?.waehrung ?? '',
+  }
+  const kette: RollerKetteStand = {
+    kette_id: j ? `Journal #${j.chain_id}` : 'Position',
+    strategie: j?.strategie ?? z.art,
+    aktiv: { verfall: z.verfall, short: z.short, long: z.long ?? z.short, menge: z.menge },
+    erstkredit: null,
+    netto: j?.realisiert_bisher ? Number(j.realisiert_bisher) : 0,
+    rolls: j?.anzahl_rolls ?? 0,
+    pt_limit: null,
+    spot: z.spot,
+    short_delta: z.delta === null ? null : z.recht === 'P' ? -z.delta : z.delta,
+    dte: z.dte,
+    schwelle: z.schwelle,
+    verlauf,
+  }
+  return { kette, regeln }
+}
+
+// Kette im Journal: Glieder (Eröffnung, Rolls, Schließen) mit Verfall, Strikes und Ergebnis.
+function JournalSchritte({ j }: { j: JournalKetteKurz }): JSX.Element {
+  return (
+    <div className="tabelle-rahmen">
+      <table className="strategie-tabelle">
+        <thead>
+          <tr>
+            <th>#</th><th>Art</th><th>Eröffnet</th><th>Geschlossen</th><th>Verfall</th><th>Strikes</th>
+            <th className="zahl">Menge</th><th className="zahl">Ergebnis</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(j.schritte ?? []).map((s) => (
+            <tr key={`${s.chain_id}-${s.sequenz}`}>
+              <td>{s.sequenz}</td>
+              <td>{s.art}</td>
+              <td>{s.eroeffnet_am ? zeitDe(s.eroeffnet_am) : '—'}</td>
+              <td>{s.geschlossen_am ? zeitDe(s.geschlossen_am) : 'offen'}</td>
+              <td>{s.verfall ? tws(jjjjmmtt(s.verfall)) : '—'}</td>
+              <td>{[s.short, s.long].filter((x) => x !== null).map((x) => strike(Number(x))).join('/')}</td>
+              <td className="zahl">{s.menge ?? '—'}</td>
+              <td className="zahl">{s.netto === null ? '—' : `${zahl(Number(s.netto), 2)} ${s.waehrung ?? ''}`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Karten({ info }: { info: KettenInfo }): JSX.Element {
+  return (
+    <div className="kk-raster">
+      <StrikeLeiter kette={info.kette} regeln={info.regeln} />
+      <RollRegel kette={info.kette} regeln={info.regeln} />
+      <Kostenbremse kette={info.kette} regeln={info.regeln} />
+      <Kettenverlauf kette={info.kette} />
+    </div>
+  )
+}
+
 interface Werkzeuge {
   ketten: Map<string, KettenInfo>
   lage?: (k: RollerKetteStand) => ReactNode
@@ -177,7 +283,25 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
         {zahl(z.unrealisiert, 2)}
         {z.grund ? ` · ${z.grund}` : ''}
       </p>
-      {ids.length === 0 ? <SchwelleForm z={z} konto={konto} /> : null}
+      {ids.length === 0 ? (
+        <div className="kette-im-trade">
+          <h5>
+            {z.journal ? (
+              <>
+                Kette im Journal <Link to={`/positionen/${z.journal.chain_id}`}>#{z.journal.chain_id}</Link>
+                {z.journal.strategie ? ` · ${z.journal.strategie}` : ''} · {z.journal.anzahl_rolls}{' '}
+                {z.journal.anzahl_rolls === 1 ? 'Roll' : 'Rolls'}
+                {z.journal.realisiert_bisher !== null ? ` · bisher realisiert ${zahl(Number(z.journal.realisiert_bisher), 2)} ${z.journal.waehrung ?? ''}` : ''}
+              </>
+            ) : (
+              'Keine Kette im Journal gefunden (heute eröffnet oder Flex-Import steht noch aus)'
+            )}
+          </h5>
+          {z.journal && (z.journal.schritte ?? []).length > 0 ? <JournalSchritte j={z.journal} /> : null}
+          <Karten info={kunstKette(z)} />
+          <SchwelleForm z={z} konto={konto} />
+        </div>
+      ) : null}
       {ids.map((id) => {
         const info = w.ketten.get(id)
         if (!info) return <p key={id} className="sicht">Kette {id}: Kettendaten fehlen im Status.</p>
@@ -191,12 +315,7 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
             </h5>
             {w.lage ? <div className="lage-block">{w.lage(k)}</div> : null}
             {w.verlauf ? w.verlauf(k) : null}
-            <div className="kk-raster">
-              <StrikeLeiter kette={k} regeln={info.regeln} />
-              <RollRegel kette={k} regeln={info.regeln} />
-              <Kostenbremse kette={k} regeln={info.regeln} />
-              <Kettenverlauf kette={k} />
-            </div>
+            <Karten info={info} />
             {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
           </div>
         )
@@ -291,7 +410,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                         {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
                       </td>
-                      <td className="zahl">{infos.length > 0 ? infos.map((i) => i.kette.rolls).join(' / ') : '—'}</td>
+                      <td className="zahl">{infos.length > 0 ? infos.map((i) => i.kette.rolls).join(' / ') : z.journal ? z.journal.anzahl_rolls : '—'}</td>
                       <td>
                         {infos.length > 0
                           ? infos.map((i, n) => (
@@ -302,7 +421,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                             ))
                           : kettenVon(z).length > 0
                             ? kettenVon(z).join(', ')
-                            : <span className="sicht">manuell</span>}
+                            : <span className="sicht">{z.journal ? `manuell · Journal #${z.journal.chain_id}` : 'manuell'}</span>}
                       </td>
                     </tr>
                     {aufgeklappt ? (

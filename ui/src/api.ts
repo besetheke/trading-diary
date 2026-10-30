@@ -542,6 +542,21 @@ export interface RollerSpread {
 }
 
 // AP-19: Shorts im Konto — jede Short-Option (Spread oder naked) mit Ampel, vom Roller bewertet.
+// Kette einer Position im Journal (AP-19): aus dem Flex-Import, Glieder in Reihenfolge.
+export interface JournalKetteKurz {
+  chain_id: number
+  ketten: number
+  anzahl_rolls: number
+  strategie: string | null
+  realisiert_bisher: string | null
+  waehrung: string | null
+  schritte?: {
+    chain_id: number; sequenz: number; art: string; typ: string; verfall: string | null
+    short: string | null; long: string | null; menge: string | null
+    eroeffnet_am: string | null; geschlossen_am: string | null; netto: string | null; waehrung: string | null
+  }[]
+}
+
 export type Ampel = 'rot' | 'gelb' | 'grau' | 'gruen'
 
 export interface RollerShort {
@@ -562,6 +577,7 @@ export interface RollerShort {
   schwelle_herkunft: 'roller' | 'position' | 'ticker' | 'staffel'
   kette: string | null
   ketten?: string[]
+  journal?: JournalKetteKurz | null
   abstand: number | null
   abstand_pct: number | null
   delta: number | null

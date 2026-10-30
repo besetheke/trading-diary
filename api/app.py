@@ -755,11 +755,19 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
     positionen = []
     for s in status.get("spreads", []):
         positionen.append(
-            (s, finde(s["symbol"], s.get("expiration"), s.get("short"), s.get("long"))))
+            (s, finde(s["symbol"], s.get("expiration"), s.get("short"), s.get("long")), "kette"))
     for b in status.get("breaches", []):
         positionen.append(
-            (b, finde(b["symbol"], b.get("expiration"), b.get("short_strike"), None)))
-    ids = sorted({c for _, treffer in positionen for c in treffer})
+            (b, finde(b["symbol"], b.get("expiration"), b.get("short_strike"), None), "kette"))
+    # AP-19: jede Position der Shorts-Übersicht bekommt ihre Kette im Journal (auch manuelle
+    # Trades und das Live-Konto); bei Kalender/Diagonal zählt nur der Short.
+    for z in (status.get("shorts") or {}).get("positionen") or []:
+        lang = z.get("long") if not z.get("long_verfall") else None
+        treffer = finde(z.get("symbol"), z.get("verfall"), z.get("short"), lang)
+        if not treffer and lang is not None:
+            treffer = finde(z.get("symbol"), z.get("verfall"), z.get("short"), None)
+        positionen.append((z, treffer, "journal"))
+    ids = sorted({c for _, treffer, _ in positionen for c in treffer})
     info: dict[int, dict] = {}
     if ids:
         ketten = {k["chain_id"]: k for k in verbindung.execute(
@@ -777,10 +785,42 @@ def _roller_kette_ergaenzen(verbindung: Connection, status: dict) -> dict:
                 "waehrung": waehrung_je.get(chain_id),
                 "praemie_offen_eur": u[2], "praemie_aktuell_eur": u[3], "unrealisiert_eur": u[0],
             }
-    for position, treffer in positionen:
+    schritte = _kettenschritte(verbindung, sorted({c for _, tr, feld in positionen
+                                                    if feld == "journal" for c in tr}))
+    for position, treffer, feld in positionen:
         if treffer:  # nur bei Treffer — sonst bleibt die Position wie gemeldet
-            position["kette"] = _fasse_ketten_zusammen([info[c] for c in treffer])
+            position[feld] = _fasse_ketten_zusammen([info[c] for c in treffer])
+            if feld == "journal":
+                position[feld]["schritte"] = [s for c in treffer for s in schritte.get(c, [])]
     return status
+
+
+def _kettenschritte(verbindung: Connection, ids: list[int]) -> dict[int, list[dict]]:
+    """Glieder einer Kette im Journal in ihrer Reihenfolge (Eröffnung, Rolls, Schließen):
+    Verfall, Strikes, Menge, Eröffnung/Schließung, Netto-Ergebnis des Glieds (AP-19)."""
+    if not ids:
+        return {}
+    zeilen = verbindung.execute(
+        select(chain_links.c.chain_id, chain_links.c.sequenz, chain_links.c.verknuepfungstyp,
+               structures.c.typ, structures.c.expiry, structures.c.short_strike,
+               structures.c.long_strike, structures.c.menge, structures.c.eroeffnet_am,
+               structures.c.geschlossen_am, structures.c.netto_pnl, structures.c.waehrung)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+        .where(chain_links.c.chain_id.in_(ids))
+        .order_by(chain_links.c.chain_id, chain_links.c.sequenz)
+    ).all()
+    aus: dict[int, list[dict]] = {}
+    for z in zeilen:
+        aus.setdefault(z.chain_id, []).append({
+            "chain_id": z.chain_id, "sequenz": z.sequenz, "art": z.verknuepfungstyp, "typ": z.typ,
+            "verfall": z.expiry.isoformat() if z.expiry else None,
+            "short": _als_text(z.short_strike), "long": _als_text(z.long_strike),
+            "menge": _als_text(z.menge),
+            "eroeffnet_am": z.eroeffnet_am.isoformat() if z.eroeffnet_am else None,
+            "geschlossen_am": z.geschlossen_am.isoformat() if z.geschlossen_am else None,
+            "netto": _als_text(z.netto_pnl), "waehrung": z.waehrung,
+        })
+    return aus
 
 
 def _port_offen(port: int) -> bool:
@@ -3460,6 +3500,12 @@ def erzeuge_app(
         if roller_live_port is None:
             return RollerAntwort(erreichbar=False, status=None)
         status = hole_roller_status(roller_live_port)
+        if status is not None:
+            try:
+                with engine.connect() as verbindung:
+                    status = _roller_kette_ergaenzen(verbindung, status)
+            except Exception:  # noqa: BLE001 — die Journal-Historie darf den Status nie verhindern
+                pass
         return RollerAntwort(erreichbar=status is not None, status=status)
 
     @applikation.get("/datenqualitaet-liste")
