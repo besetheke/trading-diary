@@ -1580,3 +1580,11 @@ table.shorts .delta-balken { width: 6.5rem; height: 1rem; }
 table.shorts .delta-balken .text { font-size: 0.72rem; }
 table.shorts .sicht, table.shorts .marke-naked { font-size: 0.72rem; }
 table.shorts .punkt { width: 0.6rem; height: 0.6rem; }
+
+/* AP-21: Live-Bedienung. Echtgeld-Befehle erst nach Bestätigung im Seiteninhalt (unten fest eingeblendet). */
+.echtgeld-bestaetigung { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 50;
+  background: #fff; border: 3px solid #b42318; border-radius: 8px; padding: 0.8rem 1.2rem; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  max-width: calc(100vw - 2rem); }
+.echtgeld-bestaetigung .echtgeld-ja { background: #b42318; color: #fff; border-color: #b42318; font-weight: 600; }
+.live-karte { border: 2px solid var(--tinte); border-radius: 6px; padding: 0 1rem 0.6rem; margin: 1rem 0; }
+.echtgeld-knopf { border-color: #b42318; color: #b42318; font-weight: 600; }

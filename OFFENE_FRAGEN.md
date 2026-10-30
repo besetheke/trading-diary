@@ -3888,3 +3888,13 @@ DTE-Staffel des Rollers (7 DTE 0,38 · 14 DTE 0,42 · 21 DTE 0,46 · 28 DTE 0,50
 Staffel des Rollers dort „noch nicht rollen“ heißt. Roller-Ketten zeigen ihre eigene Schwelle (Profil, Strategie). Ein Long schützt einen
 Short nur auf der richtigen Seite (Put darunter, Call darüber), gleicher Verfall, gleiche Handelsklasse; der nächstliegende zuerst, der Rest
 gilt als ungedeckt. Passen 80 %, 1 % und 3 % und die 0,50 für lange Laufzeiten?
+
+## OF-110 · Live-Start DAX: Wochenprogramm und Wiedereinstieg (30.10.2026)
+
+Annahmen (AP-21): „Profit Target 2 Euro“ = Restwert 2,0 (DAX-Optionen notieren in Punkten, ein Punkt = 1 Euro je Einheit,
+Multiplikator 5). „Max. 2 offene Positionen“ = live.max_offene_ketten 2 und je Strategie höchstens eine offene Kette;
+ist die BPS-Kette der Vorwoche am Montag noch offen (gerollt), wird keine zweite BPS eröffnet. Wiedereinstieg nach
+Profit-Target an jedem Börsentag, sobald das Fenster offen ist (Handelsbeginn + 60 min bis Schluss − 30 min), auch
+mehrmals am Tag. Montag 15:45 bis 17:00 darf eröffnet werden (Schluss 17:30 − 30 min). Rolls und Early Exits im Live-Konto
+nur per Freigabe (live.automatik_rolls aus). Kette 3900 (DAX, Roll am 27.10. 04:57): laut Nutzer war es der Call-Teil;
+die Zuordnung des Journals (Fortsetzung im BCS 26100/26400) bleibt, wie sie ist.

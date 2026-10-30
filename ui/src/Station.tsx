@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Kettenkarten from "./Kettenkarte";
 import OffeneKetten from "./OffeneKetten";
 import ShortsUebersicht from "./ShortsUebersicht";
-import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
+import { fehlerText, holeBreakout, holeEchtgeldReife, holeRoller, holeRollerLive, holeSystem, sendeMomentumBefehl, sendeRollerBefehl } from "./api";
 import type { RollerShorts, BreakoutStand, EchtgeldReife as EchtgeldReifeDaten, RollerAntwort, RollerKetteStand, RollerStrategie, System } from "./api";
 import { datumDe, zeitDe } from "./format";
 
@@ -308,19 +308,31 @@ function RestKarten({ s }: { s: RollerStrategie }): JSX.Element {
   return <Kettenkarten strategie={s} />;
 }
 
-type KopfKontext = { lage: (k: RollerKetteStand) => JSX.Element; verlauf: (k: RollerKetteStand) => JSX.Element; laeuft: boolean; rest: JSX.Element | null };
+type Befehl = "roll-freigabe" | "strategie-pruefen" | "oeffnen" | "kette-aufnehmen" | "auto-an" | "auto-aus";
+type Konto = "paper" | "live";
+// Befehle, die im Live-Konto Geld bewegen: erst nach Bestätigung (AP-21; die API verlangt bestaetigt=ECHTGELD).
+const ECHTGELD_BEFEHLE: Befehl[] = ["roll-freigabe", "oeffnen", "kette-aufnehmen", "auto-an"];
+const BEFEHL_TEXT: Record<Befehl, string> = {
+  "roll-freigabe": "Roll bzw. Schließen freigeben", "strategie-pruefen": "Neu prüfen", oeffnen: "Eröffnen",
+  "kette-aufnehmen": "Kette wieder aufnehmen", "auto-an": "Automatik einschalten", "auto-aus": "Automatik ausschalten",
+};
 
-function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: RollerShorts | null; kopf?: (ctx: KopfKontext) => JSX.Element }): JSX.Element {
+export interface Aktionen {
+  konto: Konto;
+  tu: (name: Befehl, parameter?: { kette?: string; strategie?: string }) => void;
+  laeuft: string | null;
+  meldung: string | null;
+  bestaetigung: JSX.Element | null;
+}
+
+function useAktionen(konto: Konto): Aktionen {
   const [meldung, setzeMeldung] = useState<string | null>(null);
   const [laeuft, setzeLaeuft] = useState<string | null>(null);
-  const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
-  const tu = (
-    name: "roll-freigabe" | "strategie-pruefen" | "oeffnen" | "kette-aufnehmen" | "auto-an" | "auto-aus",
-    parameter: { kette?: string; strategie?: string } = {},
-  ) => {
+  const [offen, setzeOffen] = useState<{ name: Befehl; parameter: { kette?: string; strategie?: string } } | null>(null);
+  const senden = (name: Befehl, parameter: { kette?: string; strategie?: string }, bestaetigt?: string) => {
     setzeLaeuft(name + (parameter.kette ?? ""));
     setzeMeldung(name === "strategie-pruefen" ? "Prüfe …" : "Order läuft — der Limit wird nachgezogen, das kann Minuten dauern …");
-    sendeRollerBefehl(name, parameter)
+    sendeRollerBefehl(name, { ...parameter, konto, ...(bestaetigt ? { bestaetigt } : {}) })
       .then((a) => {
         const r = a as { gestartet?: boolean };
         setzeMeldung(name === "strategie-pruefen" ? "Neu geprüft."
@@ -330,9 +342,34 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
       .catch((e) => setzeMeldung(fehlerText(e)))
       .finally(() => setzeLaeuft(null));
   };
-  const zahl = (x: number | null | undefined, n = 2) => (x === null || x === undefined ? "—" : x.toFixed(n));
-  // Lage einer Kette: Hinweise und Freigabe-Schaltflaechen (gemeinsam fuer die Shorts-Zeile und die Restliste)
-  const lage = (k: RollerKetteStand): JSX.Element => (
+  const tu = (name: Befehl, parameter: { kette?: string; strategie?: string } = {}) => {
+    if (konto === "live" && ECHTGELD_BEFEHLE.includes(name)) {
+      setzeOffen({ name, parameter });
+      return;
+    }
+    senden(name, parameter);
+  };
+  const bestaetigung = offen ? (
+    <div className="echtgeld-bestaetigung" role="alertdialog" aria-label="Echtgeld bestätigen">
+      <strong>ECHTGELD · Live-Konto</strong> — {BEFEHL_TEXT[offen.name]}
+      {offen.parameter.kette ? ` · Kette ${offen.parameter.kette}` : ""}
+      {offen.parameter.strategie ? ` · ${offen.parameter.strategie}` : ""}. Wirklich ausführen?{" "}
+      <button className="echtgeld-ja" onClick={() => { const o = offen; setzeOffen(null); senden(o.name, o.parameter, "ECHTGELD"); }}>
+        Ja, mit Echtgeld ausführen
+      </button>{" "}
+      <button onClick={() => setzeOffen(null)}>Abbrechen</button>
+    </div>
+  ) : null;
+  return { konto, tu, laeuft, meldung, bestaetigung };
+}
+
+const zahl2 = (x: number | null | undefined, n = 2) => (x === null || x === undefined ? "—" : x.toFixed(n));
+
+// Lage einer Kette: Hinweise und Freigabe-Schaltflächen (Zeile der Shorts-Liste und Restliste, Paper und Live)
+function lageRender(k: RollerKetteStand, s: RollerStrategie, akt: Aktionen): JSX.Element {
+  const { tu, laeuft } = akt;
+  const zahl = zahl2;
+  return (
             <>
               {k.status === "pruefen" && (
                 <div>
@@ -370,6 +407,12 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
               )}
             </>
   );
+}
+
+// Ketten ohne zugeordnete Position (z. B. gerade eröffnet): im Block der Liste, mit Verlauf und Karten.
+function restBlock(s: RollerStrategie, shorts: RollerShorts | null | undefined, akt: Aktionen): JSX.Element | null {
+  const zahl = zahl2;
+  const lage = (k: RollerKetteStand) => lageRender(k, s, akt);
   const verlauf = (k: RollerKetteStand): JSX.Element => <KettenVerlauf k={k} offen />;
   const vorShorts = new Set((shorts?.positionen ?? []).flatMap((z) => (z.ketten && z.ketten.length > 0 ? z.ketten : z.kette ? [z.kette] : [])));
   const restKetten = shorts ? s.ketten.filter((k) => !vorShorts.has(k.kette_id)) : s.ketten;
@@ -381,10 +424,15 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
       <RestKarten s={{ ...s, ketten: restKetten }} />
     </div>
   ) : null;
+  return rest;
+}
+
+function StrategieKarte({ s, akt }: { s: RollerStrategie; akt: Aktionen }): JSX.Element {
+  const { tu, laeuft, meldung, konto } = akt;
+  const [wahl, setzeWahl] = useState<string>(s.vorgaben[0]?.name ?? "");
   return (
     <>
-      {kopf?.({ lage, verlauf, laeuft: laeuft !== null, rest })}
-      <h3>Strategien (Paper)</h3>
+      <h3>{konto === "live" ? "Strategien (LIVE-Konto)" : "Strategien (Paper)"}</h3>
       <p className="sicht">
         {s.modus === "live"
           ? (s.paper ? `LIVE-Konto ${s.live?.konto ?? ""} verbunden` : "Live-Konto nicht verbunden — Orders gesperrt")
@@ -442,7 +490,8 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
             <option key={v.name} value={v.name} title={v.text}>{v.name}</option>
           ))}
         </select>{" "}
-        <button disabled={laeuft !== null || !s.paper || !wahl} onClick={() => tu("oeffnen", { strategie: wahl })}>
+        <button disabled={laeuft !== null || !s.paper || !wahl} onClick={() => tu("oeffnen", { strategie: wahl })}
+          className={konto === "live" ? "echtgeld-knopf" : undefined}>
           Eröffnen
         </button>
       </p>
@@ -526,6 +575,19 @@ function StrategieKarte({ s, shorts, kopf }: { s: RollerStrategie; shorts?: Roll
 export function RollerSeite(): JSX.Element {
   const [daten, setzeDaten] = useState<RollerAntwort | null>(null);
   const [fehler, setzeFehler] = useState<string | null>(null);
+  const [live, setzeLive] = useState<RollerAntwort | null>(null);
+  const paperAkt = useAktionen("paper");
+  const liveAkt = useAktionen("live");
+  useEffect(() => {
+    let aktiv = true;
+    const laden = () => holeRollerLive().then((d) => aktiv && setzeLive(d)).catch(() => aktiv && setzeLive(null));
+    laden();
+    const takt = window.setInterval(laden, 15000);
+    return () => {
+      aktiv = false;
+      window.clearInterval(takt);
+    };
+  }, []);
   useEffect(() => {
     let aktiv = true;
     let zaehler = 0;
@@ -566,6 +628,7 @@ export function RollerSeite(): JSX.Element {
     );
   }
   const s = daten.status;
+  const liveStrategie = live?.erreichbar && live.status?.strategie ? live.status.strategie : null;
   const alter = Math.round((Date.now() - new Date(s.herzschlag).getTime()) / 1000);
   return (
     <section className="station">
@@ -583,12 +646,24 @@ export function RollerSeite(): JSX.Element {
         Herzschlag vor {alter} s
       </p>
 
-      {s.strategie ? (
-        <StrategieKarte s={s.strategie} shorts={s.shorts}
-          kopf={(ctx) => <ShortsUebersicht paper={s.shorts} strategie={s.strategie ?? undefined} lage={ctx.lage} verlauf={ctx.verlauf} rest={ctx.rest} />} />
-      ) : (
-        <ShortsUebersicht paper={s.shorts} />
+      {paperAkt.bestaetigung}
+      {liveAkt.bestaetigung}
+      <ShortsUebersicht
+        paper={s.shorts}
+        strategie={s.strategie ?? undefined}
+        lage={s.strategie ? (k) => lageRender(k, s.strategie as RollerStrategie, paperAkt) : undefined}
+        verlauf={(k) => <KettenVerlauf k={k} offen />}
+        rest={s.strategie ? restBlock(s.strategie, s.shorts, paperAkt) : null}
+        liveStrategie={liveStrategie ?? undefined}
+        liveLage={liveStrategie ? (k) => lageRender(k, liveStrategie, liveAkt) : undefined}
+        liveRest={liveStrategie ? restBlock(liveStrategie, live?.status?.shorts, liveAkt) : null}
+      />
+      {liveStrategie && (
+        <div className="live-karte">
+          <StrategieKarte s={liveStrategie} akt={liveAkt} />
+        </div>
       )}
+      {s.strategie && <StrategieKarte s={s.strategie} akt={paperAkt} />}
       {s.strategie && <EchtgeldReife />}
 
       <details>

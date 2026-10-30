@@ -41,6 +41,8 @@ const ENDZUSTAENDE = ['Offen', 'Geschlossen', 'Verfall', 'Assigned']
 type SpaltenId =
   | 'eroeffnet_am'
   | 'underlying'
+  | 'strikes_aktuell'
+  | 'verfall_aktuell'
   | 'asset_class'
   | 'seite'
   | 'menge'
@@ -67,6 +69,9 @@ interface Spalte {
 const SPALTEN: Record<SpaltenId, Spalte> = {
   eroeffnet_am: { titel: 'Eröffnung', sortierbar: true, ersteRichtung: 'desc' },
   underlying: { titel: 'Basiswert', sortierbar: true, ersteRichtung: 'asc' },
+  // AP-21: Strikes und Verfall des jüngsten Glieds (Rolls ändern sie), je Seite zusammengestellt.
+  strikes_aktuell: { titel: 'Strikes', sortierbar: false, hinweis: 'Strikes des jüngsten Glieds der Kette' },
+  verfall_aktuell: { titel: 'Verfall', sortierbar: false, hinweis: 'Verfall des jüngsten Glieds der Kette' },
   asset_class: { titel: 'Klasse', sortierbar: true, ersteRichtung: 'asc' },
   seite: { titel: 'Seite', sortierbar: true, ersteRichtung: 'asc' },
   // Kontrakte bzw. Stück der Eröffnung. Wie die Preise je Seite zusammengestellt,
@@ -300,6 +305,10 @@ function zelle(kette: Kette, id: SpaltenId, verweis: SpaltenId): JSX.Element {
       ) : (
         <td>{kette.underlying}</td>
       )
+    case 'strikes_aktuell':
+      return <td className="strikes">{kette.strikes_aktuell ?? '—'}</td>
+    case 'verfall_aktuell':
+      return <td>{kette.verfall_aktuell ? datumDe(kette.verfall_aktuell) : '—'}</td>
     case 'asset_class':
       return <td>{kette.asset_class}</td>
     case 'seite':

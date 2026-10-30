@@ -190,6 +190,10 @@ class KetteAntwort(BaseModel):
     # Probe: offen − aktuell − Kommission = unrealisiert. Nur offene Ketten.
     praemie_offen_eur: str | None = None
     praemie_aktuell_eur: str | None = None
+    # AP-21 (Nutzer 30.10.2026): Strikes und Verfall des jüngsten Glieds — sonst ist in der
+    # Liste nicht zu erkennen, was was ist. Nur in der Liste gefüllt.
+    strikes_aktuell: str | None = None
+    verfall_aktuell: date | None = None
 
 
 class StrukturAntwort(BaseModel):
@@ -659,8 +663,11 @@ ROLLER_BEFEHLE = (
     "roll-freigabe", "strategie-pruefen", "oeffnen", "kette-aufnehmen", "auto-an", "auto-aus",
     "schwelle-setzen",
 )
-# AP-19: an die Live-Instanz (nur lesend) geht ausschließlich die Schwelle der Shorts-Übersicht.
-ROLLER_BEFEHLE_LIVE = ("schwelle-setzen",)
+# AP-19/AP-21: an die Live-Instanz gehen ohne Weiteres nur Befehle, die kein Geld bewegen;
+# Orders und das Einschalten der Automatik brauchen zusätzlich bestaetigt=ECHTGELD.
+ROLLER_BEFEHLE_LIVE = ("schwelle-setzen", "strategie-pruefen", "auto-aus")
+ROLLER_BEFEHLE_LIVE_ECHTGELD = ("roll-freigabe", "oeffnen", "kette-aufnehmen", "auto-an")
+ECHTGELD_BESTAETIGUNG = "ECHTGELD"
 
 
 def _sende_roller_befehl(port: int, name: str) -> tuple[int, dict]:
@@ -1737,6 +1744,25 @@ def _realisiert_je_waehrung(
         eintrag["kommission"] += _null(kommission)
         eintrag["netto"] += _null(netto)
     return summen
+
+
+def _juengstes_glied(verbindung: Connection,
+                     chain_ids: list[int]) -> dict[int, tuple[str | None, date | None]]:
+    """Je Kette Strikes und Verfall des jüngsten Glieds (höchste Sequenz), für die Liste (AP-21)."""
+    if not chain_ids:
+        return {}
+    glieder = verbindung.execute(
+        select(chain_links.c.chain_id, chain_links.c.sequenz, structures.c.structure_id,
+               structures.c.expiry)
+        .join(structures, structures.c.structure_id == chain_links.c.structure_id)
+        .where(chain_links.c.chain_id.in_(chain_ids))
+    ).all()
+    letztes: dict[int, tuple[int, int, date | None]] = {}
+    for chain_id, sequenz, structure_id, verfall in glieder:
+        if chain_id not in letztes or sequenz > letztes[chain_id][0]:
+            letztes[chain_id] = (sequenz, structure_id, verfall)
+    strikes = _strikes_je_struktur(verbindung, [s for _, s, _ in letztes.values()])
+    return {c: (strikes.get(s), v) for c, (_, s, v) in letztes.items()}
 
 
 def _strikes_je_struktur(verbindung: Connection, structure_ids: list[int]) -> dict[int, str]:
@@ -2938,6 +2964,7 @@ def erzeuge_app(
             zuschuesse = _ketten_zuschuesse(verbindung, [z["chain_id"] for z in zeilen])
             unrealisiert = _unrealisiert_je_kette(verbindung, [z["chain_id"] for z in zeilen])
             bisher = _realisiert_bisher(verbindung, [z["chain_id"] for z in zeilen])
+            juengstes = _juengstes_glied(verbindung, [z["chain_id"] for z in zeilen])
         leer = (0, [], None, None, None, None)
         return KettenListeAntwort(
             gesamt=gesamt,
@@ -2949,6 +2976,8 @@ def erzeuge_app(
                     praemie_offen_eur=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[2],
                     praemie_aktuell_eur=unrealisiert.get(z["chain_id"], KEIN_UNREAL)[3],
                     realisiert_bisher=_als_text(bisher.get(z["chain_id"])),
+                    strikes_aktuell=juengstes.get(z["chain_id"], (None, None))[0],
+                    verfall_aktuell=juengstes.get(z["chain_id"], (None, None))[1],
                 )
                 for z in zeilen
             ],
@@ -4242,24 +4271,25 @@ def erzeuge_app(
         def roller_befehl(name: str, request: Request, kette: str | None = None,
                           strategie: str | None = None, ticker: str | None = None,
                           position: str | None = None, wert: str | None = None,
-                          konto: str = "paper") -> dict:
+                          konto: str = "paper", bestaetigt: str | None = None) -> dict:
             """Befehl an den Roller-Dienst (AP-14e): ``roll-freigabe`` (``kette``)
             führt den vorbereiteten Roll aus, ``oeffnen`` (``strategie``) eröffnet
             eine Strategie, ``kette-aufnehmen`` (``kette``) nimmt eine angehaltene Kette
             wieder auf, ``auto-an``/``auto-aus`` schaltet die Automatik (aus = Not-Aus),
             ``strategie-pruefen`` rechnet neu, ``schwelle-setzen`` (``ticker`` oder
             ``position``, ``wert``; ohne ``wert`` entfernt) überschreibt die Schwelle der
-            Shorts-Übersicht (AP-19). ``konto=live`` geht an die lesende Live-Instanz und
-            erlaubt nur ``schwelle-setzen``. Nur diese Namen;
+            Shorts-Übersicht (AP-19). ``konto=live`` geht an die Live-Instanz; Orders und
+            ``auto-an`` nur mit ``bestaetigt=ECHTGELD`` (AP-21). Nur diese Namen;
             Prüfung (Paper, Handelszeit, Leitplanken) macht der Dienst; vorab Schutzprüfung."""
             pruefe_station_aufruf(request)
             if name not in ROLLER_BEFEHLE:
                 raise HTTPException(status_code=404, detail="unbekannter Befehl")
             if konto not in ("paper", "live"):
                 raise HTTPException(status_code=404, detail="unbekanntes Konto")
-            if konto == "live" and name not in ROLLER_BEFEHLE_LIVE:
+            if konto == "live" and name not in ROLLER_BEFEHLE_LIVE and not (
+                    name in ROLLER_BEFEHLE_LIVE_ECHTGELD and bestaetigt == ECHTGELD_BESTAETIGUNG):
                 raise HTTPException(status_code=403,
-                                    detail="an die Live-Instanz nur schwelle-setzen")
+                                    detail="Live: dieser Befehl braucht die Echtgeld-Bestätigung")
             ziel_port = roller_live_port if konto == "live" else roller_port
             if ziel_port is None:
                 raise HTTPException(status_code=503, detail="Roller nicht angebunden")

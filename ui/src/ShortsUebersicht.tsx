@@ -561,8 +561,11 @@ export default function ShortsUebersicht(props: {
   lage?: (k: RollerKetteStand) => ReactNode
   verlauf?: (k: RollerKetteStand) => ReactNode
   rest?: ReactNode
+  liveStrategie?: RollerStrategie
+  liveLage?: (k: RollerKetteStand) => ReactNode
+  liveRest?: ReactNode
 }): JSX.Element {
-  const { paper, strategie, lage, verlauf, rest } = props
+  const { paper, strategie, lage, verlauf, rest, liveStrategie, liveLage, liveRest } = props
   const [nurHandeln, setzeNurHandeln] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SPEICHER) !== '0'
@@ -609,7 +612,15 @@ export default function ShortsUebersicht(props: {
   const regelnJe = new Map((strategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
   const ketten = new Map<string, KettenInfo>((strategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: regelnJe.get(k.strategie) }]))
   const wPaper: Werkzeuge = { ketten, lage, verlauf, rest, journalStand: paper?.journal_stand }
-  const wLive: Werkzeuge = { ketten: new Map(), journalStand: live && live !== 'alt' ? live.journal_stand : null } // die Roller-Ketten gehören zum Paper-Konto
+  // Live-Konto: mit dem Live-Dienst mit Orders hat es eigene Roller-Ketten und Freigaben (AP-21)
+  const liveRegeln = new Map((liveStrategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
+  const liveKetten = new Map<string, KettenInfo>(
+    (liveStrategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: liveRegeln.get(k.strategie) }]),
+  )
+  const wLive: Werkzeuge = {
+    ketten: liveKetten, lage: liveLage, verlauf, rest: liveRest,
+    journalStand: live && live !== 'alt' ? live.journal_stand : null,
+  } // die Roller-Ketten gehören zum Paper-Konto
   const liveDaten = live && live !== 'alt' ? live : null
   const liveHinweis = live === undefined ? 'frage …' : live === 'alt' ? 'Dienst ohne Übersicht (alter Stand)' : 'nicht verbunden'
   return (

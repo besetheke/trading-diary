@@ -40,6 +40,8 @@ export interface Kette {
   // AP-07ku: unrealisiert (EUR) der offenen Legs; null bei geschlossenen.
   unrealisiert_eur: string | null
   offene_legs_ohne_kurs: number
+  strikes_aktuell?: string | null
+  verfall_aktuell?: string | null
 }
 
 export interface Struktur {
@@ -747,7 +749,7 @@ export interface RollerStrategie {
 
 export function sendeRollerBefehl(
   name: 'roll-freigabe' | 'strategie-pruefen' | 'oeffnen' | 'kette-aufnehmen' | 'auto-an' | 'auto-aus' | 'schwelle-setzen',
-  parameter: { kette?: string; strategie?: string; ticker?: string; position?: string; wert?: string; konto?: 'paper' | 'live' } = {},
+  parameter: { kette?: string; strategie?: string; ticker?: string; position?: string; wert?: string; konto?: 'paper' | 'live'; bestaetigt?: string } = {},
 ): Promise<unknown> {
   const q = new URLSearchParams(parameter as Record<string, string>).toString()
   return schicke('POST', `/journal/roller-befehl/${name}${q ? `?${q}` : ''}`, {})
