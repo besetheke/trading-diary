@@ -1588,3 +1588,11 @@ table.shorts .punkt { width: 0.6rem; height: 0.6rem; }
 .echtgeld-bestaetigung .echtgeld-ja { background: #b42318; color: #fff; border-color: #b42318; font-weight: 600; }
 .live-karte { border: 2px solid var(--tinte); border-radius: 6px; padding: 0 1rem 0.6rem; margin: 1rem 0; }
 .echtgeld-knopf { border-color: #b42318; color: #b42318; font-weight: 600; }
+
+/* Roller-Automatik: eigene Sektion über den Indizes (offen, geplant, zuletzt geschlossen) */
+.automatik-sektion { border: 1px solid var(--akzent); border-radius: 6px; padding: 0.2rem 0.7rem 0.6rem; margin: 0.4rem 0 0.8rem;
+  background: rgba(15, 93, 80, 0.04); }
+.automatik-sektion > h4 { margin-top: 0.4rem; color: var(--akzent); }
+table.rollregeln { max-width: 60rem; margin: 0.4rem 0; font-size: 0.82rem; }
+table.rollregeln td:first-child { white-space: nowrap; font-weight: 600; width: 11rem; }
+table.rollregeln td { white-space: normal; }

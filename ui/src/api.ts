@@ -724,6 +724,19 @@ export interface RollerRegeln {
   tagesende_schliessen: boolean
   multiplikator: string
   waehrung: string
+  // Wie gerollt wird (Anzeige „So wird gerollt“)
+  gap_anteil?: number
+  max_kum_debit_anteil?: number
+  roll_fallback?: boolean
+  ausfuehrung_natuerlich?: boolean
+  max_rolls?: number | null
+}
+
+export interface RollerTermin {
+  strategie: string
+  zeit: string | null
+  art: 'wochenplan' | 'taeglich' | 'wartet' | 'wiedereinstieg'
+  hinweis: string | null
 }
 
 export interface RollerStrategie {
@@ -739,7 +752,7 @@ export interface RollerStrategie {
   verlauf_live?: { zeit: string; art: string; text: string }[]
   statistik?: Record<string, RollerStatistikZeile>
   abgeschlossen?: RollerAbgeschlossen[]
-  tagesprogramm?: { strategien: string[]; ab_min: number; heute_eroeffnet: string[]; aktiv: boolean }
+  tagesprogramm?: { strategien: string[]; ab_min: number; heute_eroeffnet: string[]; aktiv: boolean; geplant?: RollerTermin[] }
   aktion?: { name: string; laeuft: boolean; seit: string; ende?: string; ergebnis: unknown; params?: unknown } | null
   auto?: { an: boolean; max_pro_tag: number; heute: number; nur_live: boolean }
   vorgaben: { name: string; text: string; regeln?: RollerRegeln }[]

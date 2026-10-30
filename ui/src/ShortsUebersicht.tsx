@@ -293,6 +293,74 @@ function KostenbasisTabelle({ z }: { z: RollerShort }): JSX.Element | null {
   )
 }
 
+// Wie der Roller diese Kette rollt (roller/strategie.py, Regeln des Nutzers): nicht nur wann (Stufen), sondern wohin,
+// zu welchem Preis und mit welchen Grenzen. Nur Anzeige der Parameter aus dem Status.
+function SoWirdGerollt({ k, r, s }: { k: RollerKetteStand; r: RollerRegeln; s?: RollerStrategie }): JSX.Element {
+  const pkt = (x: number | null | undefined) => (x === null || x === undefined ? '—' : `${zahl(x, 2)} Pkt`)
+  const erst = k.erstkredit
+  const gapDebit = r.gap_anteil !== undefined && erst !== null ? r.gap_anteil * erst : null
+  const kumDebit = r.max_kum_debit_anteil !== undefined && erst !== null ? r.max_kum_debit_anteil * erst : null
+  const automatisch =
+    s?.modus === 'live'
+      ? 'Live: Rolls und Early Exits nur nach deiner Freigabe in der Station (die Automatik eröffnet nur).'
+      : s?.auto?.an
+        ? 'Automatik AN: zulässige Rolls führt der Roller selbst aus.'
+        : 'Automatik AUS: Rolls warten auf deine Freigabe.'
+  const zeilen: [string, string][] = [
+    ['Auslöser', `|Δ| des Shorts über der Stufe der Restlaufzeit (${r.staffel.map(([t, d]) => `≤${t} DTE ${zahl(d, 2)}`).join(' · ')})`],
+    ['Ziel-Verfall', `+1 Woche, als letzte Option bis +${r.roll_wochen_max} Wochen${r.verfall_modus ? ` (${r.verfall_modus})` : ''}`],
+    ['Breite und Menge', `bleiben: ${zahl(r.breite, 0)} Pkt breit, ${r.kontrakte} Kontrakt(e)`],
+    [
+      'Richtung',
+      r.seite === 'BPS'
+        ? `Put-Spread: horizontal nur mit Kredit, sonst diagonal nach unten, höchstens ${zahl(r.max_verschiebung, 0)} Pkt`
+        : `Call-Spread: diagonal nach oben, höchstens ${zahl(r.max_verschiebung, 0)} Pkt`,
+    ],
+    ['Neues Short-Delta', `mindestens ${zahl(r.delta_puffer, 2)} unter der Stufe der neuen Laufzeit (sonst löst der nächste Check gleich wieder aus)`],
+    [
+      'Preis',
+      r.ausfuehrung_natuerlich
+        ? 'natürlicher Preis plus Zuschlag (Testprofil), höchstens die halbe Breite'
+        : `kostenneutral: Start am Mittelkurs, nachgezogen höchstens bis zum Debit-Rahmen ${pkt(r.max_debit_normal)}; darüber Abbruch und Meldung`,
+    ],
+    [
+      'Gap',
+      `|Δ| ≥ Stufe + ${zahl(r.gap_aufschlag, 2)} oder Short im Geld: Debit bis ${r.gap_anteil !== undefined ? `${zahl(r.gap_anteil * 100, 0)} %` : '—'} des Erstkredits${gapDebit !== null ? ` (= ${pkt(gapDebit)})` : ''}`,
+    ],
+    ['Roll-Debits zusammen', `höchstens ${r.max_kum_debit_anteil !== undefined ? `${zahl(r.max_kum_debit_anteil * 100, 0)} %` : '—'} des Erstkredits${kumDebit !== null ? ` (= ${pkt(kumDebit)})` : ''}, danach nur Alarm`],
+    [
+      'Kostenbremse',
+      r.max_kettenverlust_anteil !== null && r.max_kettenverlust_anteil !== undefined
+        ? `Kette nicht unter −${pkt(r.max_kettenverlust_anteil * r.breite)} (${zahl(r.max_kettenverlust_anteil * 100, 0)} % der Breite): dann keine Automatik, Weiterrollen oder Schließen entscheidest du`
+        : 'keine',
+    ],
+    ['Kein zulässiger Roll', r.roll_fallback ? 'Rückfall: erster Kandidat unter der Stufe oder mit besserem Delta, im Debit-Rahmen; sonst Alarm' : 'nur Alarm, keine Order'],
+    ['Rolls', `höchstens ${r.max_rolls_pro_tag} je Tag${r.max_rolls ? `, ${r.max_rolls} je Kette` : ', je Kette unbegrenzt'}`],
+    ['Early Exit', `am Verfallstag in den letzten ${r.early_exit_fenster_min} min, wenn |Δ| ≥ ${zahl(r.early_exit_delta, 2)} und kein Roll fällig ist`],
+    ['Profit-Target', `Rückkauf bei Restwert ${zahl(r.pt_restwert, 2)}, nie so, dass die Kette im Minus schließt`],
+    ['Ausführung', automatisch],
+  ]
+  return (
+    <div className="tabelle-rahmen">
+      <table className="strategie-tabelle rollregeln">
+        <thead>
+          <tr>
+            <th colSpan={2}>So wird gerollt · {k.strategie}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {zeilen.map(([a_, b]) => (
+            <tr key={a_}>
+              <td>{a_}</td>
+              <td>{b}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Karten({ info }: { info: KettenInfo }): JSX.Element {
   return (
     <div className="kk-raster">
@@ -310,6 +378,7 @@ interface Werkzeuge {
   verlauf?: (k: RollerKetteStand) => ReactNode
   rest?: ReactNode
   journalStand?: string | null
+  strategie?: RollerStrategie
 }
 
 // Was an der Kette hängt: Hinweis in der Zeile (Signal, Vorschlag, angehalten).
@@ -370,6 +439,7 @@ function Details(props: { z: RollerShort; konto: 'paper' | 'live'; w: Werkzeuge 
               {k.erstkredit !== null && k.erstkredit !== undefined ? ` · Erstkredit ${zahl(k.erstkredit, 2)}` : ''}
             </h5>
             {w.lage ? <div className="lage-block">{w.lage(k)}</div> : null}
+            {info.regeln ? <SoWirdGerollt k={k} r={info.regeln} s={w.strategie} /> : null}
             {w.verlauf ? w.verlauf(k) : null}
             <Karten info={info} />
             {!info.regeln ? <p className="sicht">Rollparameter dieser Strategie sind im Status nicht enthalten (Roller aktualisieren).</p> : null}
@@ -501,11 +571,89 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
   )
 }
 
+// Alles, was der Roller selbst eröffnet, managt und schließt: offene Ketten (immer sichtbar, unabhängig von
+// „nur Handlungsbedarf“), die nächsten geplanten Eröffnungen und die zuletzt geschlossenen Ketten.
+function AutomatikSektion(props: { zeilen: RollerShort[]; konto: 'paper' | 'live'; w: Werkzeuge; s: RollerStrategie }): JSX.Element {
+  const { zeilen, konto, w, s } = props
+  const geplant = s.tagesprogramm?.geplant ?? []
+  const grenze = Date.now() - 7 * 86400000
+  const geschlossen = (s.abgeschlossen ?? []).filter((a) => a.geschlossen && new Date(a.geschlossen).getTime() >= grenze)
+  return (
+    <div className="automatik-sektion">
+      <h4>
+        Roller-Automatik{' '}
+        <span className="sicht">
+          (Automatik {s.auto?.an ? 'AN' : 'AUS'} · {zeilen.length} offen · {geplant.length} geplant · {geschlossen.length} geschlossen in 7 Tagen)
+        </span>
+      </h4>
+      {zeilen.length > 0 ? (
+        <Abschnitt titel="Offen" zeilen={zeilen} nurHandeln={false} konto={konto} w={w} />
+      ) : (
+        <p className="sicht">Keine offene Roller-Kette.</p>
+      )}
+      {geplant.length > 0 ? (
+        <div className="tabelle-rahmen">
+          <table className="strategie-tabelle shorts geplant">
+            <thead>
+              <tr>
+                <th>Geplant</th>
+                <th>Strategie</th>
+                <th>Termin</th>
+                <th>Hinweis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {geplant.map((g) => (
+                <tr key={g.strategie}>
+                  <td>{g.art === 'wartet' ? '⏸' : '⏱'}</td>
+                  <td>{g.strategie}</td>
+                  <td>{g.zeit ? zeitDe(g.zeit) : '—'}</td>
+                  <td className="sicht">
+                    {g.hinweis ?? (g.art === 'wochenplan' ? 'Wochenplan' : 'Tagesprogramm')}
+                    {!s.tagesprogramm?.aktiv && g.art !== 'wartet' ? ' · startet nur mit Automatik AN' : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {geschlossen.length > 0 ? (
+        <details>
+          <summary>Geschlossen in den letzten 7 Tagen ({geschlossen.length})</summary>
+          <div className="tabelle-rahmen">
+            <table className="strategie-tabelle shorts">
+              <thead>
+                <tr>
+                  <th>Kette</th><th>Strategie</th><th>Eröffnet</th><th>Geschlossen</th><th>Schluss</th>
+                  <th className="zahl">Rolls</th><th className="zahl">Ergebnis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {geschlossen.map((a) => (
+                  <tr key={a.kette_id}>
+                    <td>{a.kette_id}</td><td>{a.strategie}</td>
+                    <td>{a.angelegt ? zeitDe(a.angelegt) : '—'}</td><td>{a.geschlossen ? zeitDe(a.geschlossen) : '—'}</td>
+                    <td>{a.schluss ?? '—'}</td><td className="zahl">{a.rolls}</td>
+                    <td className={`zahl ${a.geld < 0 ? 'verlust' : 'gewinn'}`}>{zahl(a.geld, 2)} {a.waehrung}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : null}
+    </div>
+  )
+}
+
 function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'live'; nurHandeln: boolean; paper?: boolean; w: Werkzeuge }): JSX.Element {
   const { titel, daten, konto, nurHandeln, paper, w } = props
   const z = daten.zaehler ?? {}
-  const index = daten.positionen.filter((p) => p.klasse === 'index')
-  const einzel = daten.positionen.filter((p) => p.klasse === 'einzelwert')
+  const auto = daten.positionen.filter((p) => kettenVon(p).length > 0)
+  const manuell = daten.positionen.filter((p) => kettenVon(p).length === 0)
+  const index = manuell.filter((p) => p.klasse === 'index')
+  const einzel = manuell.filter((p) => p.klasse === 'einzelwert')
   return (
     <div className={`shorts-block${paper ? ' paper' : ''}`}>
       <p className="shorts-kopf">
@@ -524,6 +672,7 @@ function Block(props: { titel: string; daten: RollerShorts; konto: 'paper' | 'li
         </p>
       ) : null}
       {daten.positionen.length === 0 && !daten.fehler ? <p className="hinweis">Keine Short-Optionen im Konto.</p> : null}
+      {w.strategie ? <AutomatikSektion zeilen={auto} konto={konto} w={w} s={w.strategie} /> : null}
       <Abschnitt titel="Indizes" zeilen={index} nurHandeln={nurHandeln} konto={konto} w={w} />
       <Abschnitt titel="Einzelwerte" zeilen={einzel} nurHandeln={nurHandeln} konto={konto} w={w} />
       {w.rest}
@@ -611,14 +760,14 @@ export default function ShortsUebersicht(props: {
   }
   const regelnJe = new Map((strategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
   const ketten = new Map<string, KettenInfo>((strategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: regelnJe.get(k.strategie) }]))
-  const wPaper: Werkzeuge = { ketten, lage, verlauf, rest, journalStand: paper?.journal_stand }
+  const wPaper: Werkzeuge = { ketten, lage, verlauf, rest, journalStand: paper?.journal_stand, strategie }
   // Live-Konto: mit dem Live-Dienst mit Orders hat es eigene Roller-Ketten und Freigaben (AP-21)
   const liveRegeln = new Map((liveStrategie?.vorgaben ?? []).map((v) => [v.name, v.regeln]))
   const liveKetten = new Map<string, KettenInfo>(
     (liveStrategie?.ketten ?? []).map((k) => [k.kette_id, { kette: k, regeln: liveRegeln.get(k.strategie) }]),
   )
   const wLive: Werkzeuge = {
-    ketten: liveKetten, lage: liveLage, verlauf, rest: liveRest,
+    ketten: liveKetten, lage: liveLage, verlauf, rest: liveRest, strategie: liveStrategie,
     journalStand: live && live !== 'alt' ? live.journal_stand : null,
   } // die Roller-Ketten gehören zum Paper-Konto
   const liveDaten = live && live !== 'alt' ? live : null
