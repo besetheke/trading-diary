@@ -347,15 +347,16 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                 <th title={REGEL}>●</th>
                 <th>Ticker</th>
                 <th>Verfall</th>
+                <th className="zahl">DTE</th>
                 <th>Strikes</th>
                 <th className="zahl" title="Wie in der TWS: Short und Credit-Spread negativ">Position</th>
                 <th className="zahl" title="Kurs des Basiswerts">Kurs</th>
-                <th className="zahl">DTE</th>
                 <th className="zahl" title="Mittelkurs x Multiplikator x Menge, Short negativ (wie KRSWRT der TWS)">Kurswert</th>
                 <th className="zahl" title="Kurswert minus Einstand (wie UNRLSRTR G&V der TWS)">Unrealisiert</th>
                 <th title={`|Δ| des Shorts gegen die Schwelle; Strich = Schwelle. ${REGEL}`}>|Δ| / Schwelle</th>
                 <th className="zahl" title="Abstand Kurs zum Short; negativ = Short im Geld">Abstand</th>
-                <th className="zahl" title="Anzahl Rolls der Roller-Kette">Rolls</th>
+                <th className="zahl" title="Anzahl Ketten dieser Position (Roller, sonst Journal)">Ketten</th>
+                <th className="zahl" title="Anzahl Rolls der Kette(n)">Rolls</th>
                 <th title="Roller-Kette dieser Position: Netto der Kette, Hinweis">Kette</th>
               </tr>
             </thead>
@@ -379,6 +380,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {aufgeklappt ? '▾' : '▸'} {z.symbol}
                       </td>
                       <td>{verfallText(z)}</td>
+                      <td className="zahl">{z.dte}</td>
                       <td>
                         {strikeText(z)}
                         {z.naked ? <span className="marke-naked" title="Risiko weder durch ein Long-Bein noch durch Aktien begrenzt"> ungedeckt</span> : null}
@@ -398,7 +400,6 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {zahl(z.spot, z.klasse === 'index' ? 0 : 2)}
                         {z.daten_alt ? <span className="sicht"> · {z.daten_alt.slice(11, 16)}</span> : null}
                       </td>
-                      <td className="zahl">{z.dte}</td>
                       <td className="zahl">{zahl(z.kurswert, 0)}</td>
                       <td className={`zahl${z.unrealisiert !== null && z.unrealisiert !== undefined ? (z.unrealisiert < 0 ? ' verlust' : ' gewinn') : ''}`}>
                         {zahl(z.unrealisiert, 0)}
@@ -410,6 +411,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                         {z.abstand === null ? '—' : `${z.abstand > 0 ? '+' : ''}${zahl(z.abstand, z.klasse === 'index' ? 0 : 2)}`}
                         {z.abstand_pct === null ? '' : <span className="sicht"> ({zahl(z.abstand_pct, 1)} %)</span>}
                       </td>
+                      <td className="zahl">{infos.length > 0 ? infos.length : z.journal ? z.journal.ketten : '—'}</td>
                       <td className="zahl">{infos.length > 0 ? infos.map((i) => i.kette.rolls).join(' / ') : z.journal ? z.journal.anzahl_rolls : '—'}</td>
                       <td>
                         {infos.length > 0
@@ -426,7 +428,7 @@ function Abschnitt(props: { titel: string; zeilen: RollerShort[]; nurHandeln: bo
                     </tr>
                     {aufgeklappt ? (
                       <tr className="verlaufszeile">
-                        <td colSpan={13}>
+                        <td colSpan={14}>
                           <div className="verlauf-innen">
                             <Details z={z} konto={konto} w={w} />
                           </div>

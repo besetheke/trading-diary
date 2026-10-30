@@ -36,6 +36,7 @@ Dokumentierte Annahmen (Regel 10, OF-44):
 """
 
 import json
+import logging
 import os
 import pathlib
 from collections.abc import Iterable
@@ -97,6 +98,7 @@ from journal.steuer_zufluss import (
 # Entscheidung 2: Die Lese-API liefert ausschließlich die Kontosicht; die
 # Kettensicht (OF-36) ist noch nicht gebaut.
 SICHT = "konto"
+logger = logging.getLogger(__name__)
 
 # AP-07s: Sortierbare Spalten der Kettenliste — nur echte Spalten der Tabelle
 # ``chains``. Abgeleitete Werte (``struktur_summe_netto``, Preise) sind nicht
@@ -2731,6 +2733,8 @@ def erzeuge_app(
     hole_roller_status=None,
     sende_roller_befehl=None,
     bo_ordner: str | pathlib.Path | None = None,
+    journal_db_paper: str | pathlib.Path | None = None,
+    journal_db_live: str | pathlib.Path | None = None,
 ) -> FastAPI:
     """Baut die Lese-Anwendung auf einer Datenbankdatei (Vertrag 1).
 
@@ -2757,6 +2761,16 @@ def erzeuge_app(
     hole_roller_status = hole_roller_status or _hole_roller_status
     sende_roller_befehl = sende_roller_befehl or _sende_roller_befehl
     engine = create_db_engine(db_pfad)  # Vertrag 3: die Pragmas setzt die Factory.
+    # AP-19: Die Station zeigt Paper- und Live-Konto; jede Position sucht ihre Kette im Journal
+    # IHRES Kontos. Ohne Angabe (oder wenn es die Datei nicht gibt) gilt die eigene Datenbank.
+    def _journal_engine(pfad):
+        if pfad is None or not pathlib.Path(pfad).exists():
+            return engine
+        if pathlib.Path(pfad).resolve() == pathlib.Path(db_pfad).resolve():
+            return engine
+        return create_db_engine(pfad)
+    engine_paper = _journal_engine(journal_db_paper)
+    engine_live = _journal_engine(journal_db_live)
 
     if ui_verzeichnis is not None:
         ui_wurzel = pathlib.Path(ui_verzeichnis)
@@ -3487,10 +3501,10 @@ def erzeuge_app(
         status = hole_roller_status(roller_port)
         if status is not None:
             try:
-                with engine.connect() as verbindung:
+                with engine_paper.connect() as verbindung:
                     status = _roller_kette_ergaenzen(verbindung, status)
             except Exception:  # noqa: BLE001 — die Journal-Historie darf den Status nie verhindern
-                pass
+                logger.exception("Roller-Status: Journal-Ketten nicht ergänzt (Paper)")
         return RollerAntwort(erreichbar=status is not None, status=status)
 
     @applikation.get("/roller-status-live", response_model=RollerAntwort)
@@ -3502,10 +3516,10 @@ def erzeuge_app(
         status = hole_roller_status(roller_live_port)
         if status is not None:
             try:
-                with engine.connect() as verbindung:
+                with engine_live.connect() as verbindung:
                     status = _roller_kette_ergaenzen(verbindung, status)
             except Exception:  # noqa: BLE001 — die Journal-Historie darf den Status nie verhindern
-                pass
+                logger.exception("Roller-Status: Journal-Ketten nicht ergänzt (Live)")
         return RollerAntwort(erreichbar=status is not None, status=status)
 
     @applikation.get("/datenqualitaet-liste")
@@ -4490,6 +4504,11 @@ app = erzeuge_app(
     roller_port=int(os.environ.get("ROLLER_STATUS_PORT", "8600")) or None,
     # AP-19 (L0): Statusport der lesenden Live-Instanz; ohne Angabe nicht angebunden.
     roller_live_port=int(os.environ.get("ROLLER_LIVE_STATUS_PORT", "0")) or None,
+    # AP-19: Journal je Konto für die Ketten der Shorts-Übersicht (fehlt die Datei: eigene DB).
+    journal_db_paper=os.environ.get("JOURNAL_DB_PAPER")
+    or pathlib.Path.home() / ".trading-journal" / "paper" / "journal-paper.db",
+    journal_db_live=os.environ.get("JOURNAL_DB_LIVE")
+    or pathlib.Path(__file__).resolve().parents[1] / "journal.db",
     # AP-14c: Ordner der BO Research Suite (nur lesend).
     bo_ordner=os.environ.get("BO_ORDNER", r"C:\10_Coding\BO Research Suite"),
 )

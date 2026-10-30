@@ -67,3 +67,22 @@ def test_kalender_ueber_den_short_und_ohne_treffer_nichts(klient):
 def test_auch_im_live_status(klient):
     p = _positionen(klient, "/roller-status-live")
     assert p[0]["journal"]["anzahl_rolls"] == 1
+
+
+def test_jedes_konto_sucht_in_seinem_journal(migrated_db, tmp_path, monkeypatch, alembic_config):
+    """Paper-Status sucht in der Paper-Datenbank, Live-Status in der Live-Datenbank — unabhängig davon, mit welcher
+    Datenbank das Journal läuft (Server: Paper-Journal mit Live-Ansicht; NOX: echtes Journal mit Paper-Roller)."""
+    from alembic import command
+    befuelle(migrated_db, ausfuehrungen=[{**a, "buchungskurs": Decimal("1")} for a in AUSFUEHRUNGEN])
+    rebuild(migrated_db)                                     # die Welt mit der DAX-Kette
+    leer = tmp_path / "leer.sqlite"
+    monkeypatch.setenv("JOURNAL_DB", str(leer))
+    command.upgrade(alembic_config, "head")                  # zweite, leere Datenbank
+    nur_live = TestClient(erzeuge_app(leer, roller_port=8600, roller_live_port=8601, journal_db_live=migrated_db,
+                                      hole_roller_status=lambda port: _status()))
+    assert "journal" in _positionen(nur_live, "/roller-status-live")[0]
+    assert "journal" not in _positionen(nur_live, "/roller-status")[0]      # Paper sucht in der eigenen (leeren) DB
+    nur_paper = TestClient(erzeuge_app(leer, roller_port=8600, roller_live_port=8601, journal_db_paper=migrated_db,
+                                       hole_roller_status=lambda port: _status()))
+    assert "journal" in _positionen(nur_paper, "/roller-status")[0]
+    assert "journal" not in _positionen(nur_paper, "/roller-status-live")[0]
