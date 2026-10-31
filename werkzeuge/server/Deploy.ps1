@@ -109,6 +109,12 @@ Tu "requirements-lock.txt des Remote-Stands mit pip download pruefen" {
 
 # ------------------------------------------------------------------ 2. Anhalten
 Schritt "Dienste anhalten"
+# Live-Dienst MIT Orders (--live-orders) merken: er wird nach dem Deploy bewusst NICHT automatisch neu gestartet, denn der
+# Start verlangt die Eingabe "ECHTGELD" am Fenster. Statt seiner startet der lesende Live-Dienst; offene Orders (Profit-
+# Targets) bleiben bei IB bestehen.
+$liveMitOrders = [bool](Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" |
+    Where-Object { $_.CommandLine -match "roller\.dienst" -and $_.CommandLine -match "--live-orders" })
+if ($liveMitOrders) { Write-Warning "Der Live-Dienst mit Orders laeuft und wird fuer den Deploy beendet." }
 Tu "Roller-Dienst beenden" { if (Test-Path "$roller\Beenden-Dienst.ps1") { & "$roller\Beenden-Dienst.ps1" } }
 Tu "Journal-Server beenden" {
     Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" |
@@ -196,6 +202,12 @@ Schritt "Starten und pruefen"
 if (Test-Path "$roller\config.json") {
     Tu "Roller-Dienst starten" { & "$roller\Start-Dienst.ps1" }
 }
+# Lesender Live-Dienst (Port 8601, nur Shorts-Uebersicht des Live-Kontos). Ohne Orders-Dienst auf demselben Port.
+if (Test-Path "$roller\Start-Dienst-Live-Lesen.ps1") {
+    Tu "Live-Lesedienst starten" { & "$roller\Start-Dienst-Live-Lesen.ps1" }
+}
+# Das Journal braucht den Statusport des Live-Dienstes (sonst zeigt die Station nur Paper).
+$env:ROLLER_LIVE_STATUS_PORT = "8601"
 Tu "Journal-Server starten" {
     $log = "$env:USERPROFILE\.trading-journal\logs"
     New-Item -ItemType Directory -Force -Path $log | Out-Null
@@ -215,3 +227,12 @@ Tu "Smoke-Test der Oberflaeche" {
 
 Schritt "Fertig"
 Write-Host "  Station: http://127.0.0.1:8000/start"
+if ($liveMitOrders) {
+    Write-Host "  ACHTUNG: Der Live-Dienst mit Orders laeuft NICHT mehr (nur der lesende). Offene Profit-Targets liegen bei IB." -ForegroundColor Yellow
+    Write-Host "  Wieder starten: cd $roller; .\Start-Dienst-Live.ps1  (Eingabe ECHTGELD)" -ForegroundColor Yellow
+}
+if (Test-Path "$roller\config.json") {
+    Push-Location $roller
+    try { & ".venv\Scripts\python.exe" -m roller.live_einrichten --pruefen } finally { Pop-Location }
+    $global:LASTEXITCODE = 0
+}
